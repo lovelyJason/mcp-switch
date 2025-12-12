@@ -2,7 +2,15 @@
 
 **macOS 下的一站式 AI 编辑器 MCP 配置管理工具**
 
-![Logo](assets/icon.png)
+<img width="256" height="256" alt="logo" src="https://github.com/user-attachments/assets/92c9ff30-0898-41a8-965c-218579661a81" />
+
+<br />
+
+**软件界面**
+
+<img width="900" height="600" alt="image" src="https://github.com/user-attachments/assets/3bc8ab5e-8c21-4303-98a0-1ed7fc102f3d" />
+
+<img width="900" height="600" alt="image" src="https://github.com/user-attachments/assets/e4d7a0d2-0b43-43bd-bca3-ffa4151bce6a" />
 
 MCP Switch 是一个专为 macOS 设计的 Flutter 应用，旨在帮助开发者高效管理多个 AI 代码编辑器的 **MCP (Model Context Protocol)** 配置文件。
 

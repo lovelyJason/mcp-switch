@@ -10,11 +10,23 @@ import 'package:uuid/uuid.dart';
 
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
+import 'logger_service.dart';
 
+/// 配置服务类 (ConfigService)
+///
+/// 主要作用：
+/// 1. 管理应用全局状态（如主题、最小化到托盘、开机自启等）。
+/// 2. 管理各个编辑器（Cursor, Windsurf, Claude Code 等）的 MCP 配置文件路径和内容。
+/// 3. 提供配置文件的读取、解析、保存和同步功能（支持 JSON 和 TOML 格式）。
+/// 4. 维护当前选中的编辑器状态（Global Editor State），用于跨页面状态共享。
 class ConfigService extends ChangeNotifier {
   // In-memory storage of profiles for each editor
   final Map<EditorType, List<McpProfile>> _profiles = {};
   final Map<EditorType, String?> _activeProfileIds = {};
+  
+  // Selected Editor (Redundant Global State)
+  EditorType _selectedEditor = EditorType.cursor;
+  EditorType get selectedEditor => _selectedEditor;
   
   // Theme
   final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(
@@ -70,6 +82,21 @@ class ConfigService extends ChangeNotifier {
     _launchAtStartup =
         prefs.getBool('launch_at_startup') ??
         false; // Actual check via package done in _initStartup
+    
+    // Load Log Level
+    final logLevel = prefs.getInt('log_level') ?? 0; // Default Error
+    logLevelNotifier.value = logLevel;
+    LoggerService.setReleaseLogLevel(logLevel);
+
+    // Load Last Selected Editor
+    final savedEditor = prefs.getString('selected_editor');
+    if (savedEditor != null) {
+      try {
+        _selectedEditor = EditorType.values.firstWhere(
+          (e) => e.name == savedEditor,
+        );
+      } catch (_) {}
+    }
   }
 
   String _getDefaultPath(EditorType type) {
@@ -464,6 +491,17 @@ class ConfigService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Log Level: 0=Error, 1=Warning, 2=Info, 3=Verbose
+  final ValueNotifier<int> logLevelNotifier = ValueNotifier(0); // Default Error
+
+  Future<void> setLogLevel(int level) async {
+    logLevelNotifier.value = level;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('log_level', level);
+    LoggerService.setReleaseLogLevel(level);
+    notifyListeners();
+  }
+
   // Getters
   List<McpProfile> getProfiles(EditorType editor) => _profiles[editor] ?? [];
   String? getActiveProfileId(EditorType editor) => _activeProfileIds[editor];
@@ -501,6 +539,14 @@ class ConfigService extends ChangeNotifier {
       print('Error initializing startup config: $e');
       _launchAtStartup = false;
     }
+  }
+
+  Future<void> setEditor(EditorType type) async {
+    if (_selectedEditor == type) return;
+    _selectedEditor = type;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('selected_editor', type.name);
+    notifyListeners();
   }
 
   Future<void> toggleServerStatus(EditorType editor, String profileId) async {

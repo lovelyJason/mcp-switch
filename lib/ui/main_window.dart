@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/config_service.dart';
+import '../services/terminal_service.dart';
+import '../l10n/s.dart';
 import '../../models/editor_type.dart';
 import 'components/editor_selector.dart';
 import 'components/custom_toast.dart';
@@ -9,12 +11,14 @@ import 'config_list_screen.dart';
 import 'settings_screen.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:tray_manager/tray_manager.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:launch_at_startup/launch_at_startup.dart';
+
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'mcp_server_edit_screen.dart';
+import 'claude_prompts_screen.dart';
+import 'rules_screen.dart';
+import 'components/claude_terminal.dart';
 
 class MainWindow extends StatefulWidget {
   const MainWindow({super.key});
@@ -25,6 +29,7 @@ class MainWindow extends StatefulWidget {
 
 class _MainWindowState extends State<MainWindow>
     with WindowListener, TrayListener {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   EditorType _selectedEditor = EditorType.cursor; // Default
   
   @override
@@ -119,7 +124,7 @@ class _MainWindowState extends State<MainWindow>
       windowManager.show();
       windowManager.focus();
     } else if (menuItem.key == 'exit_app') {
-      windowManager.destroy();
+      _attemptAppExit();
     }
   }
 
@@ -137,8 +142,59 @@ class _MainWindowState extends State<MainWindow>
       }
       await windowManager.hide();
     } else {
-      await windowManager.destroy();
+      await _attemptAppExit();
     }
+  }
+
+  Future<void> _attemptAppExit() async {
+    final terminalService = context.read<TerminalService>();
+    
+    // Graceful Exit Logic
+    if (terminalService.isPtyActive) {
+      // Check for active REPL/Process
+      final hasActiveProcess = await terminalService
+          .hasActiveForegroundProcess();
+
+      if (hasActiveProcess) {
+        // Force make window visible if it was hidden (e.g. from tray)
+        if (!await windowManager.isVisible()) {
+          await windowManager.show();
+          await windowManager.focus();
+        }
+
+        // Force open drawer
+        if (_scaffoldKey.currentState?.isEndDrawerOpen != true) {
+          _scaffoldKey.currentState?.openEndDrawer();
+        }
+        // Show warning
+        if (mounted) {
+          Toast.show(
+            context,
+            message: S.get('terminal_active_task_warning'),
+            type: ToastType.warning,
+            duration: const Duration(seconds: 4),
+          );
+        }
+        // ABORT EXIT
+        return;
+      }
+
+      // Open drawer if closed (visual feedback for auto-exit) if window is visible
+      if (await windowManager.isVisible()) {
+        if (_scaffoldKey.currentState?.isEndDrawerOpen != true) {
+          _scaffoldKey.currentState?.openEndDrawer();
+        }
+      }
+        
+        // Send exit command
+        terminalService.sendCommand('exit');
+        
+        // Wait for animation and process exit
+        // Give it a second to show the "logout" effect
+        await Future.delayed(const Duration(milliseconds: 800));
+    }
+
+    await windowManager.destroy();
   }
 
   @override
@@ -147,7 +203,9 @@ class _MainWindowState extends State<MainWindow>
     const double kTitleBarHeight = 60.0;
 
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      endDrawer: ClaudeTerminal(onClose: () => Navigator.of(context).pop()),
       body: Column(
         children: [
           // Custom Header
@@ -196,6 +254,11 @@ class _MainWindowState extends State<MainWindow>
                           Provider.of<ConfigService>(
                             context,
                             listen: false,
+                          ).setEditor(editor);
+
+                          Provider.of<ConfigService>(
+                            context,
+                            listen: false,
                           ).reloadProfiles();
                         },
                       ),
@@ -203,6 +266,154 @@ class _MainWindowState extends State<MainWindow>
                   ),
                 ),
                 
+                // Action Group (Prompt + Rules)
+                const SizedBox(width: 16),
+                Builder(
+                  builder: (context) {
+                    final isClaude = _selectedEditor == EditorType.claude;
+                    final showPrompt = isClaude;
+                    // Removed unused isDark variable
+
+                    // Rules Button
+                    final rulesBtn = IconButton(
+                      icon: Icon(
+                        Icons.article_outlined,
+                        size: 18,
+                        color: Theme.of(context).textTheme.bodyMedium?.color, 
+                      ),
+                      tooltip: 'Rules',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
+                      onPressed: () {
+                        if (_selectedEditor == EditorType.cursor) {
+                          Toast.show(
+                            context,
+                            message: S.get(
+                              'cursor_configure_hint',
+                            ), // Or direct string
+                            type: ToastType.info,
+                          );
+                          return;
+                        }
+                        if (_selectedEditor == EditorType.claude) {
+                          Toast.show(
+                            context,
+                            message: S.get('claude_rules_hint'),
+                            type: ToastType.info,
+                          );
+                          return;
+                        }
+                        if (_selectedEditor == EditorType.codex) {
+                          Toast.show(
+                            context,
+                            message: S.get('codex_rules_hint'),
+                            type: ToastType.info,
+                          );
+                          return;
+                        }
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                RulesScreen(editorType: _selectedEditor),
+                          ),
+                        );
+                      },
+                    );
+
+                    // Prompt Button
+                    final promptBtn = IconButton(
+                      icon: const Icon(
+                        Icons.tips_and_updates_outlined,
+                        size: 18,
+                        color: Colors.orange,
+                      ),
+                      tooltip: S.get('prompt_name'),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const ClaudePromptsScreen(),
+                          ),
+                        );
+                      },
+                    );
+
+                    if (showPrompt) {
+                      // Grouped Container
+                      return Container(
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
+                          border: Border.all(
+                            color: Colors.grey.withOpacity(0.3),
+                            width: 1,
+                          ),
+                          borderRadius: BorderRadius.circular(
+                            8,
+                          ), // Pill shape wrapper
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            promptBtn,
+                            Container(
+                              width: 1,
+                              height: 20,
+                              color: Colors.grey.withOpacity(0.2),
+                            ),
+                            rulesBtn,
+                          ],
+                        ),
+                      );
+                    } else {
+                      // Single Rules Button Container
+                      return Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
+                          border: Border.all(
+                            color: Colors.grey.withOpacity(0.3),
+                            width: 1,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: rulesBtn,
+                      );
+                    }
+                  },
+                ),
+
+                const SizedBox(width: 8),
+
+                // if (_selectedEditor == EditorType.claude) ...[
+                // ],
+                const SizedBox(width: 8),
+                Builder(
+                    builder: (context) => IconButton(
+                      onPressed: () {
+                      _scaffoldKey.currentState?.openEndDrawer();
+                      },
+                      icon: const Icon(Icons.terminal, size: 20),
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white70
+                          : Colors.black54,
+                      tooltip: S.get('terminal_title'),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
+                    ),
+                ),
+
                 const SizedBox(width: 8),
 
                 IconButton(

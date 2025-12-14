@@ -68,7 +68,7 @@ class ConfigListScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       const Text(
-                        '通过claude mcp的cli添加的mcp默认是项目级别的',
+                        '通过claude mcp的cli添加的mcp默认是项目级别的，MCP Switch支持UI添加和终端命令添加两种方式',
                         style: TextStyle(color: Colors.grey, fontSize: 12),
                       ),
                     ],

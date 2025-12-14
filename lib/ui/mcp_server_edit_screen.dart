@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../models/editor_type.dart';
 import '../../models/mcp_profile.dart';
 import '../../services/config_service.dart';
+import '../../l10n/s.dart';
 
 class McpServerEditScreen extends StatefulWidget {
   final EditorType editorType;
@@ -37,10 +38,16 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
   final _argsController = TextEditingController(); // Multi-line for list
   final _jsonController = TextEditingController();
   final _figmaTokenController = TextEditingController();
+  
+  // Context7 specific
+  String _context7Mode = 'remote'; // 'remote' or 'local'
+  final _context7ApiKeyController = TextEditingController();
 
   // Presets
-  final List<Map<String, dynamic>> _presets = [
+  // Presets - access via getter to ensure up-to-date localization
+  List<Map<String, dynamic>> get _presets => [
     {
+      'id': 'figma',
       'name': 'Figma',
       'icon': 'assets/icons/figma.svg',
       'config': {
@@ -49,6 +56,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
       },
     },
     {
+      'id': 'context7',
       'name': 'Context7',
       'icon': 'assets/icons/context7.svg',
       'config': {
@@ -57,6 +65,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
       },
     },
     {
+      'id': 'chrome-devtools',
       'name': 'chrome-devtools',
       'icon': null,
       'config': {
@@ -65,14 +74,15 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
       },
     },
     {
-      'name': '自定义配置',
+      'id': 'custom',
+      'name': S.get('custom_config'),
       'icon': null,
       'config': {'command': '', 'args': []},
     },
   ];
 
   bool _isUpdating = false;
-  String _selectedPresetName = '自定义配置';
+  String _selectedPresetId = 'custom'; // Use ID instead of name
 
   @override
   void initState() {
@@ -85,6 +95,11 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
       // Init empty JSON structure
       _updateJsonFromForm();
     }
+    final globalEditor = Provider.of<ConfigService>(
+      context,
+      listen: false,
+    ).selectedEditor;
+    print('GLOBAL EDITOR STATE: ${globalEditor.name}');
   }
 
   void _initFromData(Map<String, dynamic> data) {
@@ -136,6 +151,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
     _argsController.dispose();
     _jsonController.dispose();
     _figmaTokenController.dispose();
+    _context7ApiKeyController.dispose();
     super.dispose();
   }
 
@@ -235,12 +251,12 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
     } catch (e) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('格式错误，无法格式化')));
+      ).showSnackBar(SnackBar(content: Text(S.get('format_error'))));
     }
   }
 
   void _onPresetSelected(Map<String, dynamic> preset) {
-    if (preset['name'] == '自定义配置') {
+    if (preset['id'] == 'custom') {
       _nameController.clear();
       _commandController.clear();
       _argsController.clear();
@@ -252,15 +268,118 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
       _argsController.text = args.map((e) => e.toString()).join('\n');
     }
 
-    _selectedPresetName = preset['name'];
+    _selectedPresetId = preset['id'];
     
     // Clear token if switching to Figma freshly
-    if (_selectedPresetName == 'Figma') {
+    if (_selectedPresetId == 'figma') {
       _figmaTokenController.clear();
     }
     
     _updateJsonFromForm();
+    
+    // Initialize Context7 defaults if selected
+    if (_selectedPresetId == 'context7') {
+      _context7Mode = 'remote';
+      _context7ApiKeyController.clear();
+      // Trigger update to set default remote JSON
+      _updateContext7Config();
+    }
+    
     setState(() {});
+  }
+
+  void _updateContext7Config() {
+    if (_selectedPresetId != 'context7') return;
+
+    final apiKey = _context7ApiKeyController.text.trim();
+    final placeholderKey = apiKey.isEmpty ? 'YOUR_API_KEY' : apiKey;
+
+    if (widget.editorType == EditorType.codex) {
+      String toml = '';
+      if (_context7Mode == 'remote') {
+        toml =
+            '[mcp_servers.context7]\n'
+            'url = "https://mcp.context7.com/mcp"\n'
+            'http_headers = { "CONTEXT7_API_KEY" = "$placeholderKey" }';
+        _commandController.text = '';
+        _argsController.text = '';
+      } else {
+        // Local
+        final args = [
+          '-y',
+          '@upstash/context7-mcp',
+          '--api-key',
+          placeholderKey,
+        ];
+        _commandController.text = 'npx';
+        _argsController.text = args.join('\n');
+
+        // Convert args list to TOML string array
+        final argsString = args.map((e) => '"$e"').join(', ');
+
+        toml =
+            '[mcp_servers.context7]\n'
+            'command = "npx"\n'
+            'args = [$argsString]\n';
+      }
+      _jsonController.text = toml;
+    } else {
+      // Standard JSON for others
+      Map<String, dynamic> config;
+      
+      if (widget.editorType == EditorType.claude) {
+        // Claude Code specific format
+        if (_context7Mode == 'remote') {
+          config = {
+            'type': 'http', // Explicit type for Claude
+            'url':
+                'https://mcp.context7.com/mcp', // 'url' instead of 'serverUrl'
+            'headers': {'CONTEXT7_API_KEY': placeholderKey},
+          };
+          _commandController.text = '';
+          _argsController.text = '';
+        } else {
+          // Local for Claude
+          final args = [
+            '-y',
+            '@upstash/context7-mcp',
+            '--api-key',
+            placeholderKey,
+          ];
+          config = {
+            'type': 'stdio', // Explicit type
+            'command': 'npx',
+            'args': args,
+            'env': {}, // Empty env object
+          };
+          _commandController.text = 'npx';
+          _argsController.text = args.join('\n');
+        }
+      } else {
+        // Standard JSON (Windsurf, Cursor, Antigravity)
+        if (_context7Mode == 'remote') {
+          config = {
+            'serverUrl': 'https://mcp.context7.com/mcp',
+            'headers': {'CONTEXT7_API_KEY': placeholderKey},
+          };
+          _commandController.text = '';
+          _argsController.text = '';
+        } else {
+          // Local Standard
+          final args = [
+            '-y',
+            '@upstash/context7-mcp',
+            '--api-key',
+            placeholderKey,
+          ];
+          config = {'command': 'npx', 'args': args};
+          _commandController.text = 'npx';
+          _argsController.text = args.join('\n');
+        }
+      }
+      
+      _jsonController.text = const JsonEncoder.withIndent('  ').convert(config);
+    }
   }
 
   void _updateFigmaArgs(String token) {
@@ -315,7 +434,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
                     children: [
                       // Only show presets in Add Mode
                       if (!isEditMode) ...[
-                        _buildSectionTitle('预设 MCP 服务器'),
+                        _buildSectionTitle(S.get('preset_mcp')),
                         const SizedBox(height: 12),
                         SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
@@ -328,23 +447,24 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
                         const SizedBox(height: 32),
                       ],
 
-                      _buildSectionTitle('基本信息'),
+                      _buildSectionTitle(S.get('basic_info')),
                       const SizedBox(height: 12),
-                      _buildLabel('MCP名称', 'Name'),
+                      _buildLabel(S.get('mcp_name'), S.get('name')),
                       TextFormField(
                         controller: _nameController,
                         decoration: _inputDecoration(
                           widget.isPathReadOnly
-                              ? '不可编辑'
-                              : '请输入名称 (e.g. figma-mcp)',
+                              ? S.get('not_editable')
+                              : S.get('mcp_name_hint'),
                         ),
                         readOnly: widget.isPathReadOnly,
                         enabled: !widget.isPathReadOnly,
                         onChanged: (_) => _updateJsonFromForm(),
-                        validator: (v) => v?.isEmpty == true ? '请输入名称' : null,
+                        validator: (v) =>
+                            v?.isEmpty == true ? S.get('name_required') : null,
                       ),
 
-                      if (_selectedPresetName == 'Figma') ...[
+                      if (_selectedPresetId == 'figma') ...[
                         const SizedBox(height: 12),
                         _buildLabel('Access Token', 'Figma API Key'),
                         TextFormField(
@@ -354,40 +474,122 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
                         ),
                       ],
 
-                      const SizedBox(height: 24),
-                      _buildSectionTitle('MCP 配置详情'),
+                      if (_selectedPresetId == 'context7') ...[
+                        const SizedBox(height: 12),
+                        _buildLabel(
+                          S.get('basic_info'),
+                          '',
+                        ), // Reusing label style or just custom Section
+                        // _buildSectionTitle is too big? No, let's use Label style for "Service Mode"
+                        Row(
+                          children: [
+                            InkWell(
+                              onTap: () {
+                                setState(() => _context7Mode = 'remote');
+                                _updateContext7Config();
+                              },
+                              borderRadius: BorderRadius.circular(4),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Radio<String>(
+                                    value: 'remote',
+                                    groupValue: _context7Mode,
+                                    onChanged: (v) {
+                                      setState(() => _context7Mode = v!);
+                                      _updateContext7Config();
+                                    },
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(S.get('remote_service')),
+                                  const SizedBox(width: 8),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            InkWell(
+                              onTap: () {
+                                setState(() => _context7Mode = 'local');
+                                _updateContext7Config();
+                              },
+                              borderRadius: BorderRadius.circular(4),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Radio<String>(
+                                    value: 'local',
+                                    groupValue: _context7Mode,
+                                    onChanged: (v) {
+                                      setState(() => _context7Mode = v!);
+                                      _updateContext7Config();
+                                    },
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(S.get('local_service')),
+                                  const SizedBox(width: 8),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
 
-                      const SizedBox(height: 12),
-                      _buildLabel('执行指令', 'command'),
-                      TextFormField(
-                        controller: _commandController,
-                        decoration: _inputDecoration('e.g. npx, node, python'),
-                        onChanged: (_) => _updateJsonFromForm(),
-                      ),
+                        const SizedBox(height: 12),
+                        _buildLabel(S.get('api_key'), S.get('api_key_hint')),
+                        TextFormField(
+                          controller: _context7ApiKeyController,
+                          decoration: _inputDecoration('e.g. context7_...'),
+                          onChanged: (_) => _updateContext7Config(),
+                        ),
+                      ],
 
-                      const SizedBox(height: 12),
-                      _buildLabel('参数列表 (每行一个)', 'args'),
-                      TextFormField(
-                        controller: _argsController,
-                        maxLines: 4,
-                        minLines: 2,
-                        decoration: _inputDecoration('e.g. -y\n@input/server'),
-                        onChanged: (_) => _updateJsonFromForm(),
-                      ),
+                      // Hide Command/Args for Context7 Remote mode as it uses serverUrl
+                      if (!(_selectedPresetId == 'context7' &&
+                          _context7Mode == 'remote')) ...[
+                        const SizedBox(height: 24),
+                        _buildSectionTitle(S.get('mcp_detail')),
+
+                        const SizedBox(height: 12),
+                        _buildLabel(S.get('command'), 'command'),
+                        TextFormField(
+                          controller: _commandController,
+                          decoration: _inputDecoration(
+                            'e.g. npx, node, python',
+                          ),
+                          onChanged: (_) => _updateJsonFromForm(),
+                        ),
+
+                        const SizedBox(height: 12),
+                        _buildLabel(S.get('args'), 'args'),
+                        TextFormField(
+                          controller: _argsController,
+                          maxLines: 4,
+                          minLines: 2,
+                          decoration: _inputDecoration(
+                            'e.g. -y\n@input/server',
+                          ),
+                          onChanged: (_) => _updateJsonFromForm(),
+                        ),
+                      ],
 
                       const SizedBox(height: 32),
                       Row(
                         children: [
                           _buildSectionTitle(
-                            '配置预览 ${widget.editorType == EditorType.codex ? "(TOML)" : "(JSON)"}',
+                            '${S.get('config_preview')} ${widget.editorType == EditorType.codex ? "(TOML)" : "(JSON)"}',
                           ),
                           const Spacer(),
                           TextButton.icon(
                             onPressed: _formatJson,
                             icon: const Icon(Icons.auto_fix_high, size: 16),
-                            label: const Text(
-                              '格式化',
-                              style: TextStyle(
+                            label: Text(
+                              S.get('format'),
+                              style: const TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 13,
                               ),
@@ -439,7 +641,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
                               jsonDecode(v);
                               return null;
                             } catch (e) {
-                              return '无效的 JSON 格式';
+                              return S.get('invalid_json');
                             }
                           },
                         ),
@@ -499,8 +701,12 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
           ],
           Text(
             isEditMode
-                ? '编辑 ${widget.editorType.label} MCP 服务器'
-                : '添加 ${widget.editorType.label} MCP 服务器',
+                ? S
+                      .get('edit_mcp_title')
+                      .replaceAll('{editor}', widget.editorType.label)
+                : S
+                      .get('add_mcp_title')
+                      .replaceAll('{editor}', widget.editorType.label),
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -533,7 +739,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               foregroundColor: isDark ? Colors.white70 : Colors.black54,
             ),
-            child: const Text('取消'),
+            child: Text(S.get('cancel')),
           ),
           const SizedBox(width: 12),
           FilledButton.icon(
@@ -547,7 +753,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
             ),
             icon: const Icon(Icons.save_outlined, size: 20),
             label: Text(
-              isEditMode ? '保存' : '添加',
+              isEditMode ? S.get('save') : S.get('add'),
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
@@ -557,7 +763,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
   }
 
   Widget _buildPresetChip(Map<String, dynamic> preset) {
-    final isSelected = _selectedPresetName == preset['name'];
+    final isSelected = _selectedPresetId == preset['id'];
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
     return GestureDetector(

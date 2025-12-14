@@ -30,6 +30,7 @@ class _EditorSelectorState extends State<EditorSelector> {
 
   @override
   Widget build(BuildContext context) {
+    // 这里是顶部 Tab 栏
     return Container(
       decoration: BoxDecoration(
         color: Colors.grey.withOpacity(0.1),

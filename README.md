@@ -27,29 +27,29 @@ MCP Switch 是一个专为 macOS 设计的 Flutter 应用，旨在帮助开发�
   - Antigravity
   - Gemini
 
-- **⚙️ 多配置方案 (Profiles)**
-  为同一个编辑器创建多套 MCP 配置。例如，你可以有一套用于 "公司项目" 的配置（包含内部 API 的 MCP），和一套用于 "开源项目" 的配置。在列表视图中点击即可一键激活。
+
 
 - **🛠 高级路径管理**
   支持自定义每个编辑器的配置文件读取/写入路径。这意味着你可以将配置指向 Dropbox 或 iCloud 同步目录，实现跨设备同步。
 
-- **� 多语言支持**
+- **🌐 多语言支持**
   内置中文与英文界面，根据系统语言自动切换，或在设置中手动指定。
 
-- **�🎨 现代 macOS 体验**
+- **🎨 现代 macOS 体验**
   - 精心设计的无边框窗口与自定义标题栏。
   - **深色模式支持**：完美适配 macOS 深色外观。
   - **托盘常驻**：支持最小化到菜单栏，随时快速切换配置。
   - **开机自启**：支持配置随系统启动。
 
 - **📝 可视化配置编辑**
-  - 提供表单模式与 JSON/TOML 代码模式双向绑定。
+  - 提供表单模式与 JSON/TOML 代码模式双向绑定，**Codex 支持自动生成 TOML**。
   - 内置常见 MCP Server (Figma, Chrome DevTools 等) 预设，一键添加。
+  - **Context7 深度集成**：支持本地 (`npx`) 与远程 (`serverUrl`) 双模式切换，自动适配 API Key 配置。
   - 特别针对 **Claude Code** 优化，支持全局配置 (`~/.claude.json`) 管理。
 
-## 📸 截图
-
-*(此处可添加应用截图)*
+- **🤖 AI 提示词与规则管理 (New)**
+  - **Claude Code 提示词管理**：可视化管理 System Prompts，自动同步到 `CLAUDE.md`，支持开关与版本回退。
+  - **全局规则 (Rules)**：统一管理 windsurf,antigravity,gemini 等编辑器规则文
 
 ## 🚀 快速开始
 
@@ -77,11 +77,49 @@ flutter build macos --release
 # 生成的应用位于: build/macos/Build/Products/Release/mcp_switch.app
 ```
 
+### 自动化发布
+内置版本管理脚本，自动从 GitHub 获取最新 Release 并递增版本号：
+```bash
+python3 scripts/bump_version.py
+```
+
 ## 🛠 技术栈
 - **Framework**: Flutter (macOS)
 - **State Management**: Provider
 - **Storage**: SharedPreferences / JSON File System
 - **Windowing**: window_manager
+
+## 🗺️ 路线图 (Roadmap)
+
+我们致力于打造 AI 时代最强的**编辑器伴侣**，不仅限于 MCP 管理。
+
+### Phase 1: 核心增强 (In Progress)
+- [x] **自动化构建流**：`bump_version.py` 自动版本递增与常量生成
+- [x] **Context7 深度适配**：支持 Local/Remote 模式切换与 JSON/TOML 智能生成
+- [x] **Claude Code Prompt 管理**：可视化管理 `CLAUDE.md`
+- [ ] **多配置方案 (Profiles)**
+  - 为同一个编辑器创建多套 MCP 配置（如 "公司项目" vs "个人项目"），一键秒切。
+
+### Phase 2: 生态互联
+- [ ] **配置云同步**
+  - 支持 iCloud / GitHub Gist 同步配置，换电脑无缝衔接。
+- [ ] **MCP Server 市场**
+  - 内置精选 MCP Server 列表，一键 `npx` 安装与配置。
+- [ ] **AI 提示词中心 (Prompts Hub)**
+  - 社区共享优质 System Prompts（如 "爆栈侠"、"代码审计员"）。
+  - 一键下载并应用到当前项目规则。
+
+### Phase 3: AI 编辑器增强工具箱
+- [ ] **项目规则生成器 (Rules Generator)**
+  - 基于 AI 分析当前项目结构（Vue/React/Flutter），自动生成最佳实践的 `.cursorrules` 或 `CLAUDE.md`。
+- [ ] **本地知识库索引 (Local RAG)**
+  - 提供轻量级工具，将本地文档/代码库索引为 MCP Server，供编辑器直接调用查询。
+- [ ] **模型与密钥管理**
+  - 统一管理 OpenAI/Anthropic/DeepSeek API Keys。
+  - 本地代理转发，实现一次配置，所有 AI 编辑器共享 Key。
+- [ ] **环境健康检查**
+  - 自动检测本地 `npx`、`node`、`python` 环境。
+  - 诊断 MCP Server 连接状态与延迟。
 
 ## 📄 许可证
 [MIT License](LICENSE)

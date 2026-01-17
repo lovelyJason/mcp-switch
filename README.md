@@ -2,6 +2,8 @@
 
 **macOS 下的一站式 AI 编辑器 MCP 配置管理工具**
 
+不止是MCP， 本软件旨在统一各AI编辑器的操作，提供可视化界面管理各AI编辑器的特性，目标是做一个全能的AI配置工具箱，并能用AI增强AI的能力
+
 <img width="256" height="256" alt="logo" src="https://github.com/user-attachments/assets/92c9ff30-0898-41a8-965c-218579661a81" />
 
 <br />

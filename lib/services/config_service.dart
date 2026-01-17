@@ -91,6 +91,18 @@ class ConfigService extends ChangeNotifier {
     // Load DeepL API Key
     _deeplApiKey = prefs.getString('deepl_api_key');
 
+    // Load Claude API Key
+    _claudeApiKey = prefs.getString('claude_api_key');
+
+    // Load Claude API Base URL
+    _claudeApiBaseUrl = prefs.getString('claude_api_base_url');
+
+    // Load Claude Model
+    _claudeModel = prefs.getString('claude_model') ?? 'claude-sonnet-4-20250514';
+
+    // Load Chatbot Icon Setting
+    _showChatbotIcon = prefs.getBool('show_chatbot_icon') ?? true;
+
     // Load Last Selected Editor
     final savedEditor = prefs.getString('selected_editor');
     if (savedEditor != null) {
@@ -517,6 +529,70 @@ class ConfigService extends ChangeNotifier {
     } else {
       await prefs.setString('deepl_api_key', key);
     }
+    notifyListeners();
+  }
+
+  // Claude API Key (AI Chatbot)
+  String? _claudeApiKey;
+  String? get claudeApiKey => _claudeApiKey;
+
+  Future<void> setClaudeApiKey(String? key) async {
+    _claudeApiKey = key;
+    final prefs = await SharedPreferences.getInstance();
+    if (key == null || key.isEmpty) {
+      await prefs.remove('claude_api_key');
+    } else {
+      await prefs.setString('claude_api_key', key);
+    }
+    notifyListeners();
+  }
+
+  // Claude API Base URL (第三方代理)
+  String? _claudeApiBaseUrl;
+  String? get claudeApiBaseUrl => _claudeApiBaseUrl;
+
+  Future<void> setClaudeApiBaseUrl(String? url) async {
+    _claudeApiBaseUrl = url;
+    final prefs = await SharedPreferences.getInstance();
+    if (url == null || url.isEmpty) {
+      await prefs.remove('claude_api_base_url');
+    } else {
+      await prefs.setString('claude_api_base_url', url);
+    }
+    notifyListeners();
+  }
+
+  // Claude Model 选择
+  // 注意：模型名称需要与 Anthropic API 实际支持的名称一致
+  // 参考 Claude Code CLI 的 /model 命令
+  static const List<String> availableModels = [
+    'claude-opus-4-5-20251101',        // Opus 4.5 (Most capable)
+    'claude-sonnet-4-5-20250929',      // Sonnet 4.5 (Recommended)
+    'claude-sonnet-4-20250514',        // Sonnet 4
+    'claude-haiku-4-5-20250514',       // Haiku 4.5 (Fastest)
+    'claude-3-5-sonnet-20241022',      // Claude 3.5 Sonnet
+    'claude-3-5-haiku-20241022',       // Claude 3.5 Haiku
+    'claude-3-opus-20240229',          // Claude 3 Opus
+  ];
+
+  String _claudeModel = 'claude-sonnet-4-20250514';
+  String get claudeModel => _claudeModel;
+
+  Future<void> setClaudeModel(String model) async {
+    _claudeModel = model;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('claude_model', model);
+    notifyListeners();
+  }
+
+  // AI Chatbot 悬浮图标显示
+  bool _showChatbotIcon = true;
+  bool get showChatbotIcon => _showChatbotIcon;
+
+  Future<void> setShowChatbotIcon(bool show) async {
+    _showChatbotIcon = show;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('show_chatbot_icon', show);
     notifyListeners();
   }
 

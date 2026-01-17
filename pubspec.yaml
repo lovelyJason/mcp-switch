@@ -54,6 +54,7 @@ dependencies:
   image: ^4.6.0
   logger: ^2.6.2
   font_awesome_flutter: ^10.8.0
+  anthropic_sdk_dart: ^0.1.0  # Claude API SDK for AI Chatbot
 
 dev_dependencies:
   flutter_test:

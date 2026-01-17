@@ -15,7 +15,9 @@
       "Bash(claude plugin)",
       "Bash(curl:*)",
       "Bash(claude plugin disable:*)",
-      "Bash(claude plugin enable:*)"
+      "Bash(claude plugin enable:*)",
+      "Bash(flutter pub get:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

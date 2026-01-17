@@ -6,9 +6,12 @@ import 'package:window_manager/window_manager.dart';
 import 'services/config_service.dart';
 import 'services/prompt_service.dart';
 import 'services/terminal_service.dart';
+import 'services/ai_chat_service.dart';
 import 'ui/main_window.dart';
 import 'ui/components/floating_terminal_icon.dart';
 import 'ui/components/global_terminal_panel.dart';
+import 'ui/components/floating_chatbot_icon.dart';
+import 'ui/components/global_chatbot_panel.dart';
 import 'utils/app_theme.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
@@ -17,6 +20,9 @@ import 'services/logger_service.dart';
 
 /// 全局 ScaffoldKey，用于控制 MainWindow 的 endDrawer
 final GlobalKey<ScaffoldState> globalScaffoldKey = GlobalKey<ScaffoldState>();
+
+/// 全局 NavigatorKey，用于在 Overlay 中导航
+final GlobalKey<NavigatorState> globalNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,12 +73,25 @@ void main() async {
   ════════════════════════════════════════════
   ''');
 
+  // Initialize Terminal Service first
+  final terminalService = TerminalService();
+
+  // Initialize AI Chat Service and inject Terminal Service
+  final aiChatService = AiChatService();
+  aiChatService.setTerminalService(terminalService); // 关键：注入终端服务
+  await aiChatService.init(
+    configService.claudeApiKey,
+    baseUrl: configService.claudeApiBaseUrl,
+    model: configService.claudeModel,
+  );
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: configService),
         ChangeNotifierProvider(create: (_) => PromptService()..init()),
-        ChangeNotifierProvider(create: (_) => TerminalService()),
+        ChangeNotifierProvider.value(value: terminalService),
+        ChangeNotifierProvider.value(value: aiChatService),
       ],
       child: const McpSwitchApp(),
     ),
@@ -93,6 +112,7 @@ class McpSwitchApp extends StatelessWidget {
           valueListenable: configService.themeModeNotifier,
           builder: (context, themeMode, _) {
             return MaterialApp(
+              navigatorKey: globalNavigatorKey,
               title: 'MCP Switch',
               debugShowCheckedModeBanner: false,
               theme: AppTheme.lightTheme,
@@ -106,8 +126,8 @@ class McpSwitchApp extends StatelessWidget {
                 return Overlay(
                   initialEntries: [
                     OverlayEntry(
-                      builder: (context) => Consumer<TerminalService>(
-                        builder: (context, terminalService, _) {
+                      builder: (context) => Consumer2<TerminalService, AiChatService>(
+                        builder: (context, terminalService, aiChatService, _) {
                           return Stack(
                             children: [
                               child ?? const SizedBox.shrink(),
@@ -117,7 +137,20 @@ class McpSwitchApp extends StatelessWidget {
                                   terminalService.openTerminalPanel();
                                 },
                               ),
-                              // 全局终端面板（侧边滑出样式）
+                              // 全局悬浮 AI Chatbot 图标
+                              FloatingChatbotIcon(
+                                onTap: () {
+                                  aiChatService.openPanel();
+                                },
+                              ),
+                              // 全局 AI 聊天面板（侧边滑出样式）
+                              if (aiChatService.isPanelOpen)
+                                GlobalChatbotPanel(
+                                  onClose: () {
+                                    aiChatService.closePanel();
+                                  },
+                                ),
+                              // 全局终端面板（侧边滑出样式）- 放在最上层，覆盖 Chatbot
                               if (terminalService.isTerminalPanelOpen)
                                 GlobalTerminalPanel(
                                   onClose: () {

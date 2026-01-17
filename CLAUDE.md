@@ -71,6 +71,35 @@ PopupMenuButton(
 )
 ```
 
+### 主题色与配色规范
+
+**主题色**：`Colors.deepPurple`（深紫色）
+
+**图标和按钮配色规则**：
+- **主操作按钮/图标**：使用 `Colors.deepPurple` 或 `Colors.deepPurple.shade300`
+- **成功状态**：`Colors.green`
+- **警告状态**：`Colors.orange`
+- **危险/删除操作**：`Colors.red` 或 `Colors.redAccent`
+- **禁用状态**：`Colors.grey.shade600`
+
+**TextButton.icon 标准写法**：
+```dart
+TextButton.icon(
+  onPressed: () {},
+  icon: const Icon(Icons.xxx, size: 14),  // 统一使用 size: 14
+  label: Text(S.get('button_text')),
+  style: TextButton.styleFrom(
+    foregroundColor: Colors.deepPurple,  // 必须使用主题色
+    textStyle: const TextStyle(fontSize: 12),
+  ),
+)
+```
+
+**禁止**：
+- 使用默认蓝色图标（如不指定颜色的 `Icon(Icons.open_in_new)`）
+- 不同按钮使用不同的图标大小
+- 在同一行按钮中混用不同颜色风格
+
 ### 确认弹窗
 
 **禁止**直接使用原生 `AlertDialog`，必须使用封装好的 `CustomConfirmDialog`。

@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import '../../constants/version.dart';
 import '../../models/editor_type.dart';
 import '../../services/config_service.dart';
+import '../../services/ai_chat_service.dart';
 import '../l10n/s.dart';
 import 'components/styled_popup_menu.dart';
+import 'components/styled_dropdown.dart';
 import 'components/custom_toast.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -36,7 +38,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadPaths();
     _checkInstalledApps();
   }
@@ -85,6 +87,93 @@ class _SettingsScreenState extends State<SettingsScreen>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  /// 从 ~/.claude/settings.json 读取配置
+  Future<void> _loadFromClaudeSettings(
+    TextEditingController apiKeyController,
+    TextEditingController baseUrlController,
+    ConfigService configService,
+    AiChatService aiService,
+  ) async {
+    try {
+      final home = Platform.environment['HOME'];
+      final settingsFile = File('$home/.claude/settings.json');
+
+      if (!await settingsFile.exists()) {
+        if (mounted) {
+          Toast.show(
+            context,
+            message: S.get('claude_settings_not_found'),
+            type: ToastType.warning,
+          );
+        }
+        return;
+      }
+
+      final content = await settingsFile.readAsString();
+      final data = json.decode(content) as Map<String, dynamic>;
+      final env = data['env'] as Map<String, dynamic>?;
+
+      if (env == null) {
+        if (mounted) {
+          Toast.show(
+            context,
+            message: S.get('claude_settings_no_env'),
+            type: ToastType.warning,
+          );
+        }
+        return;
+      }
+
+      // 读取 API Token 和 Base URL
+      final authToken = env['ANTHROPIC_AUTH_TOKEN'] as String?;
+      final baseUrl = env['ANTHROPIC_BASE_URL'] as String?;
+
+      bool hasChanges = false;
+
+      if (authToken != null && authToken.isNotEmpty) {
+        apiKeyController.text = authToken;
+        await configService.setClaudeApiKey(authToken);
+        hasChanges = true;
+      }
+
+      if (baseUrl != null && baseUrl.isNotEmpty) {
+        baseUrlController.text = baseUrl;
+        await configService.setClaudeApiBaseUrl(baseUrl);
+        hasChanges = true;
+      }
+
+      if (hasChanges) {
+        await aiService.updateApiConfig(
+          configService.claudeApiKey,
+          baseUrl: configService.claudeApiBaseUrl,
+        );
+        if (mounted) {
+          Toast.show(
+            context,
+            message: S.get('claude_settings_loaded'),
+            type: ToastType.success,
+          );
+        }
+      } else {
+        if (mounted) {
+          Toast.show(
+            context,
+            message: S.get('claude_settings_empty'),
+            type: ToastType.warning,
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Toast.show(
+          context,
+          message: '${S.get('claude_settings_error')}: $e',
+          type: ToastType.error,
+        );
+      }
+    }
   }
 
   Future<void> _checkForUpdates() async {
@@ -300,6 +389,7 @@ open "$currentAppPath"
                     const NeverScrollableScrollPhysics(), // Disable swipe to match desktop feel
                 children: [
                   _buildGeneralTab(),
+                  _buildAiTab(),
                   _buildAdvancedTab(),
                   _buildAboutTab(),
                 ],
@@ -390,6 +480,7 @@ open "$currentAppPath"
         ),
         tabs: [
           Tab(text: S.get('general')),
+          Tab(text: S.get('ai_settings')),
           Tab(text: S.get('advanced')),
           Tab(text: S.get('about')),
         ],
@@ -501,6 +592,261 @@ open "$currentAppPath"
               listen: false,
             ).setLogLevel(newValue);
           },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAiTab() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final configService = Provider.of<ConfigService>(context, listen: false);
+    final aiService = Provider.of<AiChatService>(context, listen: false);
+    final apiKeyController = TextEditingController(text: configService.claudeApiKey ?? '');
+    final baseUrlController = TextEditingController(text: configService.claudeApiBaseUrl ?? '');
+
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        // Claude API Key 配置
+        _buildSectionTitle(S.get('ai_chatbot_section')),
+        Text(
+          S.get('ai_chatbot_section_desc'),
+          style: const TextStyle(color: Colors.grey, fontSize: 12),
+        ),
+        const SizedBox(height: 16),
+
+        // API Key 输入
+        _buildSectionTitle(S.get('claude_api_key')),
+        Text(
+          S.get('claude_api_key_desc'),
+          style: const TextStyle(color: Colors.grey, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Focus(
+                onFocusChange: (hasFocus) async {
+                  // 失去焦点时保存
+                  if (!hasFocus) {
+                    final value = apiKeyController.text;
+                    await configService.setClaudeApiKey(value.isEmpty ? null : value);
+                    await aiService.updateApiConfig(
+                      value.isEmpty ? null : value,
+                      baseUrl: configService.claudeApiBaseUrl,
+                    );
+                  }
+                },
+                child: TextField(
+                  controller: apiKeyController,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    hintText: S.get('claude_api_key_hint'),
+                    hintStyle: TextStyle(
+                      color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+                      fontSize: 13,
+                    ),
+                    filled: true,
+                    fillColor: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    prefixIcon: const Icon(Icons.key, size: 18, color: Colors.deepPurple),
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: () {
+                launchUrl(Uri.parse('https://console.anthropic.com/'));
+              },
+              icon: const Icon(Icons.open_in_new, size: 14, color: Colors.deepPurple),
+              label: Text(S.get('get_api_key')),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.deepPurple,
+                textStyle: const TextStyle(fontSize: 12),
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: () => _loadFromClaudeSettings(
+                apiKeyController,
+                baseUrlController,
+                configService,
+                aiService,
+              ),
+              icon: const Icon(Icons.download, size: 14, color: Colors.deepPurple),
+              label: Text(S.get('load_from_claude')),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.deepPurple,
+                textStyle: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 20),
+
+        // API Base URL 输入（第三方代理）
+        _buildSectionTitle(S.get('claude_api_base_url')),
+        Text(
+          S.get('claude_api_base_url_desc'),
+          style: const TextStyle(color: Colors.grey, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Focus(
+                onFocusChange: (hasFocus) async {
+                  // 失去焦点时保存
+                  if (!hasFocus) {
+                    final value = baseUrlController.text;
+                    await configService.setClaudeApiBaseUrl(value.isEmpty ? null : value);
+                    await aiService.updateApiConfig(
+                      configService.claudeApiKey,
+                      baseUrl: value.isEmpty ? null : value,
+                    );
+                  }
+                },
+                child: TextField(
+                  controller: baseUrlController,
+                  decoration: InputDecoration(
+                    hintText: S.get('claude_api_base_url_hint'),
+                    hintStyle: TextStyle(
+                      color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+                      fontSize: 13,
+                    ),
+                    filled: true,
+                    fillColor: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    prefixIcon: const Icon(Icons.link, size: 18, color: Colors.deepPurple),
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            _TestConnectionButton(
+              onTest: () async {
+                // 先保存当前输入
+                final value = baseUrlController.text;
+                await configService.setClaudeApiBaseUrl(value.isEmpty ? null : value);
+                await aiService.updateApiConfig(
+                  configService.claudeApiKey,
+                  baseUrl: value.isEmpty ? null : value,
+                );
+                // 测试连接
+                return aiService.testConnection();
+              },
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 20),
+
+        // 模型选择
+        _buildSectionTitle(S.get('claude_model')),
+        Text(
+          S.get('claude_model_desc'),
+          style: const TextStyle(color: Colors.grey, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: StyledDropdown<String>(
+            value: configService.claudeModel,
+            dense: true,
+            items: ConfigService.availableModels.map((model) {
+              return StyledDropdownItem<String>(
+                value: model,
+                label: model,
+              );
+            }).toList(),
+            onChanged: (v) async {
+              await configService.setClaudeModel(v);
+              await aiService.updateApiConfig(
+                configService.claudeApiKey,
+                baseUrl: configService.claudeApiBaseUrl,
+                model: v,
+              );
+              setState(() {});
+            },
+          ),
+        ),
+
+        const SizedBox(height: 32),
+
+        // 悬浮图标开关
+        _buildSwitchTile(
+          S.get('enable_chatbot'),
+          S.get('enable_chatbot_desc'),
+          configService.showChatbotIcon,
+          (v) async {
+            await configService.setShowChatbotIcon(v);
+            setState(() {});
+          },
+        ),
+
+        const SizedBox(height: 32),
+
+        // 聊天历史管理
+        _buildSectionTitle(S.get('chat_history_section')),
+        Text(
+          S.get('chat_history_section_desc'),
+          style: const TextStyle(color: Colors.grey, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            OutlinedButton.icon(
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: Text(S.get('clear_history')),
+                    content: Text(S.get('clear_history_confirm')),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: Text(S.get('cancel')),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.red,
+                        ),
+                        child: Text(S.get('clear_history')),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  await aiService.clearHistory();
+                  if (mounted) {
+                    Toast.show(
+                      context,
+                      message: S.get('history_cleared'),
+                      type: ToastType.success,
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.delete_outline, size: 16),
+              label: Text(S.get('clear_history')),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red,
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -1130,6 +1476,89 @@ open "$currentAppPath"
         tooltip: S.get('open_in_finder'),
         onPressed: () => _handleOpenAction(path, 'finder'),
         color: isDark ? Colors.white : Colors.black54,
+      ),
+    );
+  }
+}
+
+/// 测速按钮组件
+class _TestConnectionButton extends StatefulWidget {
+  final Future<({int? latency, String? error})> Function() onTest;
+
+  const _TestConnectionButton({required this.onTest});
+
+  @override
+  State<_TestConnectionButton> createState() => _TestConnectionButtonState();
+}
+
+class _TestConnectionButtonState extends State<_TestConnectionButton> {
+  bool _isTesting = false;
+  int? _lastLatency; // 上次测速结果
+
+  Future<void> _handleTest() async {
+    setState(() {
+      _isTesting = true;
+      _lastLatency = null;
+    });
+    final result = await widget.onTest();
+    if (!mounted) return;
+    setState(() {
+      _isTesting = false;
+      _lastLatency = result.latency;
+    });
+
+    if (result.latency != null) {
+      Toast.show(
+        context,
+        message: S.get('connection_success').replaceAll('{ms}', result.latency.toString()),
+        type: ToastType.success,
+      );
+    } else {
+      Toast.show(
+        context,
+        message: S.get('connection_failed').replaceAll('{error}', result.error ?? 'Unknown'),
+        type: ToastType.error,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 构建标签文本
+    String labelText;
+    if (_isTesting) {
+      labelText = S.get('testing_connection');
+    } else if (_lastLatency != null) {
+      labelText = '${S.get('test_connection')} (${_lastLatency}ms)';
+    } else {
+      labelText = S.get('test_connection');
+    }
+
+    return TextButton.icon(
+      onPressed: _isTesting ? null : _handleTest,
+      icon: _isTesting
+          ? SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.deepPurple.shade300,
+              ),
+            )
+          : Icon(
+              _lastLatency != null ? Icons.check_circle : Icons.speed,
+              size: 14,
+              color: _lastLatency != null ? Colors.green : Colors.deepPurple,
+            ),
+      label: Text(
+        labelText,
+        style: TextStyle(
+          color: _lastLatency != null ? Colors.green : Colors.deepPurple,
+        ),
+      ),
+      style: TextButton.styleFrom(
+        foregroundColor: _lastLatency != null ? Colors.green : Colors.deepPurple,
+        textStyle: const TextStyle(fontSize: 12),
       ),
     );
   }

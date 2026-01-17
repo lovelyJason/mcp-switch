@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(openspec --help:*)",
+      "Bash(fnm use:*)",
+      "Bash(openspec init:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(cat:*)",
+      "Bash(claude plugin --help:*)",
+      "Bash(claude plugin marketplace --help:*)",
+      "Bash(flutter build:*)",
+      "Bash(ls:*)",
+      "Bash(claude plugin list:*)",
+      "Bash(claude plugins)",
+      "Bash(claude plugin)",
+      "Bash(curl:*)",
+      "Bash(claude plugin disable:*)",
+      "Bash(claude plugin enable:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

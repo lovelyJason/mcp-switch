@@ -1,0 +1,678 @@
+part of '../../skills_screen.dart';
+
+/// 自定义 Skill 安装弹窗
+class _CustomSkillInstallDialog extends StatefulWidget {
+  final VoidCallback onInstalled;
+
+  const _CustomSkillInstallDialog({required this.onInstalled});
+
+  @override
+  State<_CustomSkillInstallDialog> createState() => _CustomSkillInstallDialogState();
+}
+
+class _CustomSkillInstallDialogState extends State<_CustomSkillInstallDialog> {
+  bool _isInstalling = false;
+  String? _statusMessage;
+
+  // 解析 GitHub URL 获取 owner, repo, branch, path
+  Map<String, String>? _parseGitHubUrl(String url) {
+    // 支持的格式:
+    // https://github.com/owner/repo/tree/branch/path/to/skill
+    // https://github.com/owner/repo/blob/branch/path/to/SKILL.md
+    final treeMatch = RegExp(
+      r'github\.com/([^/]+)/([^/]+)/tree/([^/]+)/(.+)',
+    ).firstMatch(url);
+
+    if (treeMatch != null) {
+      return {
+        'owner': treeMatch.group(1)!,
+        'repo': treeMatch.group(2)!,
+        'branch': treeMatch.group(3)!,
+        'path': treeMatch.group(4)!,
+      };
+    }
+
+    final blobMatch = RegExp(
+      r'github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)',
+    ).firstMatch(url);
+
+    if (blobMatch != null) {
+      final filePath = blobMatch.group(4)!;
+      // 如果是 SKILL.md 文件，取其目录
+      final dirPath = filePath.endsWith('SKILL.md')
+          ? filePath.substring(0, filePath.length - 9)
+          : filePath.contains('/')
+              ? filePath.substring(0, filePath.lastIndexOf('/'))
+              : '';
+      return {
+        'owner': blobMatch.group(1)!,
+        'repo': blobMatch.group(2)!,
+        'branch': blobMatch.group(3)!,
+        'path': dirPath.isEmpty ? '' : dirPath,
+      };
+    }
+
+    return null;
+  }
+
+  Future<void> _downloadDirectory(
+    String owner,
+    String repo,
+    String branch,
+    String remotePath,
+    String localPath,
+  ) async {
+    final contentsUrl =
+        'https://api.github.com/repos/$owner/$repo/contents/$remotePath?ref=$branch';
+    final response = await http
+        .get(
+          Uri.parse(contentsUrl),
+          headers: {'Accept': 'application/vnd.github.v3+json'},
+        )
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode != 200) return;
+
+    final contents = jsonDecode(response.body);
+    if (contents is! List) return;
+
+    // 创建本地目录
+    final dir = Directory(localPath);
+    await dir.create(recursive: true);
+
+    for (final item in contents) {
+      if (item['type'] == 'file') {
+        final fileName = item['name'] as String;
+        final downloadUrl = item['download_url'] as String?;
+
+        if (downloadUrl != null) {
+          final fileResponse =
+              await http.get(Uri.parse(downloadUrl)).timeout(const Duration(seconds: 30));
+
+          if (fileResponse.statusCode == 200) {
+            final file = File('$localPath/$fileName');
+            await file.writeAsBytes(fileResponse.bodyBytes);
+          }
+        }
+      } else if (item['type'] == 'dir') {
+        await _downloadDirectory(
+          owner,
+          repo,
+          branch,
+          '$remotePath/${item['name']}',
+          '$localPath/${item['name']}',
+        );
+      }
+    }
+  }
+
+  /// 显示安装表单弹窗
+  void _showInstallFormDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => _SkillInstallFormDialog(
+        onInstall: (url, name) async {
+          Navigator.of(context).pop(); // 关闭表单弹窗
+          await _doInstall(url, name);
+        },
+      ),
+    );
+  }
+
+  /// 执行安装
+  Future<void> _doInstall(String url, String skillName) async {
+    final parsed = _parseGitHubUrl(url);
+    if (parsed == null) {
+      if (mounted) {
+        Toast.show(context, message: S.get('invalid_github_url'), type: ToastType.error);
+      }
+      return;
+    }
+
+    setState(() {
+      _isInstalling = true;
+      _statusMessage = S.get('fetching_skill');
+    });
+
+    try {
+      final owner = parsed['owner']!;
+      final repo = parsed['repo']!;
+      final branch = parsed['branch']!;
+      final path = parsed['path']!;
+
+      final contentsUrl =
+          'https://api.github.com/repos/$owner/$repo/contents/$path?ref=$branch';
+      final contentsResponse = await http
+          .get(
+            Uri.parse(contentsUrl),
+            headers: {'Accept': 'application/vnd.github.v3+json'},
+          )
+          .timeout(const Duration(seconds: 30));
+
+      if (contentsResponse.statusCode != 200) {
+        throw Exception('Failed to fetch: ${contentsResponse.statusCode}');
+      }
+
+      final contents = jsonDecode(contentsResponse.body);
+      if (contents is! List) throw Exception('Invalid directory contents');
+
+      final home = Platform.environment['HOME'] ?? '';
+      final skillDir = Directory('$home/.claude/skills/$skillName');
+      if (await skillDir.exists()) {
+        throw Exception('Skill directory already exists: $skillName');
+      }
+      await skillDir.create(recursive: true);
+
+      setState(() => _statusMessage = S.get('installing_skill'));
+
+      for (final item in contents) {
+        if (item['type'] == 'file') {
+          final fileName = item['name'] as String;
+          final downloadUrl = item['download_url'] as String?;
+          if (downloadUrl != null) {
+            final fileResponse =
+                await http.get(Uri.parse(downloadUrl)).timeout(const Duration(seconds: 30));
+            if (fileResponse.statusCode == 200) {
+              final file = File('${skillDir.path}/$fileName');
+              await file.writeAsBytes(fileResponse.bodyBytes);
+            }
+          }
+        } else if (item['type'] == 'dir') {
+          await _downloadDirectory(owner, repo, branch, '$path/${item['name']}',
+              '${skillDir.path}/${item['name']}');
+        }
+      }
+
+      final skillMdFile = File('${skillDir.path}/SKILL.md');
+      if (!await skillMdFile.exists()) {
+        await skillDir.delete(recursive: true);
+        throw Exception('No SKILL.md found in the directory');
+      }
+
+      setState(() {
+        _isInstalling = false;
+        _statusMessage = null;
+      });
+
+      if (mounted) {
+        Toast.show(context, message: S.get('skill_install_success'), type: ToastType.success);
+        Navigator.of(context).pop();
+        widget.onInstalled();
+      }
+    } catch (e) {
+      setState(() {
+        _isInstalling = false;
+        _statusMessage = null;
+      });
+      if (mounted) {
+        Toast.show(context, message: '${S.get('skill_install_failed')}: $e', type: ToastType.error);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: 500,
+        constraints: const BoxConstraints(maxHeight: 550),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 固定的标题区域
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.download, color: Colors.deepPurple),
+                      const SizedBox(width: 8),
+                      Text(
+                        S.get('custom_skill_install'),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () => Navigator.of(context).pop(),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    S.get('custom_skill_install_desc'),
+                    style: TextStyle(fontSize: 13, color: Colors.grey.withValues(alpha: 0.8)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // 可滚动的内容区域
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 安全提示
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: isDark ? 0.15 : 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.withValues(alpha: 0.3), width: 1),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, size: 20, color: Colors.orange),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              S.get('skill_security_warning'),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark ? Colors.orange.shade200 : Colors.orange.shade800,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // 状态信息（安装中显示）
+                    if (_isInstalling && _statusMessage != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: isDark ? 0.2 : 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          children: [
+                            const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              _statusMessage!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // 安装按钮
+                    InkWell(
+                      onTap: _isInstalling ? null : _showInstallFormDialog,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.deepPurple.withValues(alpha: isDark ? 0.2 : 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.3), width: 1),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (_isInstalling)
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.deepPurple),
+                              )
+                            else
+                              const Icon(Icons.add_link, size: 18, color: Colors.deepPurple),
+                            const SizedBox(width: 8),
+                            Text(
+                              S.get('custom_skill_install'),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.deepPurple,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+                    const Divider(height: 1),
+                    const SizedBox(height: 20),
+
+                    // 社区资源部分
+                    _buildCommunityResourcesSection(isDark),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 社区资源部分
+  Widget _buildCommunityResourcesSection(bool isDark) {
+    // 社区资源列表（Skills 相关的）
+    const awesomeRepos = [
+      {'name': 'ComposioHQ/awesome-claude-skills', 'url': 'https://github.com/ComposioHQ/awesome-claude-skills'},
+      {'name': 'VoltAgent/awesome-claude-skills', 'url': 'https://github.com/VoltAgent/awesome-claude-skills'},
+      {'name': 'BehiSecc/awesome-claude-skills', 'url': 'https://github.com/BehiSecc/awesome-claude-skills'},
+    ];
+    const skillDirectories = [
+      {'name': 'skillsmp.com', 'url': 'https://skillsmp.com/'},
+      {'name': 'aitmpl.com/skills', 'url': 'https://www.aitmpl.com/skills'},
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 标题
+        Row(
+          children: [
+            const Icon(Icons.explore, size: 18, color: Colors.teal),
+            const SizedBox(width: 8),
+            Text(
+              S.get('community_resources'),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          S.get('community_resources_desc'),
+          style: TextStyle(fontSize: 12, color: Colors.grey.withValues(alpha: 0.8)),
+        ),
+        const SizedBox(height: 12),
+
+        // Awesome Skills 合集
+        Text(
+          S.get('awesome_skills_repos'),
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: awesomeRepos
+              .map((repo) => _buildResourceChip(
+                    repo['name']!,
+                    repo['url']!,
+                    Icons.star_border,
+                    Colors.amber,
+                    isDark,
+                  ))
+              .toList(),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Skill 导航站
+        Text(
+          S.get('skill_directories'),
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: skillDirectories
+              .map((dir) => _buildResourceChip(
+                    dir['name']!,
+                    dir['url']!,
+                    Icons.language,
+                    Colors.blue,
+                    isDark,
+                  ))
+              .toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildResourceChip(String name, String url, IconData icon, Color color, bool isDark) {
+    return InkWell(
+      onTap: () => launchUrl(Uri.parse(url)),
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: isDark ? 0.15 : 0.08),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 6),
+            Text(
+              name,
+              style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.open_in_new, size: 12, color: color.withValues(alpha: 0.7)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Skill 安装表单弹窗
+class _SkillInstallFormDialog extends StatefulWidget {
+  final Future<void> Function(String url, String name) onInstall;
+
+  const _SkillInstallFormDialog({required this.onInstall});
+
+  @override
+  State<_SkillInstallFormDialog> createState() => _SkillInstallFormDialogState();
+}
+
+class _SkillInstallFormDialogState extends State<_SkillInstallFormDialog> {
+  final _urlController = TextEditingController();
+  final _nameController = TextEditingController();
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _urlController.dispose();
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  void _onSubmit() {
+    final url = _urlController.text.trim();
+    final name = _nameController.text.trim();
+
+    if (name.isEmpty) {
+      setState(() => _errorMessage = S.get('skill_name_required'));
+      return;
+    }
+
+    if (url.isEmpty || !url.contains('github.com')) {
+      setState(() => _errorMessage = S.get('invalid_github_url'));
+      return;
+    }
+
+    widget.onInstall(url, name);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: 480,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 标题
+            Row(
+              children: [
+                const Icon(Icons.link, color: Colors.deepPurple),
+                const SizedBox(width: 8),
+                Text(
+                  S.get('github_url'),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.of(context).pop(),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // GitHub URL 输入
+            Row(
+              children: [
+                Text(
+                  S.get('github_url'),
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: S.get('github_url_tooltip'),
+                  child: Icon(
+                    Icons.help_outline,
+                    size: 14,
+                    color: Colors.grey.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _urlController,
+              decoration: InputDecoration(
+                hintText: S.get('github_url_hint'),
+                hintStyle: TextStyle(fontSize: 12, color: Colors.grey.withValues(alpha: 0.6)),
+                prefixIcon: const Icon(Icons.link, size: 18),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.deepPurple),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              style: const TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+
+            // Skill 名称输入
+            Text(
+              S.get('skill_name'),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _nameController,
+              decoration: InputDecoration(
+                hintText: S.get('skill_name_hint'),
+                hintStyle: TextStyle(fontSize: 12, color: Colors.grey.withValues(alpha: 0.6)),
+                prefixIcon: const Icon(Icons.label_outline, size: 18),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.deepPurple),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              style: const TextStyle(fontSize: 13),
+              onSubmitted: (_) => _onSubmit(),
+            ),
+
+            // 错误信息
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: isDark ? 0.2 : 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, size: 16, color: Colors.red),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.red.shade200 : Colors.red.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 20),
+
+            // 按钮
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(S.get('cancel')),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: _onSubmit,
+                  icon: const Icon(Icons.download, size: 18),
+                  label: Text(S.get('add')),
+                  style: FilledButton.styleFrom(backgroundColor: Colors.deepPurple),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

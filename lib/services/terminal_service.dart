@@ -11,8 +11,40 @@ class TerminalService extends ChangeNotifier {
   final TerminalController terminalController = TerminalController();
   Pty? _pty;
   bool _isInitialized = false;
+  bool _floatingTerminalEnabled = false;
+  bool _terminalPanelOpen = false;
 
   bool get isPtyActive => _pty != null;
+  bool get floatingTerminalEnabled => _floatingTerminalEnabled;
+  bool get isTerminalPanelOpen => _terminalPanelOpen;
+
+  // 悬浮图标只在 enabled 且终端面板关闭时显示
+  bool get shouldShowFloatingIcon => _floatingTerminalEnabled && !_terminalPanelOpen;
+
+  void setFloatingTerminal(bool enabled) {
+    _floatingTerminalEnabled = enabled;
+    notifyListeners();
+  }
+
+  void toggleFloatingTerminal() {
+    _floatingTerminalEnabled = !_floatingTerminalEnabled;
+    notifyListeners();
+  }
+
+  void setDrawerOpen(bool open) {
+    _terminalPanelOpen = open;
+    notifyListeners();
+  }
+
+  void openTerminalPanel() {
+    _terminalPanelOpen = true;
+    notifyListeners();
+  }
+
+  void closeTerminalPanel() {
+    _terminalPanelOpen = false;
+    notifyListeners();
+  }
 
   TerminalService();
 

@@ -6,32 +6,36 @@ class CustomConfirmDialog extends StatelessWidget {
   final String confirmText;
   final String cancelText;
   final Color confirmColor;
-  final VoidCallback onConfirm;
+  final VoidCallback? onConfirm;
+  final bool isDark;
 
   const CustomConfirmDialog({
     super.key,
     required this.title,
     required this.content,
-    required this.onConfirm,
+    this.onConfirm,
     this.confirmText = 'Confirm',
     this.cancelText = 'Cancel',
     this.confirmColor = Colors.blue,
+    this.isDark = false,
   });
 
-  static Future<void> show(
+  /// 显示确认弹窗，返回用户选择结果
+  static Future<bool?> show(
     BuildContext context, {
     required String title,
     required String content,
-    required VoidCallback onConfirm,
+    VoidCallback? onConfirm,
     String confirmText = 'Confirm',
     String cancelText = 'Cancel',
     Color confirmColor = Colors.blue,
   }) {
-    return showGeneralDialog(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return showGeneralDialog<bool>(
       context: context,
       barrierDismissible: true,
       barrierLabel: '',
-      barrierColor: Colors.black.withOpacity(0.5),
+      barrierColor: Colors.black.withValues(alpha: 0.5),
       transitionDuration: const Duration(milliseconds: 200),
       pageBuilder: (context, anim1, anim2) => CustomConfirmDialog(
         title: title,
@@ -40,6 +44,7 @@ class CustomConfirmDialog extends StatelessWidget {
         confirmText: confirmText,
         cancelText: cancelText,
         confirmColor: confirmColor,
+        isDark: isDark,
       ),
       transitionBuilder: (context, anim1, anim2, child) {
         return Transform.scale(
@@ -55,18 +60,23 @@ class CustomConfirmDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bgColor = isDark ? const Color(0xFF2C2C2E) : Colors.white;
+    final titleColor = isDark ? Colors.white : Colors.black87;
+    final contentColor = isDark ? Colors.white70 : Colors.black54;
+    final cancelTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+
     return Center(
       child: Material(
         color: Colors.transparent,
         child: Container(
-          width: 320,
+          width: 340,
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: bgColor,
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.15),
+                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.15),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -78,18 +88,18 @@ class CustomConfirmDialog extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: titleColor,
                 ),
               ),
               const SizedBox(height: 12),
               Text(
                 content,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
-                  color: Colors.black54,
+                  color: contentColor,
                   height: 1.5,
                 ),
               ),
@@ -98,9 +108,9 @@ class CustomConfirmDialog extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () => Navigator.of(context).pop(false),
                     style: TextButton.styleFrom(
-                      foregroundColor: Colors.grey.shade600,
+                      foregroundColor: cancelTextColor,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     ),
                     child: Text(cancelText),
@@ -108,8 +118,8 @@ class CustomConfirmDialog extends StatelessWidget {
                   const SizedBox(width: 8),
                   FilledButton(
                     onPressed: () {
-                      Navigator.of(context).pop();
-                      onConfirm();
+                      Navigator.of(context).pop(true);
+                      onConfirm?.call();
                     },
                     style: FilledButton.styleFrom(
                       backgroundColor: confirmColor,

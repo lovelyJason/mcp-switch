@@ -1,4 +1,4 @@
-## v1.0.2
+## v1.0.1
 
 ### ✨ 新增特性 (New Features)
 - **内置终端 (Terminal Integration)**
@@ -27,9 +27,9 @@
 - 移除了一些冗余的控制台警告信息。
 
 
-# MCP Switch v1.0.0 发布说明
+## MCP Switch v1.0.0 发布说明
 
-## 🎉 核心功能 (Features)
+### 🎉 核心功能 (Features)
 - **⚡️ 一站式配置管理**
   支持 Claude Code, Codex, Cursor, Windsurf, Antiravity, Gemini 等多个主流 AI 编辑器的 MCP (Model Context Protocol) 配置文件管理。
 - **🔄 灵活场景切换**
@@ -41,7 +41,7 @@
 - **📥 托盘常驻 (Tray)**
   支持最小化到系统托盘，后台静默运行，随时快速调出。
 
-## 🛠 变更日志 (Changelog)
+### 🛠 变更日志 (Changelog)
 - Initial Release (首次发布)。
 - 集成 macOS 原生文件系统和权限管理。
 - 修复托盘图标在 Release 模式下的显示问题。

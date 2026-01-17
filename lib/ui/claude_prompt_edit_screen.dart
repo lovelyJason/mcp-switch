@@ -9,6 +9,9 @@ import 'widgets/fresh_markdown_editor.dart';
 
 // 全局安装claude mcp
 // claude mcp add chrome-devtools npx chrome-devtools-mcp@latest --scope user
+// sse:
+// claude mcp remove shadow-forge -s user
+// claude mcp add shadow-forge --transport sse http://localhost:3005/sse -s user
 
 class ClaudePromptEditScreen extends StatefulWidget {
   final ClaudePrompt? prompt;

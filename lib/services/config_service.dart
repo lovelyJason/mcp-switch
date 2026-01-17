@@ -88,6 +88,9 @@ class ConfigService extends ChangeNotifier {
     logLevelNotifier.value = logLevel;
     LoggerService.setReleaseLogLevel(logLevel);
 
+    // Load DeepL API Key
+    _deeplApiKey = prefs.getString('deepl_api_key');
+
     // Load Last Selected Editor
     final savedEditor = prefs.getString('selected_editor');
     if (savedEditor != null) {
@@ -499,6 +502,21 @@ class ConfigService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('log_level', level);
     LoggerService.setReleaseLogLevel(level);
+    notifyListeners();
+  }
+
+  // DeepL API Key (可选翻译引擎)
+  String? _deeplApiKey;
+  String? get deeplApiKey => _deeplApiKey;
+
+  Future<void> setDeepLApiKey(String? key) async {
+    _deeplApiKey = key;
+    final prefs = await SharedPreferences.getInstance();
+    if (key == null || key.isEmpty) {
+      await prefs.remove('deepl_api_key');
+    } else {
+      await prefs.setString('deepl_api_key', key);
+    }
     notifyListeners();
   }
 

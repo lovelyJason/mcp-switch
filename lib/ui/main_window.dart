@@ -18,7 +18,8 @@ import 'dart:io';
 import 'mcp_server_edit_screen.dart';
 import 'claude_prompts_screen.dart';
 import 'rules_screen.dart';
-import 'components/claude_terminal.dart';
+import 'skills_screen.dart';
+import '../main.dart' show globalScaffoldKey;
 
 class MainWindow extends StatefulWidget {
   const MainWindow({super.key});
@@ -29,12 +30,15 @@ class MainWindow extends StatefulWidget {
 
 class _MainWindowState extends State<MainWindow>
     with WindowListener, TrayListener {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  EditorType _selectedEditor = EditorType.cursor; // Default
-  
+  // 使用全局的 scaffoldKey，这样其他页面也能打开终端 drawer
+  GlobalKey<ScaffoldState> get _scaffoldKey => globalScaffoldKey;
+  late EditorType _selectedEditor;
+
   @override
   void initState() {
     super.initState();
+    // 从 ConfigService 读取上次选中的编辑器
+    _selectedEditor = Provider.of<ConfigService>(context, listen: false).selectedEditor;
     windowManager.addListener(this);
     trayManager.addListener(this);
     _initTray();
@@ -205,7 +209,6 @@ class _MainWindowState extends State<MainWindow>
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      endDrawer: ClaudeTerminal(onClose: () => Navigator.of(context).pop()),
       body: Column(
         children: [
           // Custom Header
@@ -323,7 +326,37 @@ class _MainWindowState extends State<MainWindow>
                       },
                     );
 
-                    // Prompt Button
+                    // Skills Button (插件按钮，放在外面)
+                    final skillsBtn = IconButton(
+                      icon: const Icon(
+                        Icons.extension_outlined,
+                        size: 18,
+                        color: Colors.orange,
+                      ),
+                      tooltip: S.get('plugins_menu'),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
+                      onPressed: () async {
+                        final terminalService = context.read<TerminalService>();
+                        final command = await Navigator.of(context).push<String>(
+                          MaterialPageRoute(
+                            builder: (_) => const SkillsScreen(),
+                          ),
+                        );
+                        // 如果返回了命令，打开终端并执行
+                        if (command != null && command.isNotEmpty) {
+                          _scaffoldKey.currentState?.openEndDrawer();
+                          // 稍微延迟让终端初始化
+                          await Future.delayed(const Duration(milliseconds: 500));
+                          terminalService.sendCommand(command);
+                        }
+                      },
+                    );
+
+                    // Prompt Button (提示词按钮，放在外面)
                     final promptBtn = IconButton(
                       icon: const Icon(
                         Icons.tips_and_updates_outlined,
@@ -346,6 +379,87 @@ class _MainWindowState extends State<MainWindow>
                     );
 
                     if (showPrompt) {
+                      // More Button with Dropdown (Rules 放在下拉菜单里)
+                      final moreBtn = PopupMenuButton<String>(
+                        icon: Icon(
+                          Icons.more_horiz,
+                          size: 18,
+                          color: Theme.of(context).textTheme.bodyMedium?.color,
+                        ),
+                        tooltip: S.get('more'),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        position: PopupMenuPosition.under,
+                        offset: const Offset(0, 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        color: Theme.of(context).cardColor,
+                        elevation: 4,
+                        shadowColor: Colors.black26,
+                        onSelected: (value) {
+                          if (value == 'rules') {
+                            if (_selectedEditor == EditorType.cursor) {
+                              Toast.show(
+                                context,
+                                message: S.get('cursor_configure_hint'),
+                                type: ToastType.info,
+                              );
+                              return;
+                            }
+                            if (_selectedEditor == EditorType.claude) {
+                              Toast.show(
+                                context,
+                                message: S.get('claude_rules_hint'),
+                                type: ToastType.info,
+                              );
+                              return;
+                            }
+                            if (_selectedEditor == EditorType.codex) {
+                              Toast.show(
+                                context,
+                                message: S.get('codex_rules_hint'),
+                                type: ToastType.info,
+                              );
+                              return;
+                            }
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    RulesScreen(editorType: _selectedEditor),
+                              ),
+                            );
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem<String>(
+                            value: 'rules',
+                            height: 40,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.article_outlined,
+                                  size: 16,
+                                  color: Theme.of(context).textTheme.bodyMedium?.color,
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  'Rules',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Theme.of(context).textTheme.bodyMedium?.color,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+
                       // Grouped Container
                       return Container(
                         height: 32,
@@ -362,13 +476,19 @@ class _MainWindowState extends State<MainWindow>
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            skillsBtn,
+                            Container(
+                              width: 1,
+                              height: 20,
+                              color: Colors.grey.withOpacity(0.2),
+                            ),
                             promptBtn,
                             Container(
                               width: 1,
                               height: 20,
                               color: Colors.grey.withOpacity(0.2),
                             ),
-                            rulesBtn,
+                            moreBtn,
                           ],
                         ),
                       );
@@ -399,7 +519,8 @@ class _MainWindowState extends State<MainWindow>
                 Builder(
                     builder: (context) => IconButton(
                       onPressed: () {
-                      _scaffoldKey.currentState?.openEndDrawer();
+                        // 使用全局终端面板
+                        context.read<TerminalService>().openTerminalPanel();
                       },
                       icon: const Icon(Icons.terminal, size: 20),
                       color: Theme.of(context).brightness == Brightness.dark

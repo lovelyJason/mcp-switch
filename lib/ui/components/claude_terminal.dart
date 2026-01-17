@@ -62,6 +62,26 @@ class _ClaudeTerminalState extends State<ClaudeTerminal> {
                   ),
                 ),
                 const Spacer(),
+                Consumer<TerminalService>(
+                  builder: (context, service, _) => IconButton(
+                    icon: Icon(
+                      service.floatingTerminalEnabled
+                          ? Icons.picture_in_picture_alt
+                          : Icons.picture_in_picture_outlined,
+                      size: 18,
+                      color: service.floatingTerminalEnabled
+                          ? Colors.orange
+                          : Colors.white70,
+                    ),
+                    tooltip: S.get('floating_terminal'),
+                    onPressed: () {
+                      service.toggleFloatingTerminal();
+                      if (service.floatingTerminalEnabled) {
+                        widget.onClose();
+                      }
+                    },
+                  ),
+                ),
                 IconButton(
                   icon: const Icon(Icons.cleaning_services_outlined, size: 18, color: Colors.white70),
                   tooltip: S.get('terminal_clear'),

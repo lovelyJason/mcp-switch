@@ -642,7 +642,66 @@ open "$currentAppPath"
               ],
             ),
           );
-        }).toList(),
+        }),
+
+        const SizedBox(height: 32),
+
+        // DeepL API Key 配置
+        _buildSectionTitle(S.get('deepl_api_key_title')),
+        Text(
+          S.get('deepl_api_key_desc'),
+          style: const TextStyle(color: Colors.grey, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        _buildDeepLApiKeyField(),
+      ],
+    );
+  }
+
+  Widget _buildDeepLApiKeyField() {
+    final configService = Provider.of<ConfigService>(context, listen: false);
+    final controller = TextEditingController(text: configService.deeplApiKey ?? '');
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: controller,
+            obscureText: true,
+            decoration: InputDecoration(
+              hintText: S.get('deepl_api_key_hint'),
+              hintStyle: TextStyle(
+                color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+                fontSize: 13,
+              ),
+              filled: true,
+              fillColor: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide.none,
+              ),
+              prefixIcon: const Icon(Icons.key, size: 18, color: Colors.deepPurple),
+            ),
+            style: const TextStyle(fontSize: 13),
+            onChanged: (value) async {
+              await configService.setDeepLApiKey(value.isEmpty ? null : value);
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        TextButton.icon(
+          onPressed: () {
+            launchUrl(Uri.parse('https://www.deepl.com/pro-api'));
+          },
+          icon: const Icon(Icons.open_in_new, size: 14),
+          label: Text(S.get('get_api_key')),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.deepPurple,
+            textStyle: const TextStyle(fontSize: 12),
+          ),
+        ),
       ],
     );
   }

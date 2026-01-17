@@ -7,12 +7,16 @@ import 'services/config_service.dart';
 import 'services/prompt_service.dart';
 import 'services/terminal_service.dart';
 import 'ui/main_window.dart';
+import 'ui/components/floating_terminal_icon.dart';
+import 'ui/components/global_terminal_panel.dart';
 import 'utils/app_theme.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'dart:io';
-import 'l10n/s.dart'; 
+import 'l10n/s.dart';
 import 'services/logger_service.dart';
+
+/// 全局 ScaffoldKey，用于控制 MainWindow 的 endDrawer
+final GlobalKey<ScaffoldState> globalScaffoldKey = GlobalKey<ScaffoldState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -96,6 +100,38 @@ class McpSwitchApp extends StatelessWidget {
               themeMode: themeMode,
               locale: locale,
               home: const MainWindow(),
+              builder: (context, child) {
+                // 在 Navigator 之上包装一层 Stack，放置全局悬浮图标和终端面板
+                // 使用 Overlay 包装以支持 Tooltip 等需要 Overlay 的 widget
+                return Overlay(
+                  initialEntries: [
+                    OverlayEntry(
+                      builder: (context) => Consumer<TerminalService>(
+                        builder: (context, terminalService, _) {
+                          return Stack(
+                            children: [
+                              child ?? const SizedBox.shrink(),
+                              // 全局悬浮终端图标
+                              FloatingTerminalIcon(
+                                onTap: () {
+                                  terminalService.openTerminalPanel();
+                                },
+                              ),
+                              // 全局终端面板（侧边滑出样式）
+                              if (terminalService.isTerminalPanelOpen)
+                                GlobalTerminalPanel(
+                                  onClose: () {
+                                    terminalService.closeTerminalPanel();
+                                  },
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
             );
           },
         );

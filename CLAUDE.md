@@ -100,6 +100,67 @@ TextButton.icon(
 - 不同按钮使用不同的图标大小
 - 在同一行按钮中混用不同颜色风格
 
+### Toast 提示
+
+**禁止**使用 `ScaffoldMessenger.of(context).showSnackBar()`，必须使用封装好的 `Toast` 组件。
+
+**位置**：`lib/ui/components/custom_toast.dart`
+
+**特性**：
+- 显示在屏幕顶部（不是底部的丑陋 SnackBar）
+- 支持深色/浅色模式自动切换
+- 平滑的滑入/滑出动画
+- 四种类型：`success`、`error`、`warning`、`info`
+
+**用法**：
+```dart
+import 'components/custom_toast.dart';
+
+// 成功提示
+Toast.show(
+  context,
+  message: S.get('operation_success'),
+  type: ToastType.success,
+  duration: const Duration(seconds: 3),
+);
+
+// 错误提示
+Toast.show(
+  context,
+  message: S.get('operation_failed'),
+  type: ToastType.error,
+  duration: const Duration(seconds: 4),
+);
+
+// 警告提示
+Toast.show(
+  context,
+  message: '请注意...',
+  type: ToastType.warning,
+);
+
+// 信息提示
+Toast.show(
+  context,
+  message: '提示信息',
+  type: ToastType.info,
+);
+```
+
+**参数说明**：
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `context` | BuildContext | 上下文（必填） |
+| `message` | String | 提示内容（必填） |
+| `type` | ToastType | 提示类型，默认 `info` |
+| `duration` | Duration | 显示时长，默认 3 秒 |
+
+**禁止**：
+- 使用 `ScaffoldMessenger.showSnackBar()`（底部绿色/红色条太丑）
+- 使用第三方 toast 库（保持项目一致性）
+
+---
+
 ### 确认弹窗
 
 **禁止**直接使用原生 `AlertDialog`，必须使用封装好的 `CustomConfirmDialog`。

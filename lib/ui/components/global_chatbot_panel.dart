@@ -1,6 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:pasteboard/pasteboard.dart';
 import 'package:provider/provider.dart';
 import '../../l10n/s.dart';
 import '../../main.dart' show globalNavigatorKey;
@@ -30,6 +35,9 @@ class _GlobalChatbotPanelState extends State<GlobalChatbotPanel>
 
   // 记录展开的工具调用 ID
   final Set<String> _expandedToolCalls = {};
+
+  // 待发送的图片列表
+  final List<ChatImage> _pendingImages = [];
 
   @override
   void initState() {
@@ -73,17 +81,102 @@ class _GlobalChatbotPanelState extends State<GlobalChatbotPanel>
 
   void _sendMessage() {
     final text = _inputController.text.trim();
-    if (text.isEmpty) return;
+    // 如果没有文字也没有图片，不发送
+    if (text.isEmpty && _pendingImages.isEmpty) return;
 
     final aiService = context.read<AiChatService>();
-    aiService.sendMessage(text);
+    // 发送消息（带图片）
+    aiService.sendMessage(
+      text,
+      images: _pendingImages.isNotEmpty ? List.from(_pendingImages) : null,
+    );
     _inputController.clear();
+    setState(() {
+      _pendingImages.clear();
+    });
     _focusNode.requestFocus();
 
     // reverse ListView 中，0 是最新消息（视觉底部），所以滚动到 0
     Future.delayed(const Duration(milliseconds: 100), () {
       _scrollToTop(); // 实际上是滚到视觉底部
     });
+  }
+
+  /// 从剪贴板粘贴图片
+  Future<void> _pasteImage() async {
+    try {
+      final imageBytes = await Pasteboard.image;
+      if (imageBytes != null && imageBytes.isNotEmpty) {
+        _addImageFromBytes(imageBytes, 'image/png');
+      }
+    } catch (e) {
+      debugPrint('粘贴图片失败: $e');
+    }
+  }
+
+  /// 选择图片文件
+  Future<void> _pickImage() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: true,
+      );
+
+      if (result != null) {
+        for (final file in result.files) {
+          if (file.path != null) {
+            final bytes = await File(file.path!).readAsBytes();
+            final mediaType = _getMediaType(file.extension ?? 'png');
+            _addImageFromBytes(bytes, mediaType);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('选择图片失败: $e');
+    }
+  }
+
+  /// 从字节数据添加图片
+  void _addImageFromBytes(Uint8List bytes, String mediaType) {
+    // 限制最多 5 张图片
+    if (_pendingImages.length >= 5) {
+      Toast.show(
+        context,
+        message: S.get('max_images_reached'),
+        type: ToastType.warning,
+      );
+      return;
+    }
+
+    final base64Data = base64Encode(bytes);
+    setState(() {
+      _pendingImages.add(ChatImage(
+        base64Data: base64Data,
+        mediaType: mediaType,
+      ));
+    });
+  }
+
+  /// 移除待发送图片
+  void _removeImage(int index) {
+    setState(() {
+      _pendingImages.removeAt(index);
+    });
+  }
+
+  /// 获取图片 MIME 类型
+  String _getMediaType(String extension) {
+    switch (extension.toLowerCase()) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'gif':
+        return 'image/gif';
+      case 'webp':
+        return 'image/webp';
+      default:
+        return 'image/png';
+    }
   }
 
   @override
@@ -473,6 +566,9 @@ class _GlobalChatbotPanelState extends State<GlobalChatbotPanel>
               crossAxisAlignment:
                   isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
+                // 用户消息：显示图片（如果有）
+                if (isUser && message.hasImages)
+                  _buildMessageImages(message.images!),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
@@ -487,14 +583,23 @@ class _GlobalChatbotPanelState extends State<GlobalChatbotPanel>
                     ),
                   ),
                   child: isUser
-                      ? SelectableText(
-                          message.content,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            height: 1.4,
-                          ),
-                        )
+                      ? (message.content.isEmpty
+                          ? Text(
+                              S.get('image_message'),
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            )
+                          : SelectableText(
+                              message.content,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                height: 1.4,
+                              ),
+                            ))
                       : MarkdownBody(
                           data: message.content,
                           selectable: true,
@@ -703,78 +808,233 @@ class _GlobalChatbotPanelState extends State<GlobalChatbotPanel>
         color: Color(0xFF252526),
         border: Border(top: BorderSide(color: Colors.white12)),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: TextField(
-              controller: _inputController,
-              focusNode: _focusNode,
-              enabled: hasApiKey,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: hasApiKey
-                    ? S.get('chatbot_placeholder')
-                    : S.get('claude_api_key_required'),
-                hintStyle: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 13,
+          // 待发送图片预览
+          if (_pendingImages.isNotEmpty) _buildPendingImages(),
+          // 输入行
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // 图片选择按钮
+              IconButton(
+                onPressed: hasApiKey ? _pickImage : null,
+                icon: Icon(
+                  Icons.image_outlined,
+                  size: 20,
+                  color: hasApiKey ? Colors.grey.shade400 : Colors.grey.shade700,
                 ),
-                filled: true,
-                fillColor: const Color(0xFF1E1E1E),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey.shade800),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.deepPurple),
+                tooltip: S.get('add_image'),
+                style: IconButton.styleFrom(
+                  padding: const EdgeInsets.all(8),
                 ),
               ),
-              maxLines: 3,
-              minLines: 1,
-              onSubmitted: (_) => _sendMessage(),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Consumer<AiChatService>(
-            builder: (context, aiService, _) {
-              return IconButton(
-                onPressed: hasApiKey && !aiService.isLoading ? _sendMessage : null,
-                icon: aiService.isLoading
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.deepPurple.shade300,
-                        ),
-                      )
-                    : Icon(
-                        Icons.send_rounded,
-                        color: hasApiKey
-                            ? Colors.deepPurple.shade300
-                            : Colors.grey.shade600,
+              const SizedBox(width: 4),
+              // 文本输入框（支持 Cmd+V 粘贴图片）
+              Expanded(
+                child: KeyboardListener(
+                  focusNode: FocusNode(),
+                  onKeyEvent: (event) async {
+                    // 检测 Cmd+V (macOS) 或 Ctrl+V (Windows/Linux)
+                    if (event is KeyDownEvent &&
+                        event.logicalKey == LogicalKeyboardKey.keyV &&
+                        (HardwareKeyboard.instance.isMetaPressed ||
+                            HardwareKeyboard.instance.isControlPressed)) {
+                      // 尝试粘贴图片
+                      await _pasteImage();
+                    }
+                  },
+                  child: TextField(
+                    controller: _inputController,
+                    focusNode: _focusNode,
+                    enabled: hasApiKey,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: hasApiKey
+                          ? S.get('chatbot_placeholder')
+                          : S.get('claude_api_key_required'),
+                      hintStyle: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
                       ),
-                style: IconButton.styleFrom(
-                  backgroundColor: hasApiKey
-                      ? Colors.deepPurple.withOpacity(0.2)
-                      : Colors.grey.withOpacity(0.1),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                      filled: true,
+                      fillColor: const Color(0xFF1E1E1E),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey.shade800),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Colors.deepPurple),
+                      ),
+                    ),
+                    maxLines: 3,
+                    minLines: 1,
+                    onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
-              );
-            },
+              ),
+              const SizedBox(width: 8),
+              Consumer<AiChatService>(
+                builder: (context, aiService, _) {
+                  final canSend = hasApiKey &&
+                      !aiService.isLoading &&
+                      (_inputController.text.trim().isNotEmpty ||
+                          _pendingImages.isNotEmpty);
+                  return IconButton(
+                    onPressed: canSend ? _sendMessage : null,
+                    icon: aiService.isLoading
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.deepPurple.shade300,
+                            ),
+                          )
+                        : Icon(
+                            Icons.send_rounded,
+                            color: canSend
+                                ? Colors.deepPurple.shade300
+                                : Colors.grey.shade600,
+                          ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: canSend
+                          ? Colors.deepPurple.withOpacity(0.2)
+                          : Colors.grey.withOpacity(0.1),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+
+  /// 构建待发送图片预览
+  Widget _buildPendingImages() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      height: 60,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: _pendingImages.length,
+        itemBuilder: (context, index) {
+          final img = _pendingImages[index];
+          final bytes = base64Decode(img.base64Data);
+          return Container(
+            margin: const EdgeInsets.only(right: 8),
+            child: Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(
+                    bytes,
+                    width: 60,
+                    height: 60,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                // 删除按钮
+                Positioned(
+                  top: 2,
+                  right: 2,
+                  child: GestureDetector(
+                    onTap: () => _removeImage(index),
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.close,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// 构建消息中的图片显示
+  Widget _buildMessageImages(List<ChatImage> images) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        alignment: WrapAlignment.end,
+        children: images.map((img) {
+          final bytes = base64Decode(img.base64Data);
+          return GestureDetector(
+            onTap: () => _showImageDialog(bytes),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.memory(
+                bytes,
+                width: 120,
+                height: 120,
+                fit: BoxFit.cover,
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  /// 显示图片大图弹窗
+  void _showImageDialog(Uint8List bytes) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // 图片
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.memory(
+                bytes,
+                fit: BoxFit.contain,
+              ),
+            ),
+            // 关闭按钮
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close, color: Colors.white),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black54,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

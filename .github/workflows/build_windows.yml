@@ -1,0 +1,87 @@
+name: Build Windows App
+
+# 触发条件：打标签时触发，或者手动触发
+on:
+  push:
+    tags:
+      - 'v*'  # 匹配 v1.0.0, v1.0.3 等格式的标签
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. 安装 Flutter（带缓存加速）
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      # 2. 从 pubspec.yaml 提取版本号
+      - name: Extract Version
+        id: version
+        run: |
+          $content = Get-Content pubspec.yaml -Raw
+          if ($content -match 'version:\s*(\d+\.\d+\.\d+)') {
+            $version = $matches[1]
+            echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+            echo "Extracted version: $version"
+          } else {
+            echo "VERSION=unknown" >> $env:GITHUB_OUTPUT
+            echo "Failed to extract version"
+          }
+        shell: pwsh
+
+      # 3. 获取依赖
+      - name: Install Dependencies
+        run: flutter pub get
+
+      # 4. Build Windows Release
+      - name: Build Windows Release
+        run: flutter build windows --release
+
+      # 5. Download VC++ Redistributable for bundling
+      - name: Download VC++ Redistributable
+        run: |
+          # Download VC++ 2015-2022 Redistributable (x64)
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "build/vc_redist.x64.exe"
+          echo "Downloaded VC++ Redistributable"
+        shell: pwsh
+
+      # 6. Update version in Inno Setup script
+      - name: Update Inno Setup Version
+        run: |
+          $version = "${{ steps.version.outputs.VERSION }}"
+          $issPath = "installer/windows_setup.iss"
+          $content = Get-Content $issPath -Raw
+          # Replace hardcoded version with actual version from pubspec.yaml
+          $content = $content -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"$version`""
+          Set-Content $issPath -Value $content
+          echo "Updated Inno Setup version to: $version"
+        shell: pwsh
+
+      # 7. Build Installer with Inno Setup
+      - name: Build Installer with Inno Setup
+        run: |
+          # Create output directory
+          New-Item -ItemType Directory -Force -Path build/installer
+          # Use Inno Setup bundled with GitHub Actions runner
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/windows_setup.iss
+        shell: pwsh
+
+      # 8. Upload Installer (with version)
+      - name: Upload Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-switch-installer-v${{ steps.version.outputs.VERSION }}
+          path: build/installer/*.exe
+
+      # 9. Upload Raw Build (with version, for debugging)
+      - name: Upload Raw Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-switch-windows-raw-v${{ steps.version.outputs.VERSION }}
+          path: build/windows/x64/runner/Release/

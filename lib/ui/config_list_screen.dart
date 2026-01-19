@@ -94,7 +94,11 @@ class ConfigListScreen extends StatelessWidget {
                         ),
                       ],
                       if (projectProfiles.isNotEmpty) ...[
-                        if (globalProfile != null) _buildSectionHeader('项目级配置'),
+                        if (globalProfile != null)
+                          _buildSectionHeader(
+                            S.get('project_config_section'),
+                            tooltip: S.get('project_config_tooltip'),
+                          ),
                         ...projectProfiles.map(
                           (profile) => ProjectCard(
                             profile: profile,
@@ -151,17 +155,45 @@ class ConfigListScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildSectionHeader(String title, {String? tooltip}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: Colors.grey.shade600,
-          letterSpacing: 0.5,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+              letterSpacing: 0.5,
+            ),
+          ),
+          if (tooltip != null) ...[
+            const SizedBox(width: 6),
+            Tooltip(
+              message: tooltip,
+              preferBelow: false,
+              verticalOffset: 16,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade800,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              textStyle: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                height: 1.5,
+              ),
+              child: Icon(
+                Icons.help_outline,
+                size: 16,
+                color: Colors.grey.shade500,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

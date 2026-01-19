@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/claude_prompt.dart';
+import '../utils/platform_utils.dart';
 
 import 'dart:async'; // Add import
 
@@ -48,19 +49,19 @@ class PromptService extends ChangeNotifier {
   }
 
   Future<String> get _appConfigPath async {
-    final home = Platform.environment['HOME'];
-    if (home == null) throw Exception('HOME environment variable not set');
-    final dir = Directory('$home/$_mcpSwitchDir');
+    final home = PlatformUtils.userHome;
+    if (home.isEmpty) throw Exception('User home directory not found');
+    final dir = Directory(PlatformUtils.joinPath(home, _mcpSwitchDir));
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
-    return '${dir.path}/$_configFile';
+    return PlatformUtils.joinPath(dir.path, _configFile);
   }
-  
+
   String get _claudeFilePath {
-    final home = Platform.environment['HOME'];
-    if (home == null) throw Exception('HOME environment variable not set');
-    return '$home/$_claudeDir/$_claudeFile';
+    final home = PlatformUtils.userHome;
+    if (home.isEmpty) throw Exception('User home directory not found');
+    return PlatformUtils.joinPath(home, _claudeDir, _claudeFile);
   }
 
   Future<void> _loadPrompts() async {

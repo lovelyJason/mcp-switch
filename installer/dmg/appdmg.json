@@ -1,0 +1,25 @@
+{
+  "title": "MCP Switch",
+  "background": "background.png",
+  "icon-size": 100,
+  "window": {
+    "size": {
+      "width": 540,
+      "height": 380
+    }
+  },
+  "contents": [
+    {
+      "x": 135,
+      "y": 190,
+      "type": "file",
+      "path": "../../build/macos/Build/Products/Release/MCP Switch.app"
+    },
+    {
+      "x": 405,
+      "y": 190,
+      "type": "link",
+      "path": "/Applications"
+    }
+  ]
+}

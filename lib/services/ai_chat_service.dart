@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/ai_system_prompt.dart';
 import '../models/chat_message.dart';
+import '../utils/platform_utils.dart';
 import 'skills_service.dart';
 import 'terminal_service.dart';
 
@@ -41,9 +42,9 @@ class AiChatService extends ChangeNotifier {
   String? _error;
   String? get error => _error;
 
-  // 聊天历史文件路径
+  // 聊天历史文件路径（跨平台）
   String get _historyPath =>
-      '${Platform.environment['HOME']}/.mcp-switch/chat_history.json';
+      PlatformUtils.joinPath(PlatformUtils.userHome, '.mcp-switch', 'chat_history.json');
 
   // System Prompt（从单独文件引用，便于维护）
   static String get _systemPrompt => AiSystemPrompt.prompt;
@@ -158,11 +159,16 @@ class AiChatService extends ChangeNotifier {
     }
   }
 
-  /// 发送消息（流式输出）
-  Future<void> sendMessage(String content) async {
-    if (_apiKey == null || _apiKey!.isEmpty || content.trim().isEmpty) {
+  /// 发送消息（流式输出，支持图片）
+  Future<void> sendMessage(String content, {List<ChatImage>? images}) async {
+    if (_apiKey == null || _apiKey!.isEmpty) {
       _error = 'API Key 未配置';
       notifyListeners();
+      return;
+    }
+
+    // 如果内容和图片都为空，不发送
+    if (content.trim().isEmpty && (images == null || images.isEmpty)) {
       return;
     }
 
@@ -170,20 +176,14 @@ class AiChatService extends ChangeNotifier {
     _isLoading = true;
     _streamingContent = '';
 
-    // 添加用户消息
-    final userMessage = ChatMessage.user(content);
+    // 添加用户消息（带图片）
+    final userMessage = ChatMessage.user(content, images: images);
     _messages.add(userMessage);
     notifyListeners();
 
     try {
       // 构建消息历史（用于 API 请求）
-      final apiMessages = _messages
-          .where((m) => m.role != ChatRole.system)
-          .map((m) => {
-                'role': m.role == ChatRole.user ? 'user' : 'assistant',
-                'content': m.content,
-              })
-          .toList();
+      final apiMessages = _buildApiMessages();
 
       // 使用流式 API
       await _sendStreamingRequest(apiMessages);
@@ -198,6 +198,62 @@ class AiChatService extends ChangeNotifier {
       await _saveHistory();
       notifyListeners();
     }
+  }
+
+  /// 构建 API 消息格式（支持图片）
+  List<Map<String, dynamic>> _buildApiMessages() {
+    final apiMessages = <Map<String, dynamic>>[];
+
+    for (final m in _messages) {
+      if (m.role == ChatRole.system) continue;
+
+      if (m.role == ChatRole.user) {
+        // 用户消息可能包含图片
+        if (m.hasImages) {
+          // 多模态消息：图片 + 文本
+          final contentBlocks = <Map<String, dynamic>>[];
+
+          // 先添加图片
+          for (final img in m.images!) {
+            contentBlocks.add({
+              'type': 'image',
+              'source': {
+                'type': 'base64',
+                'media_type': img.mediaType,
+                'data': img.base64Data,
+              },
+            });
+          }
+
+          // 再添加文本
+          if (m.content.isNotEmpty) {
+            contentBlocks.add({
+              'type': 'text',
+              'text': m.content,
+            });
+          }
+
+          apiMessages.add({
+            'role': 'user',
+            'content': contentBlocks,
+          });
+        } else {
+          // 纯文本消息
+          apiMessages.add({
+            'role': 'user',
+            'content': m.content,
+          });
+        }
+      } else {
+        // 助手消息
+        apiMessages.add({
+          'role': 'assistant',
+          'content': m.content,
+        });
+      }
+    }
+
+    return apiMessages;
   }
 
   /// 智能构建 API URL
@@ -532,10 +588,26 @@ class AiChatService extends ChangeNotifier {
 
       for (final m in _messages) {
         if (m.role == ChatRole.user) {
-          apiMessages.add({
-            'role': 'user',
-            'content': m.content,
-          });
+          // 用户消息可能包含图片
+          if (m.hasImages) {
+            final contentBlocks = <Map<String, dynamic>>[];
+            for (final img in m.images!) {
+              contentBlocks.add({
+                'type': 'image',
+                'source': {
+                  'type': 'base64',
+                  'media_type': img.mediaType,
+                  'data': img.base64Data,
+                },
+              });
+            }
+            if (m.content.isNotEmpty) {
+              contentBlocks.add({'type': 'text', 'text': m.content});
+            }
+            apiMessages.add({'role': 'user', 'content': contentBlocks});
+          } else {
+            apiMessages.add({'role': 'user', 'content': m.content});
+          }
         } else if (m.role == ChatRole.assistant) {
           if (m.toolCalls != null && m.toolCalls!.isNotEmpty) {
             // 带工具调用的助手消息
@@ -737,15 +809,9 @@ class AiChatService extends ChangeNotifier {
     }
 
     // 静默执行命令，捕获输出（不会发到终端，避免重复执行）
+    // 使用跨平台工具类执行命令
     try {
-      final result = await Process.run(
-        'bash',
-        ['-c', command],
-        environment: {
-          ...Platform.environment,
-          'PATH': '${Platform.environment['PATH']}:/usr/local/bin:/opt/homebrew/bin',
-        },
-      );
+      final result = await PlatformUtils.runCommand(command);
 
       final stdout = (result.stdout as String).trim();
       final stderr = (result.stderr as String).trim();

@@ -1,6 +1,10 @@
 {
   "permissions": {
     "allow": [
+      "WebFetch(*)",
+      "Edit",
+      "Write",
+      "Bash(*)",
       "Bash(openspec --help:*)",
       "Bash(fnm use:*)",
       "Bash(openspec init:*)",
@@ -17,7 +21,25 @@
       "Bash(claude plugin disable:*)",
       "Bash(claude plugin enable:*)",
       "Bash(flutter pub get:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(python3:*)",
+      "Skill(docx)",
+      "Skill(docx:*)",
+      "Bash(md5:*)",
+      "Bash(brew list:*)",
+      "Skill(flow-next:ralph-init)",
+      "Skill(flow-next:ralph-init:*)",
+      "Bash(gemini --help:*)",
+      "Bash(flutter pub add:*)",
+      "Bash(./create_dmg.sh:*)",
+      "Bash(screencapture:*)",
+      "Bash(hdiutil detach:*)",
+      "Bash(npm install:*)",
+      "Bash(claude --version:*)",
+      "Bash(dart run:*)",
+      "Bash(# 检查 fnm 是怎么配置的 grep -r \"\"fnm\"\" ~/.zshrc ~/.zprofile ~/.bashrc ~/.bash_profile)",
+      "Bash(gemini extensions:*)",
+      "Bash(gemini extension:*)"
     ],
     "deny": [],
     "ask": []

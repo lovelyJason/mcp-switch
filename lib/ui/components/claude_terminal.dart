@@ -4,6 +4,7 @@ import 'package:xterm/xterm.dart';
 import '../../l10n/s.dart';
 import '../../services/terminal_service.dart';
 import '../../services/prompt_service.dart';
+import '../../services/config_service.dart';
 
 class ClaudeTerminal extends StatefulWidget {
   final VoidCallback onClose;
@@ -23,7 +24,11 @@ class _ClaudeTerminalState extends State<ClaudeTerminal> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final terminalService = context.read<TerminalService>();
       final promptService = context.read<PromptService>();
-      
+      final configService = context.read<ConfigService>();
+
+      // 设置 context 和 configService 以支持 Windows Shell 选择弹窗
+      terminalService.setContext(context, configService);
+
       terminalService.init(
         () async {
         await promptService.ensureInitialized;

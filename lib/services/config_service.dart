@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'logger_service.dart';
+import '../utils/platform_utils.dart';
 
 /// 配置服务类 (ConfigService)
 ///
@@ -112,24 +113,28 @@ class ConfigService extends ChangeNotifier {
         );
       } catch (_) {}
     }
+
+    // Load Windows Shell Preference
+    _windowsShell = prefs.getString('windows_shell');
   }
 
   String _getDefaultPath(EditorType type) {
-    // Return placeholder default paths. These need to be verified on macOS.
-    final home = Platform.environment['HOME'];
+    // 使用跨平台工具类获取用户目录
+    // Windows: %USERPROFILE%, macOS/Linux: $HOME
+    final home = PlatformUtils.userHome;
     switch (type) {
       case EditorType.cursor:
-        return '$home/.cursor/mcp.json';
+        return PlatformUtils.joinPath(home, '.cursor', 'mcp.json');
       case EditorType.windsurf:
-        return '$home/.codeium/windsurf/mcp_config.json';
+        return PlatformUtils.joinPath(home, '.codeium', 'windsurf', 'mcp_config.json');
       case EditorType.claude:
-        return '$home/.claude.json'; // Updated default path to root .claude.json
+        return PlatformUtils.joinPath(home, '.claude.json');
       case EditorType.codex:
-        return '$home/.codex/config.toml';
+        return PlatformUtils.joinPath(home, '.codex', 'config.toml');
       case EditorType.antigravity:
-        return '$home/.gemini/antigravity/mcp_config.json';
+        return PlatformUtils.joinPath(home, '.gemini', 'antigravity', 'mcp_config.json');
       case EditorType.gemini:
-        return '$home/.gemini/settings.json';
+        return PlatformUtils.joinPath(home, '.gemini', 'settings.json');
     }
   }
 
@@ -593,6 +598,19 @@ class ConfigService extends ChangeNotifier {
     _showChatbotIcon = show;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('show_chatbot_icon', show);
+    notifyListeners();
+  }
+
+  // Windows Shell 偏好 (powershell | cmd)
+  // null 表示首次启动，需要弹窗选择
+  String? _windowsShell;
+  String? get windowsShell => _windowsShell;
+  bool get hasWindowsShellPreference => _windowsShell != null;
+
+  Future<void> setWindowsShell(String shell) async {
+    _windowsShell = shell;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('windows_shell', shell);
     notifyListeners();
   }
 

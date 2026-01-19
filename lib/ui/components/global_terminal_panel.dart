@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:xterm/xterm.dart';
@@ -19,6 +20,7 @@ class _GlobalTerminalPanelState extends State<GlobalTerminalPanel>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<Offset> _slideAnimation;
+  final FocusNode _terminalFocusNode = FocusNode();
 
   @override
   void initState() {
@@ -47,6 +49,13 @@ class _GlobalTerminalPanelState extends State<GlobalTerminalPanel>
         },
         () async => await promptService.markTerminalArtLoaded(),
       );
+
+      // 确保终端获得焦点
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          _terminalFocusNode.requestFocus();
+        }
+      });
     });
 
     // 播放进入动画
@@ -56,6 +65,7 @@ class _GlobalTerminalPanelState extends State<GlobalTerminalPanel>
   @override
   void dispose() {
     _animationController.dispose();
+    _terminalFocusNode.dispose();
     super.dispose();
   }
 
@@ -158,10 +168,14 @@ class _GlobalTerminalPanelState extends State<GlobalTerminalPanel>
                             return TerminalView(
                               service.terminal,
                               controller: service.terminalController,
+                              focusNode: _terminalFocusNode,
                               autofocus: true,
                               backgroundOpacity: 0,
-                              textStyle: const TerminalStyle(
-                                fontFamily: 'Menlo',
+                              // Windows 桌面应用只使用硬件键盘
+                              hardwareKeyboardOnly: Platform.isWindows || Platform.isMacOS || Platform.isLinux,
+                              textStyle: TerminalStyle(
+                                // Windows 用 Consolas，macOS 用 Menlo
+                                fontFamily: Platform.isWindows ? 'Consolas' : 'Menlo',
                                 fontSize: 13,
                               ),
                               theme: TerminalThemes.defaultTheme,

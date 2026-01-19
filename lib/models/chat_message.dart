@@ -73,6 +73,27 @@ class ToolCall {
       );
 }
 
+/// 图片附件（Base64 编码）
+class ChatImage {
+  final String base64Data;
+  final String mediaType; // image/png, image/jpeg, image/gif, image/webp
+
+  const ChatImage({
+    required this.base64Data,
+    required this.mediaType,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'base64Data': base64Data,
+        'mediaType': mediaType,
+      };
+
+  factory ChatImage.fromJson(Map<String, dynamic> json) => ChatImage(
+        base64Data: json['base64Data'] as String,
+        mediaType: json['mediaType'] as String,
+      );
+}
+
 /// 聊天消息
 class ChatMessage {
   final String id;
@@ -80,6 +101,7 @@ class ChatMessage {
   final String content;
   final DateTime timestamp;
   final List<ToolCall>? toolCalls;
+  final List<ChatImage>? images; // 图片附件
   final bool isStreaming;
 
   const ChatMessage({
@@ -88,14 +110,16 @@ class ChatMessage {
     required this.content,
     required this.timestamp,
     this.toolCalls,
+    this.images,
     this.isStreaming = false,
   });
 
-  factory ChatMessage.user(String content) => ChatMessage(
+  factory ChatMessage.user(String content, {List<ChatImage>? images}) => ChatMessage(
         id: const Uuid().v4(),
         role: ChatRole.user,
         content: content,
         timestamp: DateTime.now(),
+        images: images,
       );
 
   factory ChatMessage.assistant(String content, {List<ToolCall>? toolCalls}) =>
@@ -120,6 +144,7 @@ class ChatMessage {
     String? content,
     DateTime? timestamp,
     List<ToolCall>? toolCalls,
+    List<ChatImage>? images,
     bool? isStreaming,
   }) {
     return ChatMessage(
@@ -128,6 +153,7 @@ class ChatMessage {
       content: content ?? this.content,
       timestamp: timestamp ?? this.timestamp,
       toolCalls: toolCalls ?? this.toolCalls,
+      images: images ?? this.images,
       isStreaming: isStreaming ?? this.isStreaming,
     );
   }
@@ -138,6 +164,7 @@ class ChatMessage {
         'content': content,
         'timestamp': timestamp.toIso8601String(),
         'toolCalls': toolCalls?.map((t) => t.toJson()).toList(),
+        'images': images?.map((i) => i.toJson()).toList(),
         'isStreaming': isStreaming,
       };
 
@@ -152,6 +179,12 @@ class ChatMessage {
         toolCalls: (json['toolCalls'] as List?)
             ?.map((e) => ToolCall.fromJson(e as Map<String, dynamic>))
             .toList(),
+        images: (json['images'] as List?)
+            ?.map((e) => ChatImage.fromJson(e as Map<String, dynamic>))
+            .toList(),
         isStreaming: json['isStreaming'] as bool? ?? false,
       );
+
+  /// 是否包含图片
+  bool get hasImages => images != null && images!.isNotEmpty;
 }

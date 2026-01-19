@@ -1,0 +1,350 @@
+# MCP Switch 平台命令配置
+# 此文件首次运行后会复制到 ~/.mcp-switch/config/platform_commands.yaml
+# 用户可以修改该目录下的配置文件来自定义行为
+#
+# 支持的功能：
+# - shells: 各平台支持的 shell 配置列表
+# - use_shell: 默认使用的 shell
+# - pre_script: 安装前执行的脚本（如设置代理）
+# - install_script: 安装脚本
+
+claude_code_download:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Windows 配置
+  # ═══════════════════════════════════════════════════════════════════════════
+  windows:
+    # 默认使用的 Shell
+    use_shell: cmd
+    run_in_shell: true
+
+    # 检测 Claude CLI 的路径（相对于用户主目录）
+    detect_paths:
+      - ".local\\bin\\claude.exe"
+      - ".claude\\bin\\claude.exe"
+      - ".claude\\local\\bin\\claude.exe"
+      - ".claude\\claude.exe"
+      - "AppData\\Local\\Programs\\claude\\claude.exe"
+      - "AppData\\Local\\Claude\\claude.exe"
+
+    # 环境变量（可选，会合并到系统环境变量）
+    environment: {}
+
+    # Shell 配置列表
+    shells:
+      # --- PowerShell 配置 ---
+      - name: powershell
+        display_name: PowerShell
+        shell: powershell
+        shell_args: ["-NoProfile", "-Command"]
+        install_script: "irm https://claude.ai/install.ps1 | iex"
+        pre_script: |
+          $env:ALL_PROXY='http://172.16.107.90:7897'
+          $env:HTTP_PROXY='http://172.16.107.90:7897'
+          $env:HTTPS_PROXY='http://172.16.107.90:7897'
+          Write-Host '>>> 代理已设置'
+          Write-Host '>>> 测试代理连通性...'
+          try {
+            $r = Invoke-WebRequest -Uri 'https://www.google.com' -UseBasicParsing -TimeoutSec 10
+            Write-Host ">>> 代理测试成功! 状态码: $($r.StatusCode)"
+          } catch {
+            Write-Host ">>> 代理测试失败: $_"
+          }
+
+      # --- CMD 配置 ---
+      - name: cmd
+        display_name: CMD (命令提示符)
+        shell: cmd
+        shell_args: ["/c"]
+        install_script: "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd"
+        pre_script: |
+          set ALL_PROXY=http://172.16.107.90:7897
+          set HTTP_PROXY=http://172.16.107.90:7897
+          set HTTPS_PROXY=http://172.16.107.90:7897
+          echo === 代理已设置 ===
+          echo === 测试代理连通性... ===
+          curl -s -o nul --connect-timeout 10 https://www.google.com
+          if %errorlevel% equ 0 (
+              echo === 代理测试成功! ===
+          ) else (
+              echo === 代理测试失败，错误码: %errorlevel% ===
+          )
+        post_script: |
+          echo === 检查 PATH 环境变量... ===
+          set "CLAUDE_BIN=%USERPROFILE%\.local\bin"
+          echo %PATH% | findstr /I /C:"%CLAUDE_BIN%" >nul
+          if %errorlevel% neq 0 (
+              echo === 正在将 %CLAUDE_BIN% 添加到用户 PATH... ===
+              for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v PATH 2^>nul') do set "USER_PATH=%%b"
+              if defined USER_PATH (
+                  setx PATH "%USER_PATH%;%CLAUDE_BIN%"
+              ) else (
+                  setx PATH "%CLAUDE_BIN%"
+              )
+              echo === PATH 已更新，请重启终端生效 ===
+          ) else (
+              echo === PATH 已包含 Claude CLI 路径 ===
+          )
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # macOS 配置
+  # ═══════════════════════════════════════════════════════════════════════════
+  macos:
+    # 默认使用的 Shell（macOS Catalina+ 默认 zsh）
+    use_shell: zsh
+    run_in_shell: false
+
+    # 检测 Claude CLI 的路径（相对于用户主目录）
+    detect_paths:
+      - ".claude/local/bin/claude"
+
+    # 环境变量（macOS 需要添加常用路径到 PATH）
+    environment:
+      PATH: "/usr/local/bin:/opt/homebrew/bin:/Users/${USER}/.local/bin:${PATH}"
+
+    # Shell 配置列表
+    shells:
+      # --- Zsh 配置 ---
+      - name: zsh
+        display_name: Zsh (默认)
+        shell: zsh
+        shell_args: ["-c"]
+        install_script: "curl -fsSL https://claude.ai/install.sh | sh"
+        pre_script: ""
+
+      # --- Bash 配置 ---
+      - name: bash
+        display_name: Bash
+        shell: bash
+        shell_args: ["-c"]
+        install_script: "curl -fsSL https://claude.ai/install.sh | sh"
+        pre_script: ""
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Linux 配置
+  # ═══════════════════════════════════════════════════════════════════════════
+  linux:
+    # 默认使用的 Shell
+    use_shell: bash
+    run_in_shell: false
+
+    # 检测 Claude CLI 的路径（相对于用户主目录）
+    detect_paths:
+      - ".claude/local/bin/claude"
+
+    # 环境变量
+    environment:
+      PATH: "/usr/local/bin:${HOME}/.local/bin:${PATH}"
+
+    # Shell 配置列表
+    shells:
+      # --- Bash 配置 ---
+      - name: bash
+        display_name: Bash (默认)
+        shell: bash
+        shell_args: ["-c"]
+        install_script: "curl -fsSL https://claude.ai/install.sh | sh"
+        pre_script: ""
+
+      # --- Zsh 配置 ---
+      - name: zsh
+        display_name: Zsh
+        shell: zsh
+        shell_args: ["-c"]
+        install_script: "curl -fsSL https://claude.ai/install.sh | sh"
+        pre_script: ""
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Codex CLI 下载配置
+# OpenAI Codex CLI: https://github.com/openai/codex
+# 安装方式: npm install -g @openai/codex
+# ═══════════════════════════════════════════════════════════════════════════════
+codex_download:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Windows 配置
+  # ═══════════════════════════════════════════════════════════════════════════
+  windows:
+    use_shell: powershell
+    run_in_shell: true
+
+    # 检测 Codex CLI 的路径（相对于用户主目录）
+    detect_paths:
+      - "AppData\\Roaming\\npm\\codex.cmd"
+      - "AppData\\Roaming\\npm\\codex"
+      - ".npm-global\\codex.cmd"
+
+    environment: {}
+
+    shells:
+      # --- PowerShell 配置 ---
+      - name: powershell
+        display_name: PowerShell
+        shell: powershell
+        shell_args: ["-NoProfile", "-Command"]
+        install_script: "npm install -g @openai/codex"
+        pre_script: ""
+
+      # --- CMD 配置 ---
+      - name: cmd
+        display_name: CMD (命令提示符)
+        shell: cmd
+        shell_args: ["/c"]
+        install_script: "npm install -g @openai/codex"
+        pre_script: ""
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # macOS 配置
+  # ═══════════════════════════════════════════════════════════════════════════
+  macos:
+    use_shell: zsh
+    run_in_shell: false
+
+    detect_paths:
+      - ".npm-global/bin/codex"
+
+    environment:
+      PATH: "/usr/local/bin:/opt/homebrew/bin:${HOME}/.npm-global/bin:${PATH}"
+
+    shells:
+      # --- Zsh 配置 ---
+      - name: zsh
+        display_name: Zsh (默认)
+        shell: zsh
+        shell_args: ["-c"]
+        install_script: "npm install -g @openai/codex"
+        pre_script: ""
+
+      # --- Bash 配置 ---
+      - name: bash
+        display_name: Bash
+        shell: bash
+        shell_args: ["-c"]
+        install_script: "npm install -g @openai/codex"
+        pre_script: ""
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Linux 配置
+  # ═══════════════════════════════════════════════════════════════════════════
+  linux:
+    use_shell: bash
+    run_in_shell: false
+
+    detect_paths:
+      - ".npm-global/bin/codex"
+
+    environment:
+      PATH: "/usr/local/bin:${HOME}/.npm-global/bin:${PATH}"
+
+    shells:
+      # --- Bash 配置 ---
+      - name: bash
+        display_name: Bash (默认)
+        shell: bash
+        shell_args: ["-c"]
+        install_script: "npm install -g @openai/codex"
+        pre_script: ""
+
+      # --- Zsh 配置 ---
+      - name: zsh
+        display_name: Zsh
+        shell: zsh
+        shell_args: ["-c"]
+        install_script: "npm install -g @openai/codex"
+        pre_script: ""
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Gemini CLI 下载配置
+# Google Gemini CLI: https://github.com/google-gemini/gemini-cli
+# 安装方式: npm install -g @google/gemini-cli
+# ═══════════════════════════════════════════════════════════════════════════════
+gemini_download:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Windows 配置
+  # ═══════════════════════════════════════════════════════════════════════════
+  windows:
+    use_shell: powershell
+    run_in_shell: true
+
+    # 检测 Gemini CLI 的路径（相对于用户主目录）
+    detect_paths:
+      - "AppData\\Roaming\\npm\\gemini.cmd"
+      - "AppData\\Roaming\\npm\\gemini"
+      - ".npm-global\\gemini.cmd"
+
+    environment: {}
+
+    shells:
+      # --- PowerShell 配置 ---
+      - name: powershell
+        display_name: PowerShell
+        shell: powershell
+        shell_args: ["-NoProfile", "-Command"]
+        install_script: "npm install -g @google/gemini-cli"
+        pre_script: ""
+
+      # --- CMD 配置 ---
+      - name: cmd
+        display_name: CMD (命令提示符)
+        shell: cmd
+        shell_args: ["/c"]
+        install_script: "npm install -g @google/gemini-cli"
+        pre_script: ""
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # macOS 配置
+  # ═══════════════════════════════════════════════════════════════════════════
+  macos:
+    use_shell: zsh
+    run_in_shell: false
+
+    detect_paths:
+      - ".npm-global/bin/gemini"
+
+    environment:
+      PATH: "/usr/local/bin:/opt/homebrew/bin:${HOME}/.npm-global/bin:${PATH}"
+
+    shells:
+      # --- Zsh 配置 ---
+      - name: zsh
+        display_name: Zsh (默认)
+        shell: zsh
+        shell_args: ["-c"]
+        install_script: "npm install -g @google/gemini-cli"
+        pre_script: ""
+
+      # --- Bash 配置 ---
+      - name: bash
+        display_name: Bash
+        shell: bash
+        shell_args: ["-c"]
+        install_script: "npm install -g @google/gemini-cli"
+        pre_script: ""
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Linux 配置
+  # ═══════════════════════════════════════════════════════════════════════════
+  linux:
+    use_shell: bash
+    run_in_shell: false
+
+    detect_paths:
+      - ".npm-global/bin/gemini"
+
+    environment:
+      PATH: "/usr/local/bin:${HOME}/.npm-global/bin:${PATH}"
+
+    shells:
+      # --- Bash 配置 ---
+      - name: bash
+        display_name: Bash (默认)
+        shell: bash
+        shell_args: ["-c"]
+        install_script: "npm install -g @google/gemini-cli"
+        pre_script: ""
+
+      # --- Zsh 配置 ---
+      - name: zsh
+        display_name: Zsh
+        shell: zsh
+        shell_args: ["-c"]
+        install_script: "npm install -g @google/gemini-cli"
+        pre_script: ""

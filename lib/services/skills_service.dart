@@ -3,16 +3,17 @@ import 'dart:convert';
 import '../models/skills/installed_plugin.dart';
 import '../models/skills/installed_marketplace.dart';
 import '../models/skills/community_skill.dart';
+import '../utils/platform_utils.dart';
 
 /// Skills 数据服务
 /// 负责：JSON 解析、文件读写、数据转换
 class SkillsService {
-  /// 获取 HOME 目录
-  String get _home => Platform.environment['HOME'] ?? '';
+  /// 获取用户目录（跨平台）
+  String get _home => PlatformUtils.userHome;
 
   /// 加载插件启用状态 (从 settings.json)
   Future<Map<String, bool>> _loadEnabledPlugins() async {
-    final settingsFile = File('$_home/.claude/settings.json');
+    final settingsFile = File(PlatformUtils.joinPath(_home, '.claude', 'settings.json'));
     if (!await settingsFile.exists()) return {};
 
     try {
@@ -27,7 +28,7 @@ class SkillsService {
 
   /// 加载已安装插件
   Future<List<InstalledPlugin>> loadPlugins() async {
-    final pluginsFile = File('$_home/.claude/plugins/installed_plugins.json');
+    final pluginsFile = File(PlatformUtils.joinPath(_home, '.claude', 'plugins', 'installed_plugins.json'));
 
     if (!await pluginsFile.exists()) return [];
 
@@ -82,7 +83,7 @@ class SkillsService {
   Future<List<InstalledMarketplace>> loadMarketplaces() async {
     final marketplaces = <InstalledMarketplace>[];
     final knownMarketplacesFile =
-        File('$_home/.claude/plugins/known_marketplaces.json');
+        File(PlatformUtils.joinPath(_home, '.claude', 'plugins', 'known_marketplaces.json'));
 
     try {
       if (await knownMarketplacesFile.exists()) {
@@ -96,10 +97,10 @@ class SkillsService {
           if (value is Map<String, dynamic>) {
             final source = value['source'] as Map<String, dynamic>? ?? {};
             final installLocation = value['installLocation'] ??
-                '$_home/.claude/plugins/marketplaces/$name';
+                PlatformUtils.joinPath(_home, '.claude', 'plugins', 'marketplaces', name);
             // 检查 README.md 是否存在
             final hasReadme =
-                await File('$installLocation/README.md').exists();
+                await File(PlatformUtils.joinPath(installLocation, 'README.md')).exists();
             marketplaces.add(InstalledMarketplace(
               name: name,
               source: source['source'] ?? 'github',
@@ -114,19 +115,19 @@ class SkillsService {
       } else {
         // 兼容：如果 known_marketplaces.json 不存在，则从目录读取
         final marketplacesDir =
-            Directory('$_home/.claude/plugins/marketplaces');
+            Directory(PlatformUtils.joinPath(_home, '.claude', 'plugins', 'marketplaces'));
         if (await marketplacesDir.exists()) {
           final entities = await marketplacesDir.list().toList();
           final names = entities
               .whereType<Directory>()
-              .map((e) => e.path.split('/').last)
+              .map((e) => PlatformUtils.basename(e.path))
               .where((name) => !name.startsWith('.'))
               .toList();
 
           for (final name in names) {
-            final installLocation = '$_home/.claude/plugins/marketplaces/$name';
+            final installLocation = PlatformUtils.joinPath(_home, '.claude', 'plugins', 'marketplaces', name);
             final hasReadme =
-                await File('$installLocation/README.md').exists();
+                await File(PlatformUtils.joinPath(installLocation, 'README.md')).exists();
             marketplaces.add(InstalledMarketplace(
               name: name,
               source: 'github',
@@ -149,18 +150,18 @@ class SkillsService {
   /// 加载社区 Skills
   Future<List<CommunitySkill>> loadCommunitySkills() async {
     final communitySkills = <CommunitySkill>[];
-    final skillsDir = Directory('$_home/.claude/skills');
+    final skillsDir = Directory(PlatformUtils.joinPath(_home, '.claude', 'skills'));
 
     try {
       if (await skillsDir.exists()) {
         final entities = await skillsDir.list().toList();
         for (final entity in entities) {
           if (entity is Directory) {
-            final dirName = entity.path.split('/').last;
+            final dirName = PlatformUtils.basename(entity.path);
             if (dirName.startsWith('.')) continue;
 
             // 检查是否有 SKILL.md
-            final skillMdFile = File('${entity.path}/SKILL.md');
+            final skillMdFile = File(PlatformUtils.joinPath(entity.path, 'SKILL.md'));
             final hasSkillMd = await skillMdFile.exists();
 
             String? description;

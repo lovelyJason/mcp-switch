@@ -1,0 +1,45 @@
+# Ralph Configuration
+# ===================
+
+# Maximum number of tasks to run in one session
+# Set to 0 for unlimited
+max_tasks: 10
+
+# Delay between tasks in seconds
+# Gives you time to cancel if needed
+task_delay: 5
+
+# Automatically commit changes after each task completes
+# Set to false to review changes manually
+auto_commit: false
+
+# Model to use for task execution
+# Options: opus, sonnet, haiku
+model: sonnet
+
+# Working directory (relative to project root)
+# Leave empty for project root
+working_dir: ""
+
+# Log level: debug, info, warn, error
+log_level: info
+
+# Timeout per task in minutes
+# 0 = no timeout
+task_timeout: 30
+
+# Notification settings
+notifications:
+  # Send notification when all tasks complete
+  on_complete: false
+  # Send notification on task failure
+  on_failure: true
+
+# Safety settings
+safety:
+  # Require confirmation before destructive operations
+  confirm_destructive: true
+  # Dry run mode - don't actually execute, just log
+  dry_run: false
+  # Create backup branch before running
+  create_backup_branch: true

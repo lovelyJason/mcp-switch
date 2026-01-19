@@ -2,7 +2,33 @@
 description: Build Release version and Publish to GitHub
 ---
 
-1. Bump Version and Sync Notes
+// turbo-all
+
+1. Ensure Release Notes Draft
+   # Check if RELEASE_DRAFT.md exists.
+   # If it is missing, we fetch the git logs.
+   # AGENT: If the file is missing (you see the logs), generate RELEASE_DRAFT.md 
+   # using the "Semantic Release" format (Chinese) BEFORE proceeding.
+   #
+   # Format:
+   # ## v[NextVersion]
+   # ### ✨ 新增特性
+   # - [Characteristic description]
+   #
+   # ### 🚀 优化改进
+   # - [Improvement description]
+   #
+   # ### 🐛 问题修复
+   # - [Fix description]
+   
+   if [ ! -f "RELEASE_DRAFT.md" ]; then
+     echo "Draft missing. Fetching logs for auto-generation..."
+     git log $(git describe --tags --abbrev=0)..HEAD --no-merges --pretty=format:"- %s"
+   else
+     echo "Draft found. Proceeding."
+   fi
+
+2. Bump Version and Sync Notes
    # Auto-bump version
    python3 scripts/bump_version.py
    
@@ -37,10 +63,10 @@ description: Build Release version and Publish to GitHub
    git commit -m "chore: release v$version"
    git push
 
-2. Build the macOS App
+3. Build the macOS App
    flutter clean && flutter build macos --release
 
-3. Create the distribution Zip archives
+4. Create the distribution Zip archives
    cd build/macos/Build/Products/Release
    rm -f *.zip
    
@@ -51,7 +77,7 @@ description: Build Release version and Publish to GitHub
    zip -r "$zip_name" "MCP Switch.app"
    cd -
 
-4. Publish to GitHub
+5. Publish to GitHub
    version=$(grep 'version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1)
    zip_name="MCP_Switch_macOS_v${version}.zip"
    zip_path="build/macos/Build/Products/Release/$zip_name"
@@ -64,6 +90,10 @@ description: Build Release version and Publish to GitHub
      rm RELEASE_DRAFT.md
      echo "Release published and draft notes cleaned up."
    else
-     # Fallback to auto-generated notes
-     gh release create "v$version" "$zip_path" --title "v$version" --generate-notes
+     # Fallback (should not happen if Step 1 works, but effectively same as erroring if empty)
+     # We reinstated the error check just in case, or we can trust the agent. 
+     # Let's keep the strict check for safety.
+     echo "❌ ERROR: RELEASE_DRAFT.md not found!"
+     echo "Agent failed to generate draft notes."
+     exit 1
    fi

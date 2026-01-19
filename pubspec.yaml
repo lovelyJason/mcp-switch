@@ -55,6 +55,10 @@ dependencies:
   logger: ^2.6.2
   font_awesome_flutter: ^10.8.0
   anthropic_sdk_dart: ^0.1.0  # Claude API SDK for AI Chatbot
+  yaml: ^3.1.2  # YAML parser for platform config
+  path: ^1.9.0  # Path manipulation utilities
+  file_picker: ^10.3.8
+  pasteboard: ^0.4.0
 
 dev_dependencies:
   flutter_test:
@@ -93,6 +97,7 @@ flutter:
   assets:
     - assets/icons/
     - assets/images/
+    - assets/config/
     - lib/l10n/locales/
 
   # An image asset can refer to one or more resolution-specific "variants", see

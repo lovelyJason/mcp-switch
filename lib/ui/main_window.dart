@@ -7,6 +7,11 @@ import '../l10n/s.dart';
 import '../../models/editor_type.dart';
 import 'components/editor_selector.dart';
 import 'components/custom_toast.dart';
+import 'components/claude_not_installed_banner.dart';
+import 'components/claude_path_not_configured_banner.dart';
+import 'components/codex_not_installed_banner.dart';
+import 'components/gemini_not_installed_banner.dart';
+import 'components/windows_shell_selector_dialog.dart';
 import 'config_list_screen.dart';
 import 'settings_screen.dart';
 import 'package:window_manager/window_manager.dart';
@@ -18,8 +23,12 @@ import 'dart:io';
 import 'mcp_server_edit_screen.dart';
 import 'claude_prompts_screen.dart';
 import 'rules_screen.dart';
-import 'skills_screen.dart';
+import 'claude_code_skills_screen.dart';
+import 'codex_skills_screen.dart';
+import 'gemini_skills_screen.dart';
+import 'antigravity_skills_screen.dart';
 import '../main.dart' show globalScaffoldKey;
+import '../utils/platform_utils.dart';
 
 class MainWindow extends StatefulWidget {
   const MainWindow({super.key});
@@ -34,6 +43,31 @@ class _MainWindowState extends State<MainWindow>
   GlobalKey<ScaffoldState> get _scaffoldKey => globalScaffoldKey;
   late EditorType _selectedEditor;
 
+  // Claude CLI 安装状态（完整状态检测）
+  ClaudeInstallStatus? _claudeStatus;
+  bool _checkingClaude = true;
+  bool _isInstallingClaude = false; // 正在安装 Claude CLI
+
+  // Codex CLI 安装状态
+  CodexInstallStatus? _codexStatus;
+  bool _checkingCodex = true;
+  bool _isInstallingCodex = false; // 正在安装 Codex CLI
+
+  // Gemini CLI 安装状态
+  GeminiInstallStatus? _geminiStatus;
+  bool _checkingGemini = true;
+  bool _isInstallingGemini = false; // 正在安装 Gemini CLI
+
+  // Claude 便捷 getter
+  bool get _isClaudeInstalled => _claudeStatus?.isInstalled ?? true;
+  bool get _needsPathSetup => _claudeStatus?.needsPathSetup ?? false;
+
+  // Codex 便捷 getter
+  bool get _isCodexInstalled => _codexStatus?.isInstalled ?? true;
+
+  // Gemini 便捷 getter
+  bool get _isGeminiInstalled => _geminiStatus?.isInstalled ?? true;
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +77,39 @@ class _MainWindowState extends State<MainWindow>
     trayManager.addListener(this);
     _initTray();
     _initWindow();
+    _checkClaudeStatus();
+    _checkCodexStatus();
+    _checkGeminiStatus();
+  }
+
+  Future<void> _checkClaudeStatus() async {
+    final status = await PlatformUtils.checkClaudeInstallStatus();
+    if (mounted) {
+      setState(() {
+        _claudeStatus = status;
+        _checkingClaude = false;
+      });
+    }
+  }
+
+  Future<void> _checkCodexStatus() async {
+    final status = await PlatformUtils.checkCodexInstallStatus();
+    if (mounted) {
+      setState(() {
+        _codexStatus = status;
+        _checkingCodex = false;
+      });
+    }
+  }
+
+  Future<void> _checkGeminiStatus() async {
+    final status = await PlatformUtils.checkGeminiInstallStatus();
+    if (mounted) {
+      setState(() {
+        _geminiStatus = status;
+        _checkingGemini = false;
+      });
+    }
   }
 
   Future<void> _initWindow() async {
@@ -249,6 +316,7 @@ class _MainWindowState extends State<MainWindow>
                       constraints: const BoxConstraints(maxWidth: 340),
                       child: EditorSelector(
                         selected: _selectedEditor,
+                        enabled: !_isInstallingClaude && !_isInstallingCodex && !_isInstallingGemini,
                         onChanged: (editor) {
                           setState(() {
                             _selectedEditor = editor;
@@ -274,8 +342,16 @@ class _MainWindowState extends State<MainWindow>
                 Builder(
                   builder: (context) {
                     final isClaude = _selectedEditor == EditorType.claude;
+                    final isCodex = _selectedEditor == EditorType.codex;
+                    final isGemini = _selectedEditor == EditorType.gemini;
+                    final isAntigravity = _selectedEditor == EditorType.antigravity;
                     final showPrompt = isClaude;
-                    // Removed unused isDark variable
+                    // Claude 功能按钮是否禁用（未安装 CLI 时禁用）
+                    final claudeDisabled = isClaude && !_isClaudeInstalled;
+                    // Codex 功能按钮是否禁用（未安装 CLI 时禁用）
+                    final codexDisabled = isCodex && !_isCodexInstalled;
+                    // Gemini 功能按钮是否禁用（未安装 CLI 时禁用）
+                    final geminiDisabled = isGemini && !_isGeminiInstalled;
 
                     // Rules Button
                     final rulesBtn = IconButton(
@@ -328,18 +404,18 @@ class _MainWindowState extends State<MainWindow>
 
                     // Skills Button (插件按钮，放在外面)
                     final skillsBtn = IconButton(
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.extension_outlined,
                         size: 18,
-                        color: Colors.orange,
+                        color: claudeDisabled ? Colors.grey : Colors.orange,
                       ),
-                      tooltip: S.get('plugins_menu'),
+                      tooltip: claudeDisabled ? S.get('claude_not_installed_title') : S.get('plugins_menu'),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(
                         minWidth: 32,
                         minHeight: 32,
                       ),
-                      onPressed: () async {
+                      onPressed: claudeDisabled ? null : () async {
                         final terminalService = context.read<TerminalService>();
                         final command = await Navigator.of(context).push<String>(
                           MaterialPageRoute(
@@ -358,18 +434,18 @@ class _MainWindowState extends State<MainWindow>
 
                     // Prompt Button (提示词按钮，放在外面)
                     final promptBtn = IconButton(
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.tips_and_updates_outlined,
                         size: 18,
-                        color: Colors.orange,
+                        color: claudeDisabled ? Colors.grey : Colors.orange,
                       ),
-                      tooltip: S.get('prompt_name'),
+                      tooltip: claudeDisabled ? S.get('claude_not_installed_title') : S.get('prompt_name'),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(
                         minWidth: 32,
                         minHeight: 32,
                       ),
-                      onPressed: () {
+                      onPressed: claudeDisabled ? null : () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const ClaudePromptsScreen(),
@@ -384,9 +460,10 @@ class _MainWindowState extends State<MainWindow>
                         icon: Icon(
                           Icons.more_horiz,
                           size: 18,
-                          color: Theme.of(context).textTheme.bodyMedium?.color,
+                          color: claudeDisabled ? Colors.grey : Theme.of(context).textTheme.bodyMedium?.color,
                         ),
-                        tooltip: S.get('more'),
+                        tooltip: claudeDisabled ? S.get('claude_not_installed_title') : S.get('more'),
+                        enabled: !claudeDisabled,
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(
                           minWidth: 32,
@@ -492,6 +569,125 @@ class _MainWindowState extends State<MainWindow>
                           ],
                         ),
                       );
+                    } else if (isCodex) {
+                      // Codex Skills Button
+                      final codexSkillsBtn = IconButton(
+                        icon: Icon(
+                          Icons.extension_outlined,
+                          size: 18,
+                          color: codexDisabled ? Colors.grey : Colors.orange,
+                        ),
+                        tooltip: codexDisabled ? S.get('codex_not_installed_title') : S.get('codex_skills'),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        onPressed: codexDisabled ? null : () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const CodexSkillsScreen(),
+                            ),
+                          );
+                        },
+                      );
+
+                      return Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
+                          border: Border.all(
+                            color: Colors.grey.withOpacity(0.3),
+                            width: 1,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: codexSkillsBtn,
+                      );
+                    } else if (isGemini) {
+                      // Gemini Skills & Extensions Button
+                      final geminiSkillsBtn = IconButton(
+                        icon: Icon(
+                          Icons.extension_outlined,
+                          size: 18,
+                          color: geminiDisabled ? Colors.grey : Colors.orange,
+                        ),
+                        tooltip: geminiDisabled ? S.get('gemini_not_installed_title') : S.get('gemini_skills_title'),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        onPressed: geminiDisabled ? null : () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const GeminiSkillsScreen(),
+                            ),
+                          );
+                        },
+                      );
+
+                      return Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
+                          border: Border.all(
+                            color: Colors.grey.withOpacity(0.3),
+                            width: 1,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: geminiSkillsBtn,
+                      );
+                    } else if (isAntigravity) {
+                      // Antigravity Skills Button + Rules Button
+                      final antigravitySkillsBtn = IconButton(
+                        icon: const Icon(
+                          Icons.psychology_outlined,
+                          size: 18,
+                          color: Colors.purple,
+                        ),
+                        tooltip: S.get('antigravity_skills_title'),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const AntigravitySkillsScreen(),
+                            ),
+                          );
+                        },
+                      );
+
+                      // Grouped Container for Antigravity
+                      return Container(
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
+                          border: Border.all(
+                            color: Colors.grey.withOpacity(0.3),
+                            width: 1,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            antigravitySkillsBtn,
+                            Container(
+                              width: 1,
+                              height: 20,
+                              color: Colors.grey.withValues(alpha: 0.2),
+                            ),
+                            rulesBtn,
+                          ],
+                        ),
+                      );
                     } else {
                       // Single Rules Button Container
                       return Container(
@@ -513,70 +709,105 @@ class _MainWindowState extends State<MainWindow>
 
                 const SizedBox(width: 8),
 
-                // if (_selectedEditor == EditorType.claude) ...[
-                // ],
-                const SizedBox(width: 8),
+                // Terminal Button
                 Builder(
-                    builder: (context) => IconButton(
-                      onPressed: () {
-                        // 使用全局终端面板
-                        context.read<TerminalService>().openTerminalPanel();
+                  builder: (context) {
+                    final claudeDisabled = _selectedEditor == EditorType.claude && !_isClaudeInstalled;
+                    return IconButton(
+                      onPressed: claudeDisabled ? null : () async {
+                        final configService = context.read<ConfigService>();
+                        final terminalService = context.read<TerminalService>();
+
+                        // Windows 首次打开终端：弹窗选择 Shell
+                        if (Platform.isWindows && !configService.hasWindowsShellPreference) {
+                          final shellType = await WindowsShellSelectorDialog.show(context);
+                          if (shellType != null) {
+                            await configService.setWindowsShell(shellType.name);
+                          } else {
+                            // 用户关闭弹窗，默认使用 PowerShell
+                            await configService.setWindowsShell('powershell');
+                          }
+                        }
+
+                        // 确保 TerminalService 有 ConfigService 引用
+                        terminalService.setConfigService(configService);
+                        terminalService.openTerminalPanel();
                       },
-                      icon: const Icon(Icons.terminal, size: 20),
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white70
-                          : Colors.black54,
-                      tooltip: S.get('terminal_title'),
+                      icon: Icon(
+                        Icons.terminal,
+                        size: 20,
+                        color: claudeDisabled
+                            ? Colors.grey
+                            : (Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white70
+                                : Colors.black54),
+                      ),
+                      tooltip: claudeDisabled ? S.get('claude_not_installed_title') : S.get('terminal_title'),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(
                         minWidth: 32,
                         minHeight: 32,
                       ),
-                    ),
-                ),
-
-                const SizedBox(width: 8),
-
-                IconButton(
-                  icon: const Icon(Icons.refresh),
-                  tooltip: '刷新配置',
-                  onPressed: () async {
-                    await Provider.of<ConfigService>(
-                      context,
-                      listen: false,
-                    ).reloadProfiles();
-                    if (context.mounted) {
-                      Toast.show(
-                        context,
-                        message: '配置已刷新',
-                        type: ToastType.success,
-                      );
-                    }
-                  },
-                ),
-                const SizedBox(width: 8),
-                
-                // Add Button (Primary Action)
-                FloatingActionButton.small(
-                  onPressed: () {
-                    if (_selectedEditor == EditorType.cursor) {
-                      Toast.show(
-                        context,
-                        message: 'Cursor 请前往客户端界面进行编辑',
-                        type: ToastType.info,
-                      );
-                      return;
-                    }
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            McpServerEditScreen(editorType: _selectedEditor),
-                      ),
                     );
                   },
-                  backgroundColor: Colors.orange,
-                  elevation: 0,
-                  child: const Icon(Icons.add, color: Colors.white),
+                ),
+
+                const SizedBox(width: 8),
+
+                // Refresh Button
+                Builder(
+                  builder: (context) {
+                    final claudeDisabled = _selectedEditor == EditorType.claude && !_isClaudeInstalled;
+                    return IconButton(
+                      icon: Icon(
+                        Icons.refresh,
+                        color: claudeDisabled ? Colors.grey : null,
+                      ),
+                      tooltip: claudeDisabled ? S.get('claude_not_installed_title') : '刷新配置',
+                      onPressed: claudeDisabled ? null : () async {
+                        await Provider.of<ConfigService>(
+                          context,
+                          listen: false,
+                        ).reloadProfiles();
+                        if (context.mounted) {
+                          Toast.show(
+                            context,
+                            message: '配置已刷新',
+                            type: ToastType.success,
+                          );
+                        }
+                      },
+                    );
+                  },
+                ),
+                const SizedBox(width: 8),
+
+                // Add Button (Primary Action)
+                Builder(
+                  builder: (context) {
+                    final claudeDisabled = _selectedEditor == EditorType.claude && !_isClaudeInstalled;
+                    return FloatingActionButton.small(
+                      onPressed: claudeDisabled ? null : () {
+                        if (_selectedEditor == EditorType.cursor) {
+                          Toast.show(
+                            context,
+                            message: 'Cursor 请前往客户端界面进行编辑',
+                            type: ToastType.info,
+                          );
+                          return;
+                        }
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                McpServerEditScreen(editorType: _selectedEditor),
+                          ),
+                        );
+                      },
+                      backgroundColor: claudeDisabled ? Colors.grey : Colors.orange,
+                      elevation: 0,
+                      child: const Icon(Icons.add, color: Colors.white),
+                    );
+                  },
                 ),
               ],
             ),
@@ -590,7 +821,88 @@ class _MainWindowState extends State<MainWindow>
           
           // Main Content
           Expanded(
-            child: ConfigListScreen(editorType: _selectedEditor),
+            child: Column(
+              children: [
+                // Claude 未安装 Banner（仅在 Claude Code Tab 且未安装时显示）
+                if (_selectedEditor == EditorType.claude &&
+                    !_checkingClaude &&
+                    !_isClaudeInstalled)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: ClaudeNotInstalledBanner(
+                      onInstallComplete: () {
+                        _checkClaudeStatus();
+                      },
+                      onInstallStateChanged: (isInstalling) {
+                        setState(() {
+                          _isInstallingClaude = isInstalling;
+                        });
+                      },
+                    ),
+                  ),
+                // Claude 已安装但 PATH 未配置 Banner
+                if (_selectedEditor == EditorType.claude &&
+                    !_checkingClaude &&
+                    _isClaudeInstalled &&
+                    _needsPathSetup &&
+                    _claudeStatus?.exePath != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: ClaudePathNotConfiguredBanner(
+                      claudeExePath: _claudeStatus!.exePath!,
+                      onConfigureComplete: () {
+                        // PATH 配置成功后，直接更新状态为 ready
+                        // 不要调用 _checkClaudeStatus()，因为当前进程的 PATH 环境变量
+                        // 已经在启动时固定，setx 只更新了注册表，不影响当前进程
+                        // 下次重启应用时 isClaudeInPath() 才会返回 true
+                        setState(() {
+                          _claudeStatus = ClaudeInstallStatus(
+                            exePath: _claudeStatus!.exePath,
+                            inPath: true, // 强制标记为已配置
+                          );
+                        });
+                      },
+                    ),
+                  ),
+                // Codex 未安装 Banner（仅在 Codex Tab 且未安装时显示）
+                if (_selectedEditor == EditorType.codex &&
+                    !_checkingCodex &&
+                    !_isCodexInstalled)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: CodexNotInstalledBanner(
+                      onInstallComplete: () {
+                        _checkCodexStatus();
+                      },
+                      onInstallStateChanged: (isInstalling) {
+                        setState(() {
+                          _isInstallingCodex = isInstalling;
+                        });
+                      },
+                    ),
+                  ),
+                // Gemini 未安装 Banner（仅在 Gemini Tab 且未安装时显示）
+                if (_selectedEditor == EditorType.gemini &&
+                    !_checkingGemini &&
+                    !_isGeminiInstalled)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: GeminiNotInstalledBanner(
+                      onInstallComplete: () {
+                        _checkGeminiStatus();
+                      },
+                      onInstallStateChanged: (isInstalling) {
+                        setState(() {
+                          _isInstallingGemini = isInstalling;
+                        });
+                      },
+                    ),
+                  ),
+                Expanded(
+                  child: ConfigListScreen(editorType: _selectedEditor),
+                ),
+              ],
+            ),
           ),
         ],
       ),

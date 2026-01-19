@@ -5,6 +5,7 @@ import '../../constants/version.dart';
 import '../../models/editor_type.dart';
 import '../../services/config_service.dart';
 import '../../services/ai_chat_service.dart';
+import '../../utils/platform_utils.dart';
 import '../l10n/s.dart';
 import 'components/styled_popup_menu.dart';
 import 'components/styled_dropdown.dart';
@@ -97,8 +98,8 @@ class _SettingsScreenState extends State<SettingsScreen>
     AiChatService aiService,
   ) async {
     try {
-      final home = Platform.environment['HOME'];
-      final settingsFile = File('$home/.claude/settings.json');
+      final home = PlatformUtils.userHome;
+      final settingsFile = File(PlatformUtils.joinPath(home, '.claude', 'settings.json'));
 
       if (!await settingsFile.exists()) {
         if (mounted) {
@@ -944,10 +945,10 @@ open "$currentAppPath"
         _buildPathField(
           S.get('config_dir'),
           TextEditingController(
-            text: '${Platform.environment['HOME']}/.mcp-switch',
+            text: PlatformUtils.joinPath(PlatformUtils.userHome, '.mcp-switch'),
           ),
           customTrailing: _buildFinderButton(
-            '${Platform.environment['HOME']}/.mcp-switch',
+            PlatformUtils.joinPath(PlatformUtils.userHome, '.mcp-switch'),
           ),
           type: null, // Global config, no specific editor preference
         ),
@@ -992,6 +993,18 @@ open "$currentAppPath"
 
         const SizedBox(height: 32),
 
+        // Windows Shell 选择（仅 Windows 显示）
+        if (Platform.isWindows) ...[
+          _buildSectionTitle(S.get('select_shell_title')),
+          Text(
+            S.get('select_shell_desc'),
+            style: const TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          _buildWindowsShellSelector(),
+          const SizedBox(height: 32),
+        ],
+
         // DeepL API Key 配置
         _buildSectionTitle(S.get('deepl_api_key_title')),
         Text(
@@ -1001,6 +1014,139 @@ open "$currentAppPath"
         const SizedBox(height: 12),
         _buildDeepLApiKeyField(),
       ],
+    );
+  }
+
+  Widget _buildWindowsShellSelector() {
+    final configService = Provider.of<ConfigService>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currentShell = configService.windowsShell ?? 'powershell';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          // PowerShell 选项
+          Expanded(
+            child: _buildShellOption(
+              icon: Icons.electric_bolt,
+              iconColor: Colors.blue,
+              title: 'PowerShell',
+              isSelected: currentShell == 'powershell',
+              isRecommended: true,
+              isDark: isDark,
+              onTap: () async {
+                if (currentShell != 'powershell') {
+                  await configService.setWindowsShell('powershell');
+                  if (mounted) {
+                    Toast.show(
+                      context,
+                      message: S.get('shell_change_restart_hint'),
+                      type: ToastType.info,
+                    );
+                  }
+                }
+              },
+            ),
+          ),
+          const SizedBox(width: 12),
+          // CMD 选项
+          Expanded(
+            child: _buildShellOption(
+              icon: Icons.code,
+              iconColor: Colors.grey,
+              title: 'CMD',
+              isSelected: currentShell == 'cmd',
+              isRecommended: false,
+              isDark: isDark,
+              onTap: () async {
+                if (currentShell != 'cmd') {
+                  await configService.setWindowsShell('cmd');
+                  if (mounted) {
+                    Toast.show(
+                      context,
+                      message: S.get('shell_change_restart_hint'),
+                      type: ToastType.info,
+                    );
+                  }
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShellOption({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required bool isSelected,
+    required bool isRecommended,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark ? Colors.deepPurple.shade900 : Colors.deepPurple.shade50)
+              : (isDark ? Colors.grey.shade800 : Colors.white),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? Colors.deepPurple : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: iconColor, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                if (isRecommended) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      S.get('recommended'),
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (isSelected) ...[
+              const SizedBox(height: 4),
+              Icon(Icons.check_circle, color: Colors.deepPurple, size: 16),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -1217,29 +1363,58 @@ open "$currentAppPath"
   Future<void> _handleOpenAction(String path, String action) async {
     if (path.isEmpty) return;
     try {
-      List<String> args = [];
-      switch (action) {
-        case 'vscode':
-          args = ['-a', 'Visual Studio Code', path];
-          break;
-        case 'cursor':
-          args = ['-a', 'Cursor', path];
-          break;
-        case 'windsurf':
-          args = ['-a', 'Windsurf', path];
-          break;
-        case 'textedit':
-          args = ['-a', 'TextEdit', path];
-          break;
-        case 'finder':
-          args = ['-R', path];
-          break;
-        case 'default':
-        default:
-          args = [path];
-          break;
+      if (Platform.isWindows) {
+        // Windows 平台处理
+        switch (action) {
+          case 'vscode':
+            await Process.run('cmd', ['/c', 'code', path]);
+            break;
+          case 'cursor':
+            await Process.run('cmd', ['/c', 'cursor', path]);
+            break;
+          case 'windsurf':
+            await Process.run('cmd', ['/c', 'windsurf', path]);
+            break;
+          case 'textedit':
+            // Windows 使用 notepad
+            await Process.run('notepad', [path]);
+            break;
+          case 'finder':
+            // Windows 使用 explorer
+            await PlatformUtils.openInFileManager(path);
+            break;
+          case 'default':
+          default:
+            // Windows 默认打开
+            await Process.run('cmd', ['/c', 'start', '', path]);
+            break;
+        }
+      } else {
+        // macOS/Linux 平台处理
+        List<String> args = [];
+        switch (action) {
+          case 'vscode':
+            args = ['-a', 'Visual Studio Code', path];
+            break;
+          case 'cursor':
+            args = ['-a', 'Cursor', path];
+            break;
+          case 'windsurf':
+            args = ['-a', 'Windsurf', path];
+            break;
+          case 'textedit':
+            args = ['-a', 'TextEdit', path];
+            break;
+          case 'finder':
+            args = ['-R', path];
+            break;
+          case 'default':
+          default:
+            args = [path];
+            break;
+        }
+        await Process.run('open', args);
       }
-      await Process.run('open', args);
     } catch (e) {
       if (mounted) {
         Toast.show(

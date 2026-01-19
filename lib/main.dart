@@ -12,11 +12,15 @@ import 'ui/components/floating_terminal_icon.dart';
 import 'ui/components/global_terminal_panel.dart';
 import 'ui/components/floating_chatbot_icon.dart';
 import 'ui/components/global_chatbot_panel.dart';
+import 'ui/components/floating_debug_button.dart';
+import 'ui/components/windows_shell_selector_dialog.dart';
 import 'utils/app_theme.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'l10n/s.dart';
 import 'services/logger_service.dart';
+import 'utils/platform_utils.dart';
+import 'config/platform_commands_config.dart';
 
 /// 全局 ScaffoldKey，用于控制 MainWindow 的 endDrawer
 final GlobalKey<ScaffoldState> globalScaffoldKey = GlobalKey<ScaffoldState>();
@@ -44,12 +48,17 @@ void main() async {
   // Initialize Window Manager
   await windowManager.ensureInitialized();
   
-  WindowOptions windowOptions = const WindowOptions(
-    size: Size(900, 600),
+  // Windows 使用原生标题栏，macOS 隐藏标题栏内容但保留红绿灯
+  final titleBarStyle = Platform.isWindows
+      ? TitleBarStyle.normal
+      : TitleBarStyle.hidden;
+
+  WindowOptions windowOptions = WindowOptions(
+    size: const Size(900, 600),
     center: true,
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
-    titleBarStyle: TitleBarStyle.hidden, // Hide native title bar content but keep traffic lights
+    titleBarStyle: titleBarStyle,
   );
   
   windowManager.waitUntilReadyToShow(windowOptions, () async {
@@ -62,12 +71,13 @@ void main() async {
   final configService = ConfigService();
   await configService.init();
   await S.init();
+  await PlatformCommandsConfig.init(); // 加载平台命令配置
 
   LoggerService.info('''
   ════════════════════════════════════════════
      🚀 MCP Switch Initialized Successfully 🚀
      ----------------------------------------
-     📁 Home:   ${Platform.environment['HOME']}
+     📁 Home:   ${PlatformUtils.userHome}
      🌏 Locale: ${S.localeNotifier.value}
      🛠️ Mode:   ${kReleaseMode ? 'Release' : 'Debug'}
   ════════════════════════════════════════════
@@ -128,36 +138,65 @@ class McpSwitchApp extends StatelessWidget {
                     OverlayEntry(
                       builder: (context) => Consumer2<TerminalService, AiChatService>(
                         builder: (context, terminalService, aiChatService, _) {
-                          return Stack(
-                            children: [
-                              child ?? const SizedBox.shrink(),
-                              // 全局悬浮终端图标
-                              FloatingTerminalIcon(
-                                onTap: () {
-                                  terminalService.openTerminalPanel();
-                                },
-                              ),
-                              // 全局悬浮 AI Chatbot 图标
-                              FloatingChatbotIcon(
-                                onTap: () {
-                                  aiChatService.openPanel();
-                                },
-                              ),
-                              // 全局 AI 聊天面板（侧边滑出样式）
-                              if (aiChatService.isPanelOpen)
-                                GlobalChatbotPanel(
-                                  onClose: () {
-                                    aiChatService.closePanel();
-                                  },
-                                ),
-                              // 全局终端面板（侧边滑出样式）- 放在最上层，覆盖 Chatbot
-                              if (terminalService.isTerminalPanelOpen)
-                                GlobalTerminalPanel(
-                                  onClose: () {
-                                    terminalService.closeTerminalPanel();
-                                  },
-                                ),
-                            ],
+                          // 使用 LayoutBuilder 获取实际窗口尺寸
+                          return LayoutBuilder(
+                            builder: (context, constraints) {
+                              final windowSize = Size(
+                                constraints.maxWidth,
+                                constraints.maxHeight,
+                              );
+                              return Stack(
+                                children: [
+                                  child ?? const SizedBox.shrink(),
+                                  // 全局悬浮终端图标
+                                  FloatingTerminalIcon(
+                                    parentSize: windowSize,
+                                    onTap: () async {
+                                      // Windows 首次打开终端：弹窗选择 Shell
+                                      if (Platform.isWindows) {
+                                        final navContext = globalNavigatorKey.currentContext;
+                                        if (navContext != null) {
+                                          final configService = navContext.read<ConfigService>();
+                                          if (!configService.hasWindowsShellPreference) {
+                                            final shellType = await WindowsShellSelectorDialog.show(navContext);
+                                            if (shellType != null) {
+                                              await configService.setWindowsShell(shellType.name);
+                                            } else {
+                                              await configService.setWindowsShell('powershell');
+                                            }
+                                          }
+                                          terminalService.setConfigService(configService);
+                                        }
+                                      }
+                                      terminalService.openTerminalPanel();
+                                    },
+                                  ),
+                                  // 全局悬浮 AI Chatbot 图标
+                                  FloatingChatbotIcon(
+                                    parentSize: windowSize,
+                                    onTap: () {
+                                      aiChatService.openPanel();
+                                    },
+                                  ),
+                                  // 全局 AI 聊天面板（侧边滑出样式）
+                                  if (aiChatService.isPanelOpen)
+                                    GlobalChatbotPanel(
+                                      onClose: () {
+                                        aiChatService.closePanel();
+                                      },
+                                    ),
+                                  // 全局终端面板（侧边滑出样式）- 放在最上层，覆盖 Chatbot
+                                  if (terminalService.isTerminalPanelOpen)
+                                    GlobalTerminalPanel(
+                                      onClose: () {
+                                        terminalService.closeTerminalPanel();
+                                      },
+                                    ),
+                                  // Debug 按钮（仅 Debug 模式显示）
+                                  const FloatingDebugButton(),
+                                ],
+                              );
+                            },
                           );
                         },
                       ),

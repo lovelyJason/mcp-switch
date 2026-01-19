@@ -5,8 +5,17 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:xterm/xterm.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:image/image.dart' as img;
+import '../utils/platform_utils.dart';
+import '../ui/components/windows_shell_selector_dialog.dart' show WindowsShellType;
+import 'config_service.dart';
 
 class TerminalService extends ChangeNotifier {
+  ConfigService? _configService;
+
+  void setConfigService(ConfigService configService) {
+    _configService = configService;
+  }
+
   final Terminal terminal = Terminal(maxLines: 10000);
   final TerminalController terminalController = TerminalController();
   Pty? _pty;
@@ -60,7 +69,7 @@ class TerminalService extends ChangeNotifier {
       }
       return;
     }
-    
+
     // Initial output
     terminal.write('\x1b[32mMCP Switch Terminal loaded\x1b[0m\r\n');
 
@@ -113,25 +122,68 @@ class TerminalService extends ChangeNotifier {
   }
 
   void _startPty() {
+    _startPtyWithShell(null);
+  }
+
+  /// 使用指定的 shell 启动 PTY
+  /// [shellType] 仅在 Windows 上有效，null 表示使用保存的偏好或默认值
+  void _startPtyWithShell(WindowsShellType? shellType) {
     String shell;
+    List<String> shellArgs;
+
     if (Platform.isWindows) {
-      shell = Platform.environment['COMSPEC'] ?? 'cmd.exe';
+      // 优先使用传入的 shellType，否则使用保存的偏好
+      final effectiveShell = shellType?.name ?? _configService?.windowsShell ?? 'powershell';
+
+      if (effectiveShell == 'cmd') {
+        shell = 'cmd.exe';
+        shellArgs = [];
+      } else {
+        shell = 'powershell.exe';
+        // -NoExit 保持会话，-Command - 接受标准输入
+        shellArgs = ['-NoLogo', '-NoExit'];
+      }
+      debugPrint('[TerminalService] Using Windows shell: $shell with args: $shellArgs');
     } else {
       shell = Platform.environment['SHELL'] ?? '/bin/zsh';
+      shellArgs = ['-l']; // Use login shell to load ~/.zshrc and paths
     }
-    
+
+    // 合并系统环境变量，确保 PATH 等关键变量被继承
+    final env = Map<String, String>.from(Platform.environment);
+    env['TERM'] = 'xterm-256color';
+    env['PROMPT_EOL_MARK'] = '';
+
+    // Windows 额外处理：确保 .local\bin 在 PATH 中
+    if (Platform.isWindows) {
+      final localBin = '${PlatformUtils.userHome}\\.local\\bin';
+      // Windows PATH 变量名大小写不敏感，但 Dart Map 是敏感的
+      // 需要同时检查 PATH 和 Path
+      final pathKey = env.containsKey('PATH') ? 'PATH' : (env.containsKey('Path') ? 'Path' : 'PATH');
+      final currentPath = env[pathKey] ?? '';
+
+      // 调试日志：打印当前 PATH
+      debugPrint('[TerminalService] PATH key: $pathKey');
+      debugPrint('[TerminalService] PATH length: ${currentPath.length}');
+      debugPrint('[TerminalService] PATH contains .local\\bin: ${currentPath.toLowerCase().contains('.local\\bin')}');
+
+      // 检查是否已包含 .local\bin（兼容正斜杠和反斜杠）
+      final lowerPath = currentPath.toLowerCase();
+      if (!lowerPath.contains('.local\\bin') && !lowerPath.contains('.local/bin')) {
+        env[pathKey] = '$localBin;$currentPath';
+        debugPrint('[TerminalService] Added $localBin to PATH');
+      } else {
+        debugPrint('[TerminalService] PATH already contains .local\\bin, skipping');
+      }
+    }
+
     _pty = Pty.start(
       shell,
-      arguments: Platform.isWindows
-          ? []
-          : ['-l'], // Use login shell to load ~/.zshrc and paths
+      arguments: shellArgs,
       columns: terminal.viewWidth,
       rows: terminal.viewHeight,
-      workingDirectory: Platform.environment['HOME'] ?? '.', // Start in HOME
-      environment: {
-        'TERM': 'xterm-256color',
-        'PROMPT_EOL_MARK': '',
-      },
+      workingDirectory: PlatformUtils.userHome.isNotEmpty ? PlatformUtils.userHome : '.', // Start in user home directory
+      environment: env,
     );
 
     _pty!.output.cast<List<int>>().transform(Utf8Decoder()).listen((data) {
@@ -151,6 +203,21 @@ class TerminalService extends ChangeNotifier {
       _pty = null;
       notifyListeners();
     });
+
+    // Windows PowerShell: 启动后注入 PATH 环境变量
+    // CMD 不需要，它会正确使用传入的环境变量
+    if (Platform.isWindows && shell == 'powershell.exe') {
+      final localBin = '${PlatformUtils.userHome}\\.local\\bin';
+      // 延迟让 PowerShell 完全启动
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (_pty != null) {
+          // PowerShell: 静默设置 PATH，然后清屏
+          final pathCmd = 'if (Test-Path "$localBin") { \$env:PATH = "$localBin;" + \$env:PATH }; cls\r';
+          _pty!.write(Utf8Encoder().convert(pathCmd));
+          debugPrint('[TerminalService] Injected PATH for PowerShell');
+        }
+      });
+    }
   }
 
   int? get ptyPid => _pty?.pid;
@@ -188,7 +255,7 @@ class TerminalService extends ChangeNotifier {
   // Specific method to send commands gracefully (like exit)
   void sendCommand(String command) {
     if (_pty != null) {
-      terminal.textInput(command + '\r');
+      terminal.textInput('$command\r');
     }
   }
 

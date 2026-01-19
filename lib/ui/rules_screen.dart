@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../l10n/s.dart';
+import '../utils/platform_utils.dart';
 import 'rule_edit_screen.dart';
 
 import '../../models/editor_type.dart';
@@ -15,10 +16,10 @@ class RulesScreen extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black87;
 
-    final home = Platform.environment['HOME'] ?? '';
+    final home = PlatformUtils.userHome;
     final windsurfRulesPath =
-        '$home/.codeium/windsurf/memories/global_rules.md';
-    final agGeminiRulesPath = '$home/.gemini/GEMINI.md';
+        PlatformUtils.joinPath(home, '.codeium', 'windsurf', 'memories', 'global_rules.md');
+    final agGeminiRulesPath = PlatformUtils.joinPath(home, '.gemini', 'GEMINI.md');
 
     List<Widget> ruleItems = [];
 

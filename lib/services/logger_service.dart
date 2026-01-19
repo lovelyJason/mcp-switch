@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart' hide FileOutput;
 import 'package:path/path.dart' as p;
 import 'logger/file_output.dart';
+import '../utils/platform_utils.dart';
 
 class LoggerService {
   static final LoggerService _instance = LoggerService._internal();
@@ -32,8 +33,8 @@ class LoggerService {
     LogFilter filter;
     
     if (kReleaseMode) {
-      final home = Platform.environment['HOME'] ?? '.';
-      final dir = Directory(p.join(home, '.mcp-switch', 'logs'));
+      final home = PlatformUtils.userHome;
+      final dir = Directory(p.join(home.isNotEmpty ? home : '.', '.mcp-switch', 'logs'));
       
       if (!await dir.exists()) {
         await dir.create(recursive: true);

@@ -160,7 +160,7 @@ class AiChatService extends ChangeNotifier {
   }
 
   /// 发送消息（流式输出，支持图片）
-  Future<void> sendMessage(String content, {List<ChatImage>? images}) async {
+  Future<void> sendMessage(String content, {List<ChatImage>? images, String? modelId}) async {
     if (_apiKey == null || _apiKey!.isEmpty) {
       _error = 'API Key 未配置';
       notifyListeners();
@@ -186,7 +186,7 @@ class AiChatService extends ChangeNotifier {
       final apiMessages = _buildApiMessages();
 
       // 使用流式 API
-      await _sendStreamingRequest(apiMessages);
+      await _sendStreamingRequest(apiMessages, modelId: modelId);
     } catch (e) {
       _error = e.toString();
       if (_streamingContent.isEmpty) {
@@ -282,13 +282,13 @@ class AiChatService extends ChangeNotifier {
   }
 
   /// 发送流式请求
-  Future<void> _sendStreamingRequest(List<Map<String, dynamic>> apiMessages) async {
+  Future<void> _sendStreamingRequest(List<Map<String, dynamic>> apiMessages, {String? modelId}) async {
     final baseUrl = _baseUrl ?? 'https://api.anthropic.com';
     final uri = Uri.parse(_buildApiUrl(baseUrl));
 
     // 构建请求体
     final body = jsonEncode({
-      'model': _model,
+      'model': modelId ?? _model,
       'max_tokens': 4096,
       'system': _systemPrompt,
       'messages': apiMessages,

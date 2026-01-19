@@ -39,7 +39,8 @@
       "Bash(dart run:*)",
       "Bash(# 检查 fnm 是怎么配置的 grep -r \"\"fnm\"\" ~/.zshrc ~/.zprofile ~/.bashrc ~/.bash_profile)",
       "Bash(gemini extensions:*)",
-      "Bash(gemini extension:*)"
+      "Bash(gemini extension:*)",
+      "Bash(flutter doctor:*)"
     ],
     "deny": [],
     "ask": []

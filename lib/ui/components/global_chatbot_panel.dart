@@ -25,6 +25,37 @@ class GlobalChatbotPanel extends StatefulWidget {
   State<GlobalChatbotPanel> createState() => _GlobalChatbotPanelState();
 }
 
+/// AI 模型选项
+class _AIModelOption {
+  final String label;
+  final String modelId;
+  final Color color;
+
+  const _AIModelOption({
+    required this.label,
+    required this.modelId,
+    required this.color,
+  });
+
+  static const List<_AIModelOption> availableModels = [
+    _AIModelOption(
+      label: 'Opus 4.5',
+      modelId: 'claude-opus-4-5-20251101',
+      color: Color(0xFFE87B35), // 橙色
+    ),
+    _AIModelOption(
+      label: 'Sonnet 4.5',
+      modelId: 'claude-sonnet-4-5-20250929',
+      color: Color(0xFF6366F1), // 紫色
+    ),
+    _AIModelOption(
+      label: 'Haiku 4.5',
+      modelId: 'claude-haiku-4-5-20251001',
+      color: Color(0xFF10B981), // 绿色
+    ),
+  ];
+}
+
 class _GlobalChatbotPanelState extends State<GlobalChatbotPanel>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
@@ -38,6 +69,16 @@ class _GlobalChatbotPanelState extends State<GlobalChatbotPanel>
 
   // 待发送的图片列表
   final List<ChatImage> _pendingImages = [];
+
+  // 模型选择器状态
+  bool _isModelDropdownOpen = false;
+  final GlobalKey _modelDropdownKey = GlobalKey();
+  OverlayEntry? _modelOverlayEntry;
+
+  // 加号菜单状态
+  bool _isAddMenuOpen = false;
+  final GlobalKey _addMenuKey = GlobalKey();
+  OverlayEntry? _addMenuOverlayEntry;
 
   @override
   void initState() {
@@ -67,6 +108,8 @@ class _GlobalChatbotPanelState extends State<GlobalChatbotPanel>
 
   @override
   void dispose() {
+    _removeModelOverlay(updateState: false);
+    _removeAddMenuOverlay(updateState: false);
     _animationController.dispose();
     _inputController.dispose();
     _scrollController.dispose();
@@ -75,8 +118,195 @@ class _GlobalChatbotPanelState extends State<GlobalChatbotPanel>
   }
 
   Future<void> _close() async {
+    _removeModelOverlay(updateState: false);
+    _removeAddMenuOverlay(updateState: false);
     await _animationController.reverse();
     widget.onClose();
+  }
+
+  // 加号菜单相关方法
+  void _removeAddMenuOverlay({bool updateState = true}) {
+    _addMenuOverlayEntry?.remove();
+    _addMenuOverlayEntry = null;
+    _isAddMenuOpen = false;
+    if (updateState && mounted) {
+      setState(() {});
+    }
+  }
+
+  void _toggleAddMenu() {
+    if (_isAddMenuOpen) {
+      _removeAddMenuOverlay();
+    } else {
+      _showAddMenu();
+    }
+  }
+
+  void _showAddMenu() {
+    final RenderBox? renderBox =
+        _addMenuKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final offset = renderBox.localToGlobal(Offset.zero);
+
+    _addMenuOverlayEntry = OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: _removeAddMenuOverlay,
+              behavior: HitTestBehavior.opaque,
+              child: Container(color: Colors.transparent),
+            ),
+          ),
+          Positioned(
+            left: offset.dx,
+            top: offset.dy - 8 - 44, // 菜单高度约 44
+            width: 120,
+            child: Material(
+              color: const Color(0xFF3C3C3F),
+              elevation: 8,
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                onTap: () {
+                  _removeAddMenuOverlay();
+                  _pickImage();
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  height: 44,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.image_outlined,
+                        size: 18,
+                        color: Colors.grey.shade300,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        S.get('add_image'),
+                        style: TextStyle(
+                          color: Colors.grey.shade200,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    Overlay.of(context).insert(_addMenuOverlayEntry!);
+    setState(() => _isAddMenuOpen = true);
+  }
+
+  // 模型选择器相关方法
+  void _removeModelOverlay({bool updateState = true}) {
+    _modelOverlayEntry?.remove();
+    _modelOverlayEntry = null;
+    _isModelDropdownOpen = false;
+    if (updateState && mounted) {
+      setState(() {});
+    }
+  }
+
+  void _toggleModelDropdown() {
+    if (_isModelDropdownOpen) {
+      _removeModelOverlay();
+    } else {
+      _showModelDropdown();
+    }
+  }
+
+  void _showModelDropdown() {
+    final configService = context.read<ConfigService>();
+    final RenderBox? renderBox =
+        _modelDropdownKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final size = renderBox.size;
+    final offset = renderBox.localToGlobal(Offset.zero);
+
+    _modelOverlayEntry = OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: _removeModelOverlay,
+              behavior: HitTestBehavior.opaque,
+              child: Container(color: Colors.transparent),
+            ),
+          ),
+          Positioned(
+            left: offset.dx,
+            top: offset.dy - 8 - (_AIModelOption.availableModels.length * 36),
+            width: size.width + 20,
+            child: Material(
+              color: const Color(0xFF3C3C3F),
+              elevation: 8,
+              borderRadius: BorderRadius.circular(8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: _AIModelOption.availableModels.map((model) {
+                  final isSelected = model.modelId == configService.chatAiModelId;
+                  return InkWell(
+                    onTap: () {
+                      configService.setChatAiModelId(model.modelId);
+                      _removeModelOverlay();
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      height: 36,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: model.color,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            model.label,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                            ),
+                          ),
+                          if (isSelected) ...[
+                            const Spacer(),
+                            Icon(Icons.check, size: 14, color: model.color),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    Overlay.of(context).insert(_modelOverlayEntry!);
+    setState(() => _isModelDropdownOpen = true);
+  }
+
+  _AIModelOption _getSelectedModel(String modelId) {
+    return _AIModelOption.availableModels.firstWhere(
+      (m) => m.modelId == modelId,
+      orElse: () => _AIModelOption.availableModels[1], // 默认 Sonnet
+    );
   }
 
   void _sendMessage() {
@@ -85,10 +315,12 @@ class _GlobalChatbotPanelState extends State<GlobalChatbotPanel>
     if (text.isEmpty && _pendingImages.isEmpty) return;
 
     final aiService = context.read<AiChatService>();
-    // 发送消息（带图片）
+    final configService = context.read<ConfigService>();
+    // 发送消息（带图片和模型选择）
     aiService.sendMessage(
       text,
       images: _pendingImages.isNotEmpty ? List.from(_pendingImages) : null,
+      modelId: configService.chatAiModelId,
     );
     _inputController.clear();
     setState(() {
@@ -813,35 +1045,24 @@ class _GlobalChatbotPanelState extends State<GlobalChatbotPanel>
         children: [
           // 待发送图片预览
           if (_pendingImages.isNotEmpty) _buildPendingImages(),
-          // 输入行
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              // 图片选择按钮
-              IconButton(
-                onPressed: hasApiKey ? _pickImage : null,
-                icon: Icon(
-                  Icons.image_outlined,
-                  size: 20,
-                  color: hasApiKey ? Colors.grey.shade400 : Colors.grey.shade700,
-                ),
-                tooltip: S.get('add_image'),
-                style: IconButton.styleFrom(
-                  padding: const EdgeInsets.all(8),
-                ),
-              ),
-              const SizedBox(width: 4),
-              // 文本输入框（支持 Cmd+V 粘贴图片）
-              Expanded(
-                child: KeyboardListener(
+          // 输入框容器 - 内嵌工具栏
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E1E1E),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade800),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 输入框
+                KeyboardListener(
                   focusNode: FocusNode(),
                   onKeyEvent: (event) async {
-                    // 检测 Cmd+V (macOS) 或 Ctrl+V (Windows/Linux)
                     if (event is KeyDownEvent &&
                         event.logicalKey == LogicalKeyboardKey.keyV &&
                         (HardwareKeyboard.instance.isMetaPressed ||
                             HardwareKeyboard.instance.isControlPressed)) {
-                      // 尝试粘贴图片
                       await _pasteImage();
                     }
                   },
@@ -859,68 +1080,85 @@ class _GlobalChatbotPanelState extends State<GlobalChatbotPanel>
                         fontSize: 13,
                       ),
                       filled: true,
-                      fillColor: const Color(0xFF1E1E1E),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey.shade800),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Colors.deepPurple),
-                      ),
+                      fillColor: Colors.transparent,
+                      contentPadding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
                     ),
-                    maxLines: 3,
-                    minLines: 1,
+                    maxLines: 4,
+                    minLines: 2,
                     onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Consumer<AiChatService>(
-                builder: (context, aiService, _) {
-                  final canSend = hasApiKey &&
-                      !aiService.isLoading &&
-                      (_inputController.text.trim().isNotEmpty ||
-                          _pendingImages.isNotEmpty);
-                  return IconButton(
-                    onPressed: canSend ? _sendMessage : null,
-                    icon: aiService.isLoading
-                        ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.deepPurple.shade300,
-                            ),
-                          )
-                        : Icon(
-                            Icons.send_rounded,
-                            color: canSend
-                                ? Colors.deepPurple.shade300
-                                : Colors.grey.shade600,
-                          ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: canSend
-                          ? Colors.deepPurple.withOpacity(0.2)
-                          : Colors.grey.withOpacity(0.1),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                // 内嵌工具栏
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                  child: Row(
+                    children: [
+                      // 加号按钮 - 上拉菜单
+                      _buildAddMenu(hasApiKey),
+                      const SizedBox(width: 8),
+                      // 模型选择器
+                      _buildModelSelector(configService),
+                      const Spacer(),
+                      // 发送按钮
+                      Consumer<AiChatService>(
+                        builder: (context, aiService, _) {
+                          final canSend = hasApiKey &&
+                              !aiService.isLoading &&
+                              (_inputController.text.trim().isNotEmpty ||
+                                  _pendingImages.isNotEmpty);
+                          return _buildInlineSendButton(aiService.isLoading, canSend);
+                        },
                       ),
-                    ),
-                  );
-                },
-              ),
-            ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 构建加号上拉菜单
+  Widget _buildAddMenu(bool enabled) {
+    return GestureDetector(
+      key: _addMenuKey,
+      onTap: enabled ? _toggleAddMenu : null,
+      child: Icon(
+        Icons.add_circle_outline,
+        size: 20,
+        color: enabled ? Colors.grey.shade500 : Colors.grey.shade700,
+      ),
+    );
+  }
+
+  Widget _buildInlineSendButton(bool isLoading, bool canSend) {
+    return GestureDetector(
+      onTap: canSend ? _sendMessage : null,
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: canSend ? Colors.deepPurple : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: isLoading
+            ? SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.grey.shade400,
+                ),
+              )
+            : Icon(
+                Icons.arrow_upward_rounded,
+                size: 18,
+                color: canSend ? Colors.white : Colors.grey.shade600,
+              ),
       ),
     );
   }
@@ -1032,6 +1270,47 @@ class _GlobalChatbotPanelState extends State<GlobalChatbotPanel>
                   backgroundColor: Colors.black54,
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 构建模型选择器
+  Widget _buildModelSelector(ConfigService configService) {
+    final selectedModel = _getSelectedModel(configService.chatAiModelId);
+    return GestureDetector(
+      key: _modelDropdownKey,
+      onTap: _toggleModelDropdown,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: _isModelDropdownOpen ? Colors.white10 : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: selectedModel.color,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              selectedModel.label,
+              style: const TextStyle(color: Colors.white, fontSize: 11),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              _isModelDropdownOpen ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+              size: 14,
+              color: Colors.grey.shade400,
             ),
           ],
         ),

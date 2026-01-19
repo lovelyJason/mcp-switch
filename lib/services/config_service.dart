@@ -116,6 +116,12 @@ class ConfigService extends ChangeNotifier {
 
     // Load Windows Shell Preference
     _windowsShell = prefs.getString('windows_shell');
+
+    // Load Terminal AI Model Preference
+    _terminalAiModelId = prefs.getString('terminal_ai_model_id') ?? 'claude-opus-4-5-20251101';
+
+    // Load Chat AI Model Preference
+    _chatAiModelId = prefs.getString('chat_ai_model_id') ?? 'claude-sonnet-4-5-20250929';
   }
 
   String _getDefaultPath(EditorType type) {
@@ -574,7 +580,7 @@ class ConfigService extends ChangeNotifier {
     'claude-opus-4-5-20251101',        // Opus 4.5 (Most capable)
     'claude-sonnet-4-5-20250929',      // Sonnet 4.5 (Recommended)
     'claude-sonnet-4-20250514',        // Sonnet 4
-    'claude-haiku-4-5-20250514',       // Haiku 4.5 (Fastest)
+    'claude-haiku-4-5-20251001',       // Haiku 4.5 (Fastest)
     'claude-3-5-sonnet-20241022',      // Claude 3.5 Sonnet
     'claude-3-5-haiku-20241022',       // Claude 3.5 Haiku
     'claude-3-opus-20240229',          // Claude 3 Opus
@@ -614,6 +620,28 @@ class ConfigService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 终端 AI 输入框选中的模型 ID
+  String _terminalAiModelId = 'claude-opus-4-5-20251101'; // 默认 Opus 4.5
+  String get terminalAiModelId => _terminalAiModelId;
+
+  Future<void> setTerminalAiModelId(String modelId) async {
+    _terminalAiModelId = modelId;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('terminal_ai_model_id', modelId);
+    notifyListeners();
+  }
+
+  // AI 助手聊天选中的模型 ID
+  String _chatAiModelId = 'claude-sonnet-4-5-20250929'; // 默认 Sonnet 4.5
+  String get chatAiModelId => _chatAiModelId;
+
+  Future<void> setChatAiModelId(String modelId) async {
+    _chatAiModelId = modelId;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('chat_ai_model_id', modelId);
+    notifyListeners();
+  }
+
   // Getters
   List<McpProfile> getProfiles(EditorType editor) => _profiles[editor] ?? [];
   String? getActiveProfileId(EditorType editor) => _activeProfileIds[editor];
@@ -631,10 +659,15 @@ class ConfigService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('launch_at_startup', value);
 
-    if (value) {
-      await LaunchAtStartup.instance.enable();
-    } else {
-      await LaunchAtStartup.instance.disable();
+    try {
+      if (value) {
+        await LaunchAtStartup.instance.enable();
+      } else {
+        await LaunchAtStartup.instance.disable();
+      }
+    } catch (e) {
+      // 开发模式下原生插件可能未加载，忽略错误
+      LoggerService.error('Failed to set launch at startup: $e');
     }
     notifyListeners();
   }

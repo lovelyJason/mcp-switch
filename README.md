@@ -1,8 +1,10 @@
 # MCP Switch
 
-**macOS 下的一站式 AI 编辑器 MCP 配置管理工具**
+**跨平台的一站式 AI 编辑器 MCP 配置管理工具**
 
 不止是MCP， 本软件旨在统一各AI编辑器的操作，提供可视化界面管理各AI编辑器的特性，目标是做一个全能的AI配置工具箱，并能用AI增强AI的能力
+
+> 支持 macOS / Windows 双平台
 
 <img width="256" height="256" alt="logo" src="https://github.com/user-attachments/assets/92c9ff30-0898-41a8-965c-218579661a81" />
 
@@ -14,7 +16,7 @@
 
 <img width="900" height="600" alt="image" src="https://github.com/user-attachments/assets/e4d7a0d2-0b43-43bd-bca3-ffa4151bce6a" />
 
-MCP Switch 是一个专为 macOS 设计的 Flutter 应用，旨在帮助开发者高效管理多个 AI 代码编辑器的 **MCP (Model Context Protocol)** 配置文件。
+MCP Switch 是一个跨平台（macOS / Windows）的 Flutter 应用，旨在帮助开发者高效管理多个 AI 代码编辑器的 **MCP (Model Context Protocol)** 配置文件，以及各 CLI 工具的 Skills/Extensions。
 
 在不同的 AI 辅助开发工具（如 Cursor, Windsurf, Claude Code 等）之间切换时，管理分散且格式各异的 MCP 配置往往令人头疼。MCP Switch 提供了一个统一、现代化的界面，让你能够集中管理这些配置，并只需一键即可应用到指定的编辑器中。
 
@@ -35,14 +37,29 @@ MCP Switch 是一个专为 macOS 设计的 Flutter 应用，旨在帮助开发�
 - **Claude Code 提示词管理**：可视化管理 System Prompts，自动同步到 `CLAUDE.md`
 - **全局规则 (Rules)**：统一管理 Windsurf、Antigravity、Gemini 等编辑器规则
 
-## 🆕 最新更新 (2026-01-17)
+## 🆕 最新更新 (2026-01-19)
 
-> **v1.1.0** 重磅更新！新增 Claude Code 插件可视化管理 + AI 智能助手
+> **v1.2.0** 重磅更新！多 CLI 工具 Skills 统一管理 + 终端 AI 集成
 
+### 🖥️ 终端 AI 集成
+- **Command+I 快捷键**：在内置终端中按 `⌘+I` (macOS) 或 `Ctrl+I` (Windows) 唤起 AI 输入框
+- **多模型支持**：可选 Claude Opus 4.5 或 Claude Sonnet 4.5
+- **模型记忆**：自动保存上次选择的模型偏好
+
+### 🛠️ 多 CLI 工具 Skills 统一管理
+- **Claude Code**：Plugins 市场 + Skills 管理（支持社区/本地 Skills）
+- **OpenAI Codex**：Skills 市场 + 本地 Skills 管理，支持从 GitHub 安装自定义 Skill
+- **Google Gemini CLI**：Skills + Extensions 双管理
+  - 支持从官方/社区安装 Extensions
+  - 支持 GitHub URL 安装自定义 Skill
+- **Antigravity**：Skills 管理 + 社区 Skills 一键安装
+
+### 🔧 其他优化
 - 🏪 **插件市场**：支持添加官方/第三方市场，一键安装插件，查看文档和源码
 - 🎯 **Skills 管理**：浏览已安装的社区技能，支持文档翻译
 - 🤖 **AI 助手**：集成 Claude API，用自然语言管理插件（如 "帮我安装 xxx"）
 - 🌐 **内置翻译**：英文文档一键翻译为中文
+- 🖥️ **Windows 支持**：新增 Windows 平台适配，支持 PowerShell/CMD 终端切换
 
 ---
 
@@ -71,7 +88,7 @@ MCP Switch 是一个专为 macOS 设计的 Flutter 应用，旨在帮助开发�
   - 一键浏览、安装、卸载插件
   - 查看插件文档和源码
   - 内置翻译功能，轻松阅读英文文档
- 
+
 <img width="900" height="600" alt="image" src="https://github.com/user-attachments/assets/bc40c758-0b54-4023-8f2c-b4d09c70eb01" />
 
 - **社区 Skills 管理**
@@ -83,7 +100,34 @@ MCP Switch 是一个专为 macOS 设计的 Flutter 应用，旨在帮助开发�
   - 插件/Skills 详情页展示完整 README
   - 一键跳转 GitHub 查看源码
   - 内置 Markdown 渲染，阅读体验绝佳
- 
+
+### 🛠️ 多 CLI 工具 Skills 统一管理 (New!)
+
+为主流 AI CLI 工具提供统一的 Skills/Extensions 管理界面：
+
+| CLI 工具 | Skills 管理 | Extensions | 自定义安装 | 配置路径 |
+|---------|------------|------------|-----------|---------|
+| **Claude Code** | ✅ 社区 Skills | - | ✅ GitHub URL | `~/.claude/` |
+| **OpenAI Codex** | ✅ 本地 Skills | - | ✅ GitHub URL | `~/.codex/skills/` |
+| **Google Gemini CLI** | ✅ 本地 Skills | ✅ Extensions | ✅ GitHub URL | `~/.gemini/` |
+| **Antigravity** | ✅ 本地 Skills | - | ✅ GitHub URL | `~/.antigravity/skills/` |
+
+**功能亮点**：
+- 📦 **一键安装**：从 GitHub URL 直接安装 Skill 到对应 CLI 工具目录
+- 📋 **可视化管理**：查看已安装 Skills/Extensions，支持删除
+- 📖 **文档预览**：内置 Markdown 渲染，支持翻译
+- 🔄 **统一界面**：一个应用管理所有 CLI 工具的 Skills
+
+### 🖥️ 内置终端 + AI 集成 (New!)
+
+内置全功能终端，支持 AI 辅助：
+
+- **跨平台终端**：macOS (zsh/bash) + Windows (PowerShell/CMD)
+- **AI 快捷输入**：按 `⌘+I` / `Ctrl+I` 唤起 AI 输入框
+- **多模型选择**：支持 Claude Opus 4.5 / Sonnet 4.5
+- **模型偏好保存**：自动记住上次选择的模型
+- **悬浮终端**：可设为悬浮窗口，随时唤起
+
 内部集成了几个免费的翻译引擎，在预览plugin, skill的文档的同时支持对其进行翻译并缓存，这样更方便阅读
 
 <img width="900" height="600" alt="image" src="https://github.com/user-attachments/assets/32e5b5f7-206b-4a5f-80c1-48eb427d4f6d" />
@@ -97,7 +141,6 @@ MCP Switch 是一个专为 macOS 设计的 Flutter 应用，旨在帮助开发�
 - **对话式操作**：不用记命令，直接说 "帮我安装 xxx 插件"
 - **插件安装/卸载**：通过聊天完成插件管理
 - **信息查询**：询问已安装插件、市场列表、Skills 信息等
-- **Tool Use 支持**：查看命令执行过程，结果可折叠展示
 - **历史记录**：聊天记录自动保存，支持导出
 
 ## 🗺️ 路线图 (Roadmap)
@@ -110,6 +153,10 @@ MCP Switch 是一个专为 macOS 设计的 Flutter 应用，旨在帮助开发�
 - [x] **Claude Code 插件市场**：一键安装/卸载插件，支持文档查看与翻译
 - [x] **社区 Skills 管理**：浏览已安装 Skills，查看使用文档
 - [x] **AI 智能助手**：集成 Claude API，对话式管理插件和配置
+- [x] **多 CLI 工具 Skills 管理**：统一管理 Claude Code / Codex / Gemini CLI / Antigravity 的 Skills
+- [x] **Gemini CLI Extensions**：支持 Extensions 安装与管理
+- [x] **内置终端 AI 集成**：Command+I 唤起 AI 输入框，支持多模型选择
+- [x] **Windows 平台支持**：新增 Windows 适配，支持 PowerShell/CMD
 
 ### Phase 2: 生态互联 (In Progress)
 - [ ] **多配置方案 (Profiles)**

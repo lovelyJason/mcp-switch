@@ -786,6 +786,41 @@ open "$currentAppPath"
 
         const SizedBox(height: 32),
 
+        // 终端 AI 模型选择
+        _buildSectionTitle(S.get('terminal_ai_model')),
+        Text(
+          S.get('terminal_ai_model_desc'),
+          style: const TextStyle(color: Colors.grey, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: StyledDropdown<String>(
+            value: configService.terminalAiModelId,
+            dense: true,
+            items: [
+              StyledDropdownItem<String>(
+                value: 'claude-opus-4-5-20251101',
+                label: 'Claude Opus 4.5',
+              ),
+              StyledDropdownItem<String>(
+                value: 'claude-sonnet-4-5-20250929',
+                label: 'Claude Sonnet 4.5',
+              ),
+              StyledDropdownItem<String>(
+                value: 'claude-haiku-4-5-20251001',
+                label: 'Claude Haiku 4.5',
+              ),
+            ],
+            onChanged: (v) async {
+              await configService.setTerminalAiModelId(v);
+              setState(() {});
+            },
+          ),
+        ),
+
+        const SizedBox(height: 32),
+
         // 悬浮图标开关
         _buildSwitchTile(
           S.get('enable_chatbot'),

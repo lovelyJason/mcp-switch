@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../models/mcp_profile.dart';
 import '../../models/editor_type.dart';
 import '../../services/config_service.dart';
-import '../mcp_server_edit_screen.dart';
+import '../pages/mcp_config/mcp_server_edit_screen.dart';
 import 'custom_dialog.dart';
 import '../../l10n/s.dart';
 
@@ -320,7 +320,7 @@ class _ProjectCardState extends State<ProjectCard> {
             ),
             const SizedBox(width: 8),
             IconButton(
-              icon: const Icon(Icons.close, size: 16, color: Colors.redAccent),
+              icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
               onPressed: () => _confirmDeleteServer(name),
             ),
           ],

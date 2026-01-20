@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../l10n/s.dart';
-import '../models/claude_prompt.dart';
-import '../services/prompt_service.dart';
+import '../../../l10n/s.dart';
+import '../../../models/claude_prompt.dart';
+import '../../../services/prompt_service.dart';
 import 'claude_prompt_edit_screen.dart';
-import 'components/custom_dialog.dart';
+import '../../components/custom_dialog.dart';
 
 class ClaudePromptsScreen extends StatelessWidget {
   const ClaudePromptsScreen({super.key});

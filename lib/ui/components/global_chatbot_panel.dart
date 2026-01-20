@@ -8,11 +8,11 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:pasteboard/pasteboard.dart';
 import 'package:provider/provider.dart';
 import '../../l10n/s.dart';
-import '../../main.dart' show globalNavigatorKey;
+import '../../utils/global_keys.dart';
 import '../../models/chat_message.dart';
 import '../../services/ai_chat_service.dart';
 import '../../services/config_service.dart';
-import '../settings_screen.dart';
+import '../pages/settings/settings_screen.dart';
 import 'custom_toast.dart';
 
 /// 全局 AI 聊天面板 - 侧边滑出样式

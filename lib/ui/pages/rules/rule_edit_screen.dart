@@ -3,8 +3,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import '../l10n/s.dart'; 
-import 'widgets/fresh_markdown_editor.dart';
+import '../../../l10n/s.dart';
+import '../../widgets/fresh_markdown_editor.dart';
 
 class RuleEditScreen extends StatefulWidget {
   final File file;

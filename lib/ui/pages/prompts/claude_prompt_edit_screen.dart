@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
-import '../l10n/s.dart';
-import '../models/claude_prompt.dart';
-import '../services/prompt_service.dart';
-import 'widgets/fresh_markdown_editor.dart';
+import '../../../l10n/s.dart';
+import '../../../models/claude_prompt.dart';
+import '../../../services/prompt_service.dart';
+import '../../widgets/fresh_markdown_editor.dart';
 
 // 全局安装claude mcp
 // claude mcp add chrome-devtools npx chrome-devtools-mcp@latest --scope user

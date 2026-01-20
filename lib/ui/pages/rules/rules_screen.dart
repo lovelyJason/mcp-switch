@@ -1,10 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import '../l10n/s.dart';
-import '../utils/platform_utils.dart';
+import '../../../l10n/s.dart';
+import '../../../utils/platform_utils.dart';
 import 'rule_edit_screen.dart';
 
-import '../../models/editor_type.dart';
+import '../../../models/editor_type.dart';
 
 class RulesScreen extends StatelessWidget {
   final EditorType editorType;

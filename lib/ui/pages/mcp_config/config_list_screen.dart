@@ -1,14 +1,14 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../models/editor_type.dart';
-import '../../models/mcp_profile.dart';
-import '../../services/config_service.dart';
-import 'components/profile_card.dart';
-import 'components/project_card.dart';
-import 'components/custom_dialog.dart';
-import 'components/custom_toast.dart';
-import '../l10n/s.dart';
+import '../../../models/editor_type.dart';
+import '../../../models/mcp_profile.dart';
+import '../../../services/config_service.dart';
+import '../../components/profile_card.dart';
+import '../../components/project_card.dart';
+import '../../components/custom_dialog.dart';
+import '../../components/custom_toast.dart';
+import '../../../l10n/s.dart';
 import 'mcp_server_edit_screen.dart';
 
 class ConfigListScreen extends StatelessWidget {

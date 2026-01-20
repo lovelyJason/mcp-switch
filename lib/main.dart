@@ -21,12 +21,8 @@ import 'l10n/s.dart';
 import 'services/logger_service.dart';
 import 'utils/platform_utils.dart';
 import 'config/platform_commands_config.dart';
-
-/// 全局 ScaffoldKey，用于控制 MainWindow 的 endDrawer
-final GlobalKey<ScaffoldState> globalScaffoldKey = GlobalKey<ScaffoldState>();
-
-/// 全局 NavigatorKey，用于在 Overlay 中导航
-final GlobalKey<NavigatorState> globalNavigatorKey = GlobalKey<NavigatorState>();
+import 'config/mcp_presets_config.dart';
+import 'utils/global_keys.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -72,6 +68,7 @@ void main() async {
   await configService.init();
   await S.init();
   await PlatformCommandsConfig.init(); // 加载平台命令配置
+  await McpPresetsConfig.init(); // 加载 MCP 预设配置
 
   LoggerService.info('''
   ════════════════════════════════════════════

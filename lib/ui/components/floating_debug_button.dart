@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../config/platform_commands_config.dart';
 import '../../services/logger_service.dart';
 import '../../utils/platform_utils.dart';
-import '../../main.dart' show globalNavigatorKey;
+import '../../utils/global_keys.dart';
 
 /// 悬浮 Debug 按钮（仅在 Debug 模式下显示）
 /// 用于开发调试功能

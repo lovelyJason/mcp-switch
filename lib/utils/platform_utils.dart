@@ -1252,7 +1252,7 @@ class PlatformUtils {
     if (exePath != null && !Platform.isWindows) {
       // 标准系统路径 + fnm/nvm 路径都认为已配置好
       inPath = true;
-      LoggerService.debug('[checkGeminiInstallStatus] 找到路径，直接认为 inPath=true');
+      // LoggerService.debug('[checkGeminiInstallStatus] 找到路径，直接认为 inPath=true');
     } else if (Platform.isWindows) {
       String? geminiBinDir;
       if (exePath != null) {
@@ -1279,7 +1279,7 @@ class PlatformUtils {
       }
     }
 
-    LoggerService.debug('[checkGeminiInstallStatus] exePath=$exePath, inPath=$inPath');
+    // LoggerService.debug('[checkGeminiInstallStatus] exePath=$exePath, inPath=$inPath');
     return GeminiInstallStatus(exePath: exePath, inPath: inPath);
   }
 

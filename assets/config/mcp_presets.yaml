@@ -1,0 +1,203 @@
+# MCP Server 预设配置
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# 支持功能：
+# - presets: MCP 服务器预设列表
+# - connection_types: 连接类型（local/http/sse）
+# - form_fields: 动态表单字段
+# - claude_cli: Claude Code CLI 命令模板（仅 Claude Code 使用）
+#
+# 导入导出：用户可以在 MCP 编辑页面导入/导出此配置文件
+#
+# ───────────────────────────────────────────────────────────────────────────────
+# form_fields.apply_mode 字段值说明：
+# ───────────────────────────────────────────────────────────────────────────────
+#   env   - 环境变量模式，值写入 JSON 的 env 对象
+#           配合 env_key 使用，如 "env": {"API_KEY": "xxx"}
+#
+#   arg   - 命令行参数模式，值追加到 args 数组
+#           配合 arg_key 和 arg_format 使用：
+#           - arg_key: 参数名，如 '--figma-api-key'
+#           - arg_format: 'equals' 生成 --key=value，'space' 生成 --key value
+#
+#   不填  - extra_args 模板模式（默认）
+#           通过 connection_types.config.extra_args 里的 {{field_id}} 模板插值
+#           示例：extra_args: ['--api-key', '{{api_key}}']
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 连接类型定义（全局）
+# ═══════════════════════════════════════════════════════════════════════════════
+connection_type_definitions:
+  local:
+    label_key: connection_type_local       # stdio 本地进程
+    description_key: connection_type_local_desc
+    show_command_args: true                # local 模式显示 command + args 输入框
+
+  http:
+    label_key: connection_type_http        # HTTP 远程调用
+    description_key: connection_type_http_desc
+    show_command_args: false
+
+  sse:
+    label_key: connection_type_sse         # Server-Sent Events
+    description_key: connection_type_sse_desc
+    show_command_args: false
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MCP 预设列表
+# ═══════════════════════════════════════════════════════════════════════════════
+presets:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Figma 官方 MCP（Anthropic 官方）
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: figma-official
+    name_key: figma_official               # i18n key，用于显示
+    default_cli_name: figma-official       # CLI 命令中使用的名称（只能英文、数字、-、_）
+    icon: assets/icons/figma.svg
+    tips_key: figma_official_tips          # 灯泡提示 i18n key
+
+    # 连接类型配置
+    connection_types:
+      - type: http
+        recommended: true                  # HTTP 远程（推荐）
+        config:
+          url: https://mcp.figma.com/mcp
+        # Claude Code CLI 命令模板
+        claude_cli: 'claude mcp add --transport http --scope user {{name}} https://mcp.figma.com/mcp'
+
+    # 官方 Figma MCP 无需额外配置（Token 通过 OAuth 认证获取）
+    form_fields: []
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Figma 开源 MCP (figma-developer-mcp)
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: figma-opensource
+    name_key: figma_opensource
+    default_cli_name: figma-developer
+    icon: assets/icons/figma.svg
+    tips_key: figma_opensource_tips
+
+    connection_types:
+      - type: local
+        recommended: true
+        config:
+          command: npx
+          args: ['-y', 'figma-developer-mcp', '--stdio']
+        claude_cli: 'claude mcp add --scope user {{name}} -- npx -y figma-developer-mcp --figma-api-key={{figma_token}} --stdio'
+
+    form_fields:
+      - id: figma_token
+        label_key: figma_access_token
+        sub_label_key: figma_api_key
+        placeholder: 'figd_...'
+        required: true
+        apply_mode: arg                    # arg = 命令行参数方式
+        arg_key: '--figma-api-key'         # 参数名
+        arg_format: equals                 # equals: --key=value, space: --key value
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Context7 - 支持 http/sse/local 三种连接方式
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: context7
+    name: Context7                         # 直接字符串（无 name_key 时使用）
+    icon: assets/icons/context7.svg
+    tips_key: context7_tips
+
+    connection_types:
+      # HTTP 远程模式（推荐）
+      - type: http
+        recommended: true
+        config:
+          url: https://mcp.context7.com/mcp
+          # headers 使用 {{field_id}} 模板插值
+          headers:
+            CONTEXT7_API_KEY: '{{api_key}}'
+        # Claude Code CLI: HTTP 传输模式（--header 必须放在 URL 后面）
+        claude_cli: 'claude mcp add --transport http --scope user {{name}} https://mcp.context7.com/mcp --header "CONTEXT7_API_KEY: {{api_key}}"'
+
+      # SSE 模式
+      - type: sse
+        recommended: false
+        config:
+          url: https://mcp.context7.com/sse
+          headers:
+            CONTEXT7_API_KEY: '{{api_key}}'
+        # Claude Code CLI: SSE 传输模式（--header 必须放在 URL 后面）
+        claude_cli: 'claude mcp add --transport sse --scope user {{name}} https://mcp.context7.com/sse --header "CONTEXT7_API_KEY: {{api_key}}"'
+
+      # 本地模式
+      - type: local
+        recommended: false
+        config:
+          command: npx
+          args: ['-y', '@upstash/context7-mcp']
+          # 本地模式额外追加的参数（使用模板）
+          extra_args:
+            - '--api-key'
+            - '{{api_key}}'
+        # Claude Code CLI: 本地模式
+        claude_cli: 'claude mcp add --scope user {{name}} -- npx -y @upstash/context7-mcp --api-key {{api_key}}'
+
+    form_fields:
+      - id: api_key
+        label_key: api_key                 # i18n: "API Key"
+        sub_label_key: api_key_hint        # i18n: "请输入 API Key"
+        placeholder: 'context7_...'
+        required: false                    # Context7 可以不填 API Key
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Chrome DevTools MCP
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: chrome-devtools
+    name: chrome-devtools
+    icon: assets/icons/chrome-devtools.svg
+    tips_key: chrome_devtools_tips
+
+    connection_types:
+      - type: local
+        recommended: true
+        config:
+          command: npx
+          args: ['-y', 'chrome-devtools-mcp@latest']
+        claude_cli: 'claude mcp add --scope user {{name}} -- npx -y chrome-devtools-mcp@latest'
+
+    form_fields: []                        # 无额外表单字段
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Playwright MCP
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: playwright
+    name: Playwright
+    default_cli_name: playwright
+    icon: assets/icons/playwright.svg
+    tips_key: playwright_tips
+
+    connection_types:
+      - type: local
+        recommended: true
+        config:
+          command: npx
+          args: ['-y', '@playwright/mcp@latest']
+        claude_cli: 'claude mcp add --scope user {{name}} -- npx -y @playwright/mcp@latest'
+
+    form_fields: []
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 自定义配置（特殊预设）
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: custom
+    name_key: custom_config
+    icon: null
+    is_custom: true                        # 标记为自定义模式，隐藏 connection_types 选择器
+
+    # 自定义模式下，用户可以自由填写 command/args
+    connection_types:
+      - type: local
+        recommended: true
+        config:
+          command: ''
+          args: []
+        # 自定义模式不预设 CLI 命令，由代码动态生成
+
+    form_fields: []

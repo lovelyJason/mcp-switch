@@ -22,6 +22,12 @@ class _PluginDetailDialogState extends State<_PluginDetailDialog> {
   String? _pluginAuthor;
   String? _githubUrl;
 
+  // 是否为远程源插件（source 是 URL 而非本地路径）
+  bool _isRemoteSource = false;
+
+  // 远程源插件的 marketplace repo（从 marketplace.json 解析）
+  String? _remoteMarketplaceRepo;
+
   // README 路径（智能查找后的实际路径）
   String? _readmePath;
 
@@ -34,6 +40,7 @@ class _PluginDetailDialogState extends State<_PluginDetailDialog> {
     _loadAgents();
     _loadCommands();
     _findReadmePath();
+    _loadRemoteMarketplaceRepo();
   }
 
   /// 智能查找 README 文件（大小写不敏感）
@@ -64,6 +71,39 @@ class _PluginDetailDialogState extends State<_PluginDetailDialog> {
       }
     } catch (e) {
       debugPrint('Error finding README: $e');
+    }
+  }
+
+  /// 从 marketplace.json 解析远程 marketplace repo
+  Future<void> _loadRemoteMarketplaceRepo() async {
+    try {
+      final installPath = widget.plugin.installPath;
+      final marketplaceJsonPath = '$installPath/.claude-plugin/marketplace.json';
+      final marketplaceJsonFile = File(marketplaceJsonPath);
+
+      if (await marketplaceJsonFile.exists()) {
+        final content = await marketplaceJsonFile.readAsString();
+        final json = jsonDecode(content) as Map<String, dynamic>;
+        final plugins = json['plugins'] as List<dynamic>?;
+
+        if (plugins != null && plugins.isNotEmpty) {
+          // 取第一个插件的 source
+          final firstPlugin = plugins[0] as Map<String, dynamic>;
+          final source = firstPlugin['source'] as Map<String, dynamic>?;
+
+          if (source != null) {
+            final sourceType = source['source'] as String?;
+            if (sourceType == 'github') {
+              final repo = source['repo'] as String?;
+              if (repo != null && repo.isNotEmpty) {
+                setState(() => _remoteMarketplaceRepo = repo);
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading marketplace repo: $e');
     }
   }
 
@@ -128,15 +168,37 @@ class _PluginDetailDialogState extends State<_PluginDetailDialog> {
                     // 情况1: source 是对象，包含 url 字段（外部插件）
                     if (pluginSource is Map<String, dynamic>) {
                       final sourceType = pluginSource['source'] as String?;
-                      if (sourceType == 'url') {
-                        final url = pluginSource['url'] as String?;
-                        if (url != null && url.contains('github.com')) {
-                          // 从 .git URL 提取 GitHub 仓库链接
-                          var githubUrl = url.replaceAll('.git', '');
-                          setState(() {
-                            _githubUrl = githubUrl;
-                          });
-                          return;
+                      if (sourceType == 'url' || sourceType == 'github') {
+                        // 检查插件是否实际可用（skills 或 commands 目录存在）
+                        // 如果插件已正确安装且有内容，则不是"远程源"问题
+                        final installPath = widget.plugin.installPath;
+                        final skillsDir = Directory('$installPath/skills');
+                        final commandsDir = Directory('$installPath/commands');
+                        final hasLocalContent = await skillsDir.exists() || await commandsDir.exists();
+
+                        // 只有当插件目录下没有 skills/commands 时才标记为远程源
+                        if (!hasLocalContent) {
+                          setState(() => _isRemoteSource = true);
+                        }
+
+                        if (sourceType == 'url') {
+                          final url = pluginSource['url'] as String?;
+                          if (url != null && url.contains('github.com')) {
+                            // 从 .git URL 提取 GitHub 仓库链接
+                            var githubUrl = url.replaceAll('.git', '');
+                            setState(() {
+                              _githubUrl = githubUrl;
+                            });
+                            return;
+                          }
+                        } else if (sourceType == 'github') {
+                          final repo = pluginSource['repo'] as String?;
+                          if (repo != null) {
+                            setState(() {
+                              _githubUrl = 'https://github.com/$repo';
+                            });
+                            return;
+                          }
                         }
                       }
                     }
@@ -341,6 +403,12 @@ class _PluginDetailDialogState extends State<_PluginDetailDialog> {
                     // 插件描述（来自 plugin.json）
                     if (_pluginDescription != null && _pluginDescription!.isNotEmpty) ...[
                       _buildDescriptionRow(_pluginDescription!, isDark),
+                      const SizedBox(height: 12),
+                    ],
+
+                    // 远程源警告提示
+                    if (_isRemoteSource) ...[
+                      _buildRemoteSourceWarning(isDark),
                       const SizedBox(height: 12),
                     ],
 
@@ -557,6 +625,79 @@ class _PluginDetailDialogState extends State<_PluginDetailDialog> {
         ],
       ),
     );
+  }
+
+  /// 远程源警告提示
+  Widget _buildRemoteSourceWarning(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.orange.withValues(alpha: 0.15) : Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Colors.orange.withValues(alpha: 0.4),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                size: 18,
+                color: Colors.orange.shade700,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  S.get('plugin_remote_source_warning'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.orange.shade200 : Colors.orange.shade900,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          // 尝试安装按钮（仅当解析到 repo 时显示）
+          if (_remoteMarketplaceRepo != null) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _tryInstallMarketplace,
+                icon: const Icon(Icons.download_outlined, size: 14),
+                label: Text(S.get('try_install_marketplace')),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.deepPurple,
+                  textStyle: const TextStyle(fontSize: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 尝试安装远程 marketplace
+  Future<void> _tryInstallMarketplace() async {
+    if (_remoteMarketplaceRepo == null) return;
+
+    final terminalService = context.read<TerminalService>();
+    terminalService.setFloatingTerminal(true);
+    terminalService.openTerminalPanel();
+    await Future.delayed(const Duration(milliseconds: 500));
+    terminalService.sendCommand('claude plugin marketplace add $_remoteMarketplaceRepo');
+
+    // 关闭当前弹窗
+    if (mounted) {
+      Navigator.of(context).pop({'action': 'marketplace_installed', 'repo': _remoteMarketplaceRepo});
+    }
   }
 
   Widget _buildInstallPathRow(bool isDark) {

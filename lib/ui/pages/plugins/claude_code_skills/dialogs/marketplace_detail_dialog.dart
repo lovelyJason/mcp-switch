@@ -20,6 +20,25 @@ class _MarketplaceDetailDialogState extends State<_MarketplaceDetailDialog> {
   List<Map<String, dynamic>> _plugins = [];
   bool _loading = true;
   String? _marketplaceDescription;
+  String _searchQuery = '';
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// 获取筛选后的插件列表
+  List<Map<String, dynamic>> get _filteredPlugins {
+    if (_searchQuery.isEmpty) return _plugins;
+    final query = _searchQuery.toLowerCase();
+    return _plugins.where((plugin) {
+      final name = (plugin['name'] as String).toLowerCase();
+      final description = (plugin['description'] as String).toLowerCase();
+      return name.contains(query) || description.contains(query);
+    }).toList();
+  }
 
   // 判断插件是否已安装（通过名称和市场名称匹配）
   bool _isPluginInstalled(String pluginName) {
@@ -174,10 +193,69 @@ class _MarketplaceDetailDialogState extends State<_MarketplaceDetailDialog> {
                           ),
                           const SizedBox(height: 12),
 
-                          if (_plugins.isEmpty)
+                          // 搜索框
+                          if (_plugins.isNotEmpty) ...[
+                            TextField(
+                              controller: _searchController,
+                              onChanged: (value) => setState(() => _searchQuery = value),
+                              decoration: InputDecoration(
+                                hintText: S.get('search_plugins'),
+                                hintStyle: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey.withValues(alpha: 0.6),
+                                ),
+                                prefixIcon: Icon(
+                                  Icons.search,
+                                  size: 18,
+                                  color: Colors.grey.withValues(alpha: 0.6),
+                                ),
+                                suffixIcon: _searchQuery.isNotEmpty
+                                    ? IconButton(
+                                        icon: Icon(
+                                          Icons.clear,
+                                          size: 16,
+                                          color: Colors.grey.withValues(alpha: 0.6),
+                                        ),
+                                        onPressed: () {
+                                          _searchController.clear();
+                                          setState(() => _searchQuery = '');
+                                        },
+                                      )
+                                    : null,
+                                filled: true,
+                                fillColor: isDark
+                                    ? Colors.white.withValues(alpha: 0.05)
+                                    : Colors.grey.shade100,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.withValues(alpha: 0.2),
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: Colors.deepPurple.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                              ),
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+
+                          if (_filteredPlugins.isEmpty)
                             _buildEmptyState(isDark)
                           else
-                            ...(_plugins.map((plugin) => _buildPluginItem(plugin, isDark))),
+                            ...(_filteredPlugins.map((plugin) => _buildPluginItem(plugin, isDark))),
                         ],
                       ),
                     ),

@@ -10,11 +10,14 @@ import '../../l10n/s.dart';
 class ProjectCard extends StatefulWidget {
   final McpProfile profile;
   final VoidCallback onDelete;
+  /// 全局 MCP 服务器配置（用于显示继承的 MCP）
+  final Map<String, dynamic>? globalMcpServers;
 
   const ProjectCard({
     super.key,
     required this.profile,
     required this.onDelete,
+    this.globalMcpServers,
   });
 
   @override
@@ -23,6 +26,9 @@ class ProjectCard extends StatefulWidget {
 
 class _ProjectCardState extends State<ProjectCard> {
   bool _isHovering = false;
+
+  /// 判断是否是全局配置
+  bool get _isGlobalProfile => widget.profile.content['isGlobal'] == true;
 
   void _addServer() {
     Navigator.of(context).push(
@@ -116,12 +122,30 @@ class _ProjectCardState extends State<ProjectCard> {
 
   @override
   Widget build(BuildContext context) {
-    final Map<String, dynamic> mcpServers = 
-        (widget.profile.content['mcpServers'] is Map) 
-            ? widget.profile.content['mcpServers'] 
+    final Map<String, dynamic> mcpServers =
+        (widget.profile.content['mcpServers'] is Map)
+            ? widget.profile.content['mcpServers']
             : {};
-            
-    final serverCount = mcpServers.length;
+
+    // 获取禁用的继承 MCP 列表
+    final List<String> disabledMcpServers =
+        (widget.profile.content['disabledMcpServers'] is List)
+            ? List<String>.from(widget.profile.content['disabledMcpServers'])
+            : [];
+
+    // 全局 MCP（过滤掉项目本身已配置的）
+    final Map<String, dynamic> inheritedMcpServers = {};
+    if (widget.globalMcpServers != null && !_isGlobalProfile) {
+      for (final entry in widget.globalMcpServers!.entries) {
+        // 只显示项目中没有配置的全局 MCP
+        if (!mcpServers.containsKey(entry.key)) {
+          inheritedMcpServers[entry.key] = entry.value;
+        }
+      }
+    }
+
+    final projectServerCount = mcpServers.length;
+    final inheritedServerCount = inheritedMcpServers.length;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? const Color(0xFF2C2C2E) : Colors.white;
@@ -159,40 +183,82 @@ class _ProjectCardState extends State<ProjectCard> {
                 color: isDark ? Colors.white70 : Colors.grey,
               ),
             ),
-            title: Text(
-              widget.profile.name,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'Menlo', 
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            title: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    widget.profile.name,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Menlo',
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // 全局配置的灯泡提示
+                if (_isGlobalProfile) ...[
+                  const SizedBox(width: 8),
+                  Tooltip(
+                    message: S.get('global_mcp_disable_tip'),
+                    preferBelow: false,
+                    verticalOffset: 16,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade800,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    textStyle: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      height: 1.5,
+                    ),
+                    child: Icon(
+                      Icons.lightbulb,
+                      size: 18,
+                      color: Colors.amber.shade600,
+                    ),
+                  ),
+                ],
+              ],
             ),
             subtitle: Text(
-              '$serverCount servers configured',
+              _isGlobalProfile
+                  ? '$projectServerCount servers configured'
+                  : '$projectServerCount project + $inheritedServerCount inherited',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
             ),
-            // 项目删除按钮
-            // trailing: _isHovering
-            //     ? IconButton(
-            //         icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-            //         onPressed: widget.onDelete,
-            //         tooltip: 'Remove Project Config',
-            //       )
-            //     : const SizedBox(width: 48), // Balancing
             children: [
-              // Server List
-              if (serverCount == 0)
+              // 继承的全局 MCP（仅非全局项目显示）
+              if (!_isGlobalProfile && inheritedMcpServers.isNotEmpty) ...[
+                _buildSectionDivider('继承自全局配置', isDark),
+                ...inheritedMcpServers.keys.map((name) {
+                  final config = inheritedMcpServers[name];
+                  final isDisabled = disabledMcpServers.contains(name);
+                  return _buildInheritedServerItem(
+                    name,
+                    config,
+                    isDisabled: isDisabled,
+                    onToggle: (enabled) => _toggleInheritedServer(name, enabled),
+                  );
+                }),
+              ],
+
+              // 项目自有 MCP
+              if (!_isGlobalProfile && mcpServers.isNotEmpty && inheritedMcpServers.isNotEmpty)
+                _buildSectionDivider('项目配置', isDark),
+
+              if (projectServerCount == 0 && inheritedServerCount == 0)
                 const Padding(
                   padding: EdgeInsets.all(16.0),
                   child: Text('No servers configured.', style: TextStyle(color: Colors.grey)),
                 ),
-                
+
               ...mcpServers.keys.map((name) {
                 final config = mcpServers[name];
                 return _buildServerItem(name, config);
-              }).toList(),
+              }),
 
               // Add Button
               Container(
@@ -327,5 +393,180 @@ class _ProjectCardState extends State<ProjectCard> {
         ),
       ),
     );
+  }
+
+  /// 构建分割线标题
+  Widget _buildSectionDivider(String title, bool isDark) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(36, 12, 24, 8),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade200,
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            title.contains('全局') ? Icons.public : Icons.folder_special,
+            size: 14,
+            color: Colors.grey.shade500,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade500,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 构建继承的 MCP 服务器项
+  Widget _buildInheritedServerItem(
+    String name,
+    dynamic config, {
+    required bool isDisabled,
+    required ValueChanged<bool> onToggle,
+  }) {
+    final cmd = config is Map ? config['command'] ?? '' : '';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isEnabled = !isDisabled;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.deepPurple.withOpacity(0.05)
+            : Colors.deepPurple.withOpacity(0.02),
+        border: Border(
+          top: BorderSide(
+            color: isDark
+                ? Colors.white.withOpacity(0.05)
+                : Colors.grey.shade50,
+          ),
+        ),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.only(left: 36, right: 24),
+        dense: true,
+        leading: Container(
+          width: 36,
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.deepPurple.withOpacity(0.2)
+                : Colors.deepPurple.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.deepPurple.withOpacity(0.3),
+            ),
+          ),
+          child: Text(
+            name.isNotEmpty ? name[0].toUpperCase() : '',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.deepPurple.shade200 : Colors.deepPurple,
+            ),
+          ),
+        ),
+        title: Row(
+          children: [
+            Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            // 继承标签
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.deepPurple.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '继承',
+                style: TextStyle(
+                  fontSize: 9,
+                  color: isDark ? Colors.deepPurple.shade200 : Colors.deepPurple,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            // 状态标签
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: isEnabled
+                    ? Colors.green.withOpacity(0.1)
+                    : Colors.grey.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                isEnabled ? '已启用' : '已禁用',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isEnabled ? Colors.green : Colors.grey,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        subtitle: Text(
+          cmd.toString(),
+          style: const TextStyle(fontFamily: 'Menlo', fontSize: 11),
+        ),
+        trailing: Transform.scale(
+          scale: 0.7,
+          child: Switch(
+            value: isEnabled,
+            onChanged: onToggle,
+            activeColor: Colors.green,
+            inactiveTrackColor: isDark
+                ? Colors.grey.shade800
+                : Colors.grey.shade300,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 切换继承 MCP 的启用状态
+  void _toggleInheritedServer(String name, bool enabled) {
+    final configService = Provider.of<ConfigService>(context, listen: false);
+    final content = Map<String, dynamic>.from(widget.profile.content);
+
+    List<String> disabledMcpServers = (content['disabledMcpServers'] is List)
+        ? List<String>.from(content['disabledMcpServers'])
+        : [];
+
+    if (enabled) {
+      // 启用：从禁用列表中移除
+      disabledMcpServers.remove(name);
+    } else {
+      // 禁用：添加到禁用列表
+      if (!disabledMcpServers.contains(name)) {
+        disabledMcpServers.add(name);
+      }
+    }
+
+    content['disabledMcpServers'] = disabledMcpServers;
+
+    final updatedProfile = McpProfile(
+      id: widget.profile.id,
+      name: widget.profile.name,
+      description: widget.profile.description,
+      content: content,
+    );
+
+    configService.saveProfile(EditorType.claude, updatedProfile);
   }
 }

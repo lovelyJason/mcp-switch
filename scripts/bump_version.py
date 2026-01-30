@@ -113,7 +113,21 @@ def get_total_release_count():
             pass
     return 0
 
+import argparse
+
+# ... (imports remain)
+
+def get_latest_gh_release_tag():
+    # ... (remains same)
+    pass # implementation preserved in actual file
+
+# ... (helper functions remain)
+
 def main():
+    parser = argparse.ArgumentParser(description='Bump version in pubspec.yaml')
+    parser.add_argument('--type', choices=['major', 'minor', 'patch'], default='patch', help='Type of version bump')
+    args = parser.parse_args()
+
     # 1. Get latest GH version for SemVer (Major.Minor.Patch) logic
     latest_tag = get_latest_gh_release_tag()
     
@@ -144,24 +158,31 @@ def main():
     new_build_number = total_releases + 1
     print(f"Total Releases: {total_releases} -> New Build Number: {new_build_number}")
 
-    # 4. Increment Patch Version
-    # Logic: Always increment patch from the *latest released version*?
-    # Or should we just respect the build number bump and keep version?
-    # Usually bump_version implies SemVer bump.
-    # The user only specified buildNumber logic.
-    # I will stick to existing behavior: Bump Patch.
-    new_patch_number = current_version['patch'] + 1
+    # 4. Bump Version based on type
+    major = current_version['major']
+    minor = current_version['minor']
+    patch = current_version['patch']
     
-    new_version_str = f"{current_version['major']}.{current_version['minor']}.{new_patch_number}+{new_build_number}"
+    if args.type == 'major':
+        major += 1
+        minor = 0
+        patch = 0
+    elif args.type == 'minor':
+        minor += 1
+        patch = 0
+    else: # patch
+        patch += 1
+        
+    new_version_str = f"{major}.{minor}.{patch}+{new_build_number}"
     
-    print(f"Bumping version to: {new_version_str}")
+    print(f"Bumping version ({args.type}): {current_version['major']}.{current_version['minor']}.{current_version['patch']} -> {major}.{minor}.{patch} (Build {new_build_number})")
     
     # 5. Update files
     update_pubspec(new_version_str)
     update_dart_constant({
-        'major': current_version['major'],
-        'minor': current_version['minor'],
-        'patch': new_patch_number,
+        'major': major,
+        'minor': minor,
+        'patch': patch,
         'build': new_build_number
     })
 

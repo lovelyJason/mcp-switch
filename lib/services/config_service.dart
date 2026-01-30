@@ -245,6 +245,8 @@ class ConfigService extends ChangeNotifier {
                   if (projectConfig is Map<String, dynamic> &&
                       projectConfig.containsKey('mcpServers')) {
                     final mcpServers = projectConfig['mcpServers'];
+                    // 读取 disabledMcpServers（项目级禁用继承的全局 MCP）
+                    final disabledMcpServers = projectConfig['disabledMcpServers'];
 
                     if (existingMap.containsKey(projectPath)) {
                       final existing = existingMap[projectPath]!;
@@ -253,7 +255,10 @@ class ConfigService extends ChangeNotifier {
                           id: existing.id,
                           name: projectPath,
                           description: existing.description,
-                          content: {'mcpServers': mcpServers},
+                          content: {
+                            'mcpServers': mcpServers,
+                            if (disabledMcpServers is List) 'disabledMcpServers': disabledMcpServers,
+                          },
                         ),
                       );
                     } else {
@@ -262,7 +267,10 @@ class ConfigService extends ChangeNotifier {
                           id: const Uuid().v4(),
                           name: projectPath, // Project Path is the Name
                           description: 'Project Config',
-                          content: {'mcpServers': mcpServers},
+                          content: {
+                            'mcpServers': mcpServers,
+                            if (disabledMcpServers is List) 'disabledMcpServers': disabledMcpServers,
+                          },
                         ),
                       );
                     }
@@ -428,6 +436,15 @@ class ConfigService extends ChangeNotifier {
         }
         projects[projectPath]['mcpServers'] =
             profile.content['mcpServers'] ?? {};
+
+        // 保存 disabledMcpServers（项目级禁用继承的全局 MCP）
+        final disabledMcpServers = profile.content['disabledMcpServers'];
+        if (disabledMcpServers is List && disabledMcpServers.isNotEmpty) {
+          projects[projectPath]['disabledMcpServers'] = disabledMcpServers;
+        } else {
+          // 清理空的 disabledMcpServers
+          projects[projectPath].remove('disabledMcpServers');
+        }
       }
 
       // 3. Remove mcpServers from projects that are NO LONGER in profiles

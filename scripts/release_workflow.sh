@@ -23,9 +23,22 @@ else
   echo "Draft found. Proceeding."
 fi
 
+# Select release type
+echo "Select release type:"
+echo "1) patch (default)"
+echo "2) minor"
+echo "3) major"
+read -p "Enter choice (1-3): " choice
+
+case $choice in
+    2) type="minor" ;;
+    3) type="major" ;;
+    *) type="patch" ;;
+esac
+
 # bump_version logic
-echo "Bumping version..."
-python3 scripts/bump_version.py
+echo "Bumping version ($type)..."
+python3 scripts/bump_version.py --type $type
 
 # Extract new version
 version=$(grep 'version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1)
@@ -53,7 +66,9 @@ if [ -f "RELEASE_DRAFT.md" ]; then
   git reset HEAD RELEASE_DRAFT.md
 fi
 git commit -m "chore: release v$version"
+git tag -a "v$version" -m "Release v$version"
 git push
+git push --tags
 
 # Build
 echo "Building macOS app..."

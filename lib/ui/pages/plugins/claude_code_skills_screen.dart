@@ -18,6 +18,7 @@ import '../../../models/skills/preset_marketplace.dart';
 import '../../../models/skills/installed_plugin.dart';
 import '../../../models/skills/installed_marketplace.dart';
 import '../../../models/skills/community_skill.dart';
+import '../../../models/skills/slash_command.dart';
 import '../../components/custom_toast.dart';
 import '../../components/custom_dialog.dart';
 import '../../components/skills_editor_switcher.dart';
@@ -34,6 +35,7 @@ part 'claude_code_skills/dialogs/marketplace_detail_dialog.dart';
 part 'claude_code_skills/dialogs/skill_content_dialog.dart';
 part 'claude_code_skills/dialogs/community_skill_detail_dialog.dart';
 part 'claude_code_skills/dialogs/custom_skill_install_dialog.dart';
+part 'claude_code_skills/dialogs/slash_command_search_dialog.dart';
 
 /// Skills 管理页面
 class SkillsScreen extends StatefulWidget {
@@ -45,6 +47,8 @@ class SkillsScreen extends StatefulWidget {
 
 class _SkillsScreenState extends State<SkillsScreen> {
   final _skillsService = SkillsService();
+  final _scrollController = ScrollController();
+  final _marketplaceSectionKey = GlobalKey();
 
   List<InstalledPlugin> _plugins = [];
   List<InstalledMarketplace> _marketplaces = [];
@@ -52,6 +56,9 @@ class _SkillsScreenState extends State<SkillsScreen> {
   bool _loading = true;
   bool _wasTerminalOpen = false;
   TerminalService? _terminalService;
+
+  // 高亮的 marketplace 名称
+  String? _highlightedMarketplace;
 
   @override
   void initState() {
@@ -63,6 +70,7 @@ class _SkillsScreenState extends State<SkillsScreen> {
   @override
   void dispose() {
     _terminalService?.removeListener(_onTerminalStateChanged);
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -131,10 +139,52 @@ class _SkillsScreenState extends State<SkillsScreen> {
   }
 
   Future<void> _showPluginDetailDialog(InstalledPlugin plugin) async {
-    await showDialog<void>(
+    final result = await showDialog<Map<String, dynamic>?>(
       context: context,
       builder: (context) => _PluginDetailDialog(plugin: plugin),
     );
+
+    // 处理市场安装结果
+    if (result != null && result['action'] == 'marketplace_installed' && mounted) {
+      final repo = result['repo'] as String?;
+      if (repo != null) {
+        // 显示提示
+        Toast.show(
+          context,
+          message: S.get('marketplace_install_started'),
+          type: ToastType.success,
+          duration: const Duration(seconds: 4),
+        );
+
+        // 从 repo 提取 marketplace 名称（最后一个路径段）
+        final marketplaceName = repo.split('/').last;
+        setState(() => _highlightedMarketplace = marketplaceName);
+
+        // 滚动到市场区域
+        _scrollToMarketplaceSection();
+
+        // 3 秒后取消高亮
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() => _highlightedMarketplace = null);
+          }
+        });
+      }
+    }
+  }
+
+  /// 滚动到已添加市场区域
+  void _scrollToMarketplaceSection() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final keyContext = _marketplaceSectionKey.currentContext;
+      if (keyContext != null) {
+        Scrollable.ensureVisible(
+          keyContext,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
   }
 
   Future<void> _showMarketplaceDetailDialog(InstalledMarketplace marketplace) async {
@@ -145,6 +195,17 @@ class _SkillsScreenState extends State<SkillsScreen> {
         installedPlugins: _plugins,
         onInstalled: _loadData,
       ),
+    );
+  }
+
+  Future<void> _showSlashCommandSearchDialog() async {
+    // 扫描所有斜线指令
+    final commands = await _skillsService.scanSlashCommands(_plugins);
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => _SlashCommandSearchDialog(commands: commands),
     );
   }
 
@@ -272,6 +333,12 @@ class _SkillsScreenState extends State<SkillsScreen> {
             onSwitch: _switchToEditor,
           ),
           const Spacer(),
+          // 搜索斜线指令按钮
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: _showSlashCommandSearchDialog,
+            tooltip: S.get('search_slash_commands'),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
@@ -318,6 +385,7 @@ class _SkillsScreenState extends State<SkillsScreen> {
     final pluginName = parts[0];
     final marketplace = parts.length > 1 ? parts[1] : '';
     final isEnabled = plugin.isEnabled;
+    final isDeprecated = plugin.isDeprecated;
 
     return SizedBox(
       width: cardWidth,
@@ -329,10 +397,12 @@ class _SkillsScreenState extends State<SkillsScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
             side: BorderSide(
-              color: isEnabled
-                  ? Colors.grey.withValues(alpha: 0.2)
-                  : Colors.grey.withValues(alpha: 0.3),
-              width: 1,
+              color: isDeprecated
+                  ? Colors.red.withValues(alpha: 0.5)
+                  : isEnabled
+                      ? Colors.grey.withValues(alpha: 0.2)
+                      : Colors.grey.withValues(alpha: 0.3),
+              width: isDeprecated ? 1.5 : 1,
             ),
           ),
           child: InkWell(
@@ -349,16 +419,51 @@ class _SkillsScreenState extends State<SkillsScreen> {
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: Colors.blue.withValues(alpha: 0.1),
+                          color: isDeprecated
+                              ? Colors.red.withValues(alpha: 0.1)
+                              : Colors.blue.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Icon(Icons.extension, size: 16, color: Colors.blue),
+                        child: Icon(
+                          Icons.extension,
+                          size: 16,
+                          color: isDeprecated ? Colors.red : Colors.blue,
+                        ),
                       ),
+                      // 废弃警告图标
+                      if (isDeprecated) ...[
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: S.get('plugin_deprecated_tip'),
+                          preferBelow: false,
+                          verticalOffset: 14,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade700,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          textStyle: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            height: 1.4,
+                          ),
+                          child: Icon(
+                            Icons.warning_amber_rounded,
+                            size: 16,
+                            color: Colors.red.shade600,
+                          ),
+                        ),
+                      ],
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           pluginName,
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: isDeprecated ? Colors.red.shade700 : null,
+                            decoration: isDeprecated ? TextDecoration.lineThrough : null,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -429,6 +534,21 @@ class _SkillsScreenState extends State<SkillsScreen> {
                         ),
                       ),
                       const SizedBox(width: 4),
+                      // 更新按钮（废弃插件不显示）
+                      if (!isDeprecated)
+                        InkWell(
+                          onTap: () => _updatePlugin(plugin),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.sync,
+                              size: 16,
+                              color: Colors.blue.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ),
+                      if (!isDeprecated) const SizedBox(width: 4),
                       // 删除按钮
                       InkWell(
                         onTap: () => _confirmUninstallPlugin(plugin),
@@ -453,6 +573,15 @@ class _SkillsScreenState extends State<SkillsScreen> {
     );
   }
 
+  /// 更新插件
+  Future<void> _updatePlugin(InstalledPlugin plugin) async {
+    final terminalService = context.read<TerminalService>();
+    terminalService.setFloatingTerminal(true);
+    terminalService.openTerminalPanel();
+    await Future.delayed(const Duration(milliseconds: 500));
+    terminalService.sendCommand('claude plugin update ${plugin.name}');
+  }
+
   /// 切换插件启用状态
   Future<void> _togglePluginEnabled(InstalledPlugin plugin) async {
     final terminalService = context.read<TerminalService>();
@@ -471,6 +600,12 @@ class _SkillsScreenState extends State<SkillsScreen> {
     final parts = plugin.name.split('@');
     final pluginName = parts[0];
 
+    // 废弃插件使用特殊弹窗
+    if (plugin.isDeprecated) {
+      await _confirmForceDeleteDeprecatedPlugin(plugin, pluginName);
+      return;
+    }
+
     final confirmed = await CustomConfirmDialog.show(
       context,
       title: S.get('confirm_uninstall_title'),
@@ -486,6 +621,46 @@ class _SkillsScreenState extends State<SkillsScreen> {
       terminalService.openTerminalPanel();
       await Future.delayed(const Duration(milliseconds: 500));
       terminalService.sendCommand('claude plugin uninstall ${plugin.name}');
+    }
+  }
+
+  /// 废弃插件强力删除确认弹窗
+  Future<void> _confirmForceDeleteDeprecatedPlugin(InstalledPlugin plugin, String pluginName) async {
+    final confirmed = await CustomConfirmDialog.show(
+      context,
+      title: S.get('deprecated_plugin_title'),
+      content: S.get('deprecated_plugin_content').replaceAll('{name}', pluginName),
+      confirmText: S.get('force_delete'),
+      cancelText: S.get('cancel'),
+      confirmColor: Colors.red,
+    );
+
+    if (confirmed == true && mounted) {
+      final (success, errorCode) = await _skillsService.forceDeleteDeprecatedPlugin(plugin);
+      if (mounted) {
+        if (success) {
+          Toast.show(
+            context,
+            message: S.get('plugin_force_deleted'),
+            type: ToastType.success,
+          );
+          _loadData();
+        } else if (errorCode == 'claude_cli_conflict') {
+          // Claude CLI 正在运行，会重写 JSON 文件
+          Toast.show(
+            context,
+            message: S.get('plugin_delete_cli_conflict'),
+            type: ToastType.warning,
+            duration: const Duration(seconds: 5),
+          );
+        } else {
+          Toast.show(
+            context,
+            message: S.get('plugin_force_delete_failed'),
+            type: ToastType.error,
+          );
+        }
+      }
     }
   }
 
@@ -645,7 +820,7 @@ class _SkillsScreenState extends State<SkillsScreen> {
 
   /// 复制社区 Skill 命令
   void _copyCommunitySkillCommand(String skillName) {
-    final command = '/skill $skillName';
+    final command = '/$skillName';
     Clipboard.setData(ClipboardData(text: command));
     Toast.show(
       context,
@@ -686,6 +861,7 @@ class _SkillsScreenState extends State<SkillsScreen> {
   // ============ 市场区域 ============
   Widget _buildMarketplacesSection(bool isDark) {
     return Column(
+      key: _marketplaceSectionKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionTitleWithAction(
@@ -726,18 +902,37 @@ class _SkillsScreenState extends State<SkillsScreen> {
     final isOfficial = marketplace.isOfficial;
     final tagColor = isOfficial ? Colors.blue : Colors.purple;
     final hint = _getMarketplaceHint(marketplace.name);
+    final isHighlighted = _highlightedMarketplace != null &&
+        marketplace.name.toLowerCase().contains(_highlightedMarketplace!.toLowerCase());
 
     return SizedBox(
       width: cardWidth,
-      child: InkWell(
-        onTap: () => _showMarketplaceDetailDialog(marketplace),
-        borderRadius: BorderRadius.circular(10),
-        child: Card(
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: BorderSide(color: Colors.grey.withValues(alpha: 0.2), width: 1),
-          ),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        decoration: isHighlighted
+            ? BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.deepPurple.withValues(alpha: 0.4),
+                    blurRadius: 12,
+                    spreadRadius: 2,
+                  ),
+                ],
+              )
+            : null,
+        child: InkWell(
+          onTap: () => _showMarketplaceDetailDialog(marketplace),
+          borderRadius: BorderRadius.circular(10),
+          child: Card(
+            margin: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(
+                color: isHighlighted ? Colors.deepPurple : Colors.grey.withValues(alpha: 0.2),
+                width: isHighlighted ? 2 : 1,
+              ),
+            ),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
@@ -875,6 +1070,7 @@ class _SkillsScreenState extends State<SkillsScreen> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );

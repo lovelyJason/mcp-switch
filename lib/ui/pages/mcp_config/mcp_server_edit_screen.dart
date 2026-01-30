@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import '../../../config/mcp_presets_config.dart';
 import '../../../models/editor_type.dart';
@@ -56,19 +58,80 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
   // 当前选择的编辑器类型（支持切换）
   late EditorType _currentEditorType;
 
+  // 草稿缓存 key
+  static const _draftNameKey = 'mcp_edit_draft_name';
+  static const _draftConnectionTypeKey = 'mcp_edit_draft_connection_type';
+  static const _draftJsonKey = 'mcp_edit_draft_json';
+
+  // FocusNode 用于监听失焦保存草稿
+  final _jsonFocusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
     _currentEditorType = widget.editorType;
     _initializePresets();
 
+    // 监听 JSON 输入框失焦事件，自动保存草稿
+    _jsonFocusNode.addListener(_onJsonFocusChanged);
+
     if (widget.initialData != null) {
       _initFromData(widget.initialData!);
     } else if (widget.profile != null) {
       _initFromProfile();
     } else {
+      // 新建模式：尝试加载草稿
+      _loadDraft();
+    }
+  }
+
+  void _onJsonFocusChanged() {
+    // 失焦时保存草稿（仅新建模式）
+    if (!_jsonFocusNode.hasFocus && widget.profile == null && widget.initialData == null) {
+      _saveDraft();
+    }
+  }
+
+  /// 加载草稿缓存
+  Future<void> _loadDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    final draftName = prefs.getString(_draftNameKey);
+    final draftConnectionType = prefs.getString(_draftConnectionTypeKey);
+    final draftJson = prefs.getString(_draftJsonKey);
+
+    if (draftName != null || draftJson != null) {
+      setState(() {
+        if (draftName != null && draftName.isNotEmpty) {
+          _nameController.text = draftName;
+        }
+        if (draftConnectionType != null) {
+          _selectedConnectionType = draftConnectionType;
+        }
+        if (draftJson != null && draftJson.isNotEmpty) {
+          _jsonController.text = draftJson;
+        } else {
+          _updateJsonFromForm();
+        }
+      });
+    } else {
       _updateJsonFromForm();
     }
+  }
+
+  /// 保存草稿到缓存
+  Future<void> _saveDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_draftNameKey, _nameController.text);
+    await prefs.setString(_draftConnectionTypeKey, _selectedConnectionType);
+    await prefs.setString(_draftJsonKey, _jsonController.text);
+  }
+
+  /// 清除草稿缓存
+  Future<void> _clearDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_draftNameKey);
+    await prefs.remove(_draftConnectionTypeKey);
+    await prefs.remove(_draftJsonKey);
   }
 
   /// 切换编辑器类型
@@ -159,6 +222,8 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
 
   @override
   void dispose() {
+    _jsonFocusNode.removeListener(_onJsonFocusChanged);
+    _jsonFocusNode.dispose();
     _nameController.dispose();
     _commandController.dispose();
     _argsController.dispose();
@@ -650,11 +715,43 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
 
   Widget _buildPresetsSection() {
     final presets = McpPresetsConfig.presets;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionTitle(S.get('preset_mcp')),
+        Row(
+          children: [
+            SectionTitle(S.get('preset_mcp')),
+            const Spacer(),
+            // Smithery 按钮
+            TextButton.icon(
+              onPressed: () async {
+                final uri = Uri.parse('https://smithery.ai/');
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri);
+                }
+              },
+              icon: Icon(
+                Icons.rocket_launch_outlined,
+                size: 14,
+                color: isDark ? Colors.deepPurple.shade300 : Colors.deepPurple,
+              ),
+              label: Text(
+                'Smithery',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.deepPurple.shade300 : Colors.deepPurple,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 12),
         Wrap(
           spacing: 0,
@@ -790,11 +887,12 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
         Map<String, dynamic> config;
         if (_currentEditorType == EditorType.windsurf ||
             _currentEditorType == EditorType.antigravity) {
-          config = {'serverUrl': ''};
+          config = {'type': type, 'serverUrl': ''};
         } else if (_currentEditorType == EditorType.gemini) {
-          config = {'httpUrl': ''};
+          config = {'type': type, 'httpUrl': ''};
         } else {
-          config = {'url': ''};
+          // Claude Code 需要 type 字段
+          config = {'type': type, 'url': ''};
         }
         _jsonController.text = const JsonEncoder.withIndent('  ').convert(config);
       }
@@ -941,6 +1039,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
           ),
           child: TextFormField(
             controller: _jsonController,
+            focusNode: _jsonFocusNode,
             maxLines: 12,
             minLines: 6,
             style: const TextStyle(
@@ -1023,6 +1122,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
 
       if (widget.onSave != null) {
         widget.onSave!(name, serverConfig);
+        _clearDraft(); // 保存成功，清除草稿
         Navigator.of(context).pop();
         return;
       }
@@ -1041,6 +1141,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
             );
             return;
           }
+          _clearDraft(); // 通过 CLI 添加，清除草稿
           _saveViaCli(name, serverConfig);
           return;
         }
@@ -1099,6 +1200,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
         configService.saveProfile(_currentEditorType, newProfile);
       }
 
+      _clearDraft(); // 保存成功，清除草稿
       Navigator.of(context).pop();
     } catch (e) {
       Toast.show(context, message: 'Error saving: $e', type: ToastType.error);
@@ -1136,19 +1238,31 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
 
     // 如果没有配置模板，使用默认生成逻辑
     if (cliCommand == null || cliCommand.isEmpty) {
-      final command = serverConfig['command'] ?? '';
-      final args = serverConfig['args'] as List? ?? [];
+      final configType = serverConfig['type']?.toString() ?? '';
+      final url = serverConfig['url']?.toString() ?? '';
 
-      // --scope user 必须放在 -- 之前，否则会被当成子命令参数
-      final buffer = StringBuffer('claude mcp add --scope user "$name"');
-      if (command.toString().isNotEmpty) {
-        buffer.write(' -- "$command"');
-        for (final arg in args) {
-          final escapedArg = arg.toString().replaceAll('"', '\\"');
-          buffer.write(' "$escapedArg"');
+      if (configType == 'http' && url.isNotEmpty) {
+        // HTTP 远程类型: claude mcp add --transport http --scope user "name" url
+        cliCommand = 'claude mcp add --transport http --scope user "$name" "$url"';
+      } else if (configType == 'sse' && url.isNotEmpty) {
+        // SSE 远程类型: claude mcp add --transport sse --scope user "name" url
+        cliCommand = 'claude mcp add --transport sse --scope user "$name" "$url"';
+      } else {
+        // stdio 本地类型: claude mcp add --scope user "name" -- command args...
+        final command = serverConfig['command'] ?? '';
+        final args = serverConfig['args'] as List? ?? [];
+
+        // --scope user 必须放在 -- 之前，否则会被当成子命令参数
+        final buffer = StringBuffer('claude mcp add --scope user "$name"');
+        if (command.toString().isNotEmpty) {
+          buffer.write(' -- "$command"');
+          for (final arg in args) {
+            final escapedArg = arg.toString().replaceAll('"', '\\"');
+            buffer.write(' "$escapedArg"');
+          }
         }
+        cliCommand = buffer.toString();
       }
-      cliCommand = buffer.toString();
     }
 
     terminalService.setFloatingTerminal(true);

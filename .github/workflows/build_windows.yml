@@ -76,12 +76,41 @@ jobs:
       - name: Upload Installer
         uses: actions/upload-artifact@v4
         with:
-          name: mcp-switch-installer-v${{ steps.version.outputs.VERSION }}
+          name: MCP_Switch_windows_setup_v${{ steps.version.outputs.VERSION }}
           path: build/installer/*.exe
 
       # 9. Upload Raw Build (with version, for debugging)
       - name: Upload Raw Build
         uses: actions/upload-artifact@v4
         with:
-          name: mcp-switch-windows-raw-v${{ steps.version.outputs.VERSION }}
+          name: MCP_Switch_windows_raw_v${{ steps.version.outputs.VERSION }}
           path: build/windows/x64/runner/Release/
+
+      # 10. Zip Artifacts for Release
+      - name: Zip Artifacts
+        run: |
+          $version = "${{ steps.version.outputs.VERSION }}"
+          
+          # Zip Installer
+          $exePath = "build/installer/*.exe"
+          $setupZip = "MCP_Switch_windows_setup_v$version.zip"
+          Compress-Archive -Path $exePath -DestinationPath "build/installer/$setupZip"
+          
+          # Zip Raw Build
+          $rawPath = "build/windows/x64/runner/Release/*"
+          $rawZip = "MCP_Switch_windows_raw_v$version.zip"
+          Compress-Archive -Path $rawPath -DestinationPath "build/windows/$rawZip"
+          
+          echo "SETUP_ZIP=build/installer/$setupZip" >> $env:GITHUB_OUTPUT
+          echo "RAW_ZIP=build/windows/$rawZip" >> $env:GITHUB_OUTPUT
+        id: zip_artifacts
+        shell: pwsh
+
+      # 11. Upload to Release
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            ${{ steps.zip_artifacts.outputs.SETUP_ZIP }}
+            ${{ steps.zip_artifacts.outputs.RAW_ZIP }}

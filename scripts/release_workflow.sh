@@ -24,17 +24,30 @@ else
 fi
 
 # Select release type
-echo "Select release type:"
-echo "1) patch (default)"
-echo "2) minor"
-echo "3) major"
-read -p "Enter choice (1-3): " choice
+if [ -n "$1" ]; then
+  case $1 in
+    major|minor|patch)
+      type=$1
+      echo "Release type set to '$type' via argument."
+      ;;
+    *)
+      echo "Error: Invalid argument '$1'. Usage: ./release_workflow.sh [major|minor|patch]"
+      exit 1
+      ;;
+  esac
+else
+  echo "Select release type:"
+  echo "1) patch (default)"
+  echo "2) minor"
+  echo "3) major"
+  read -p "Enter choice (1-3): " choice
 
-case $choice in
-    2) type="minor" ;;
-    3) type="major" ;;
-    *) type="patch" ;;
-esac
+  case $choice in
+      2) type="minor" ;;
+      3) type="major" ;;
+      *) type="patch" ;;
+  esac
+fi
 
 # bump_version logic
 echo "Bumping version ($type)..."

@@ -900,7 +900,23 @@ class _SkillsScreenState extends State<SkillsScreen> {
 
   Widget _buildMarketplaceCard(InstalledMarketplace marketplace, bool isDark, double cardWidth) {
     final isOfficial = marketplace.isOfficial;
-    final tagColor = isOfficial ? Colors.blue : Colors.purple;
+    final isAuthor = presetMarketplaces.any((p) => p.name == marketplace.name && p.isAuthor);
+    final Color tagColor;
+    final IconData tagIcon;
+    final String tagText;
+    if (isOfficial) {
+      tagColor = Colors.blue;
+      tagIcon = Icons.verified;
+      tagText = S.get('official');
+    } else if (isAuthor) {
+      tagColor = Colors.deepOrange;
+      tagIcon = Icons.favorite;
+      tagText = S.get('author_tag');
+    } else {
+      tagColor = Colors.purple;
+      tagIcon = Icons.groups;
+      tagText = S.get('community');
+    }
     final hint = _getMarketplaceHint(marketplace.name);
     final isHighlighted = _highlightedMarketplace != null &&
         marketplace.name.toLowerCase().contains(_highlightedMarketplace!.toLowerCase());
@@ -947,11 +963,7 @@ class _SkillsScreenState extends State<SkillsScreen> {
                         color: tagColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Icon(
-                        isOfficial ? Icons.verified : Icons.groups,
-                        size: 16,
-                        color: tagColor,
-                      ),
+                      child: Icon(tagIcon, size: 16, color: tagColor),
                     ),
                     // 有提示信息时显示问号
                     if (hint != null) HoverPopover(message: hint, isDark: isDark),
@@ -971,7 +983,7 @@ class _SkillsScreenState extends State<SkillsScreen> {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        isOfficial ? S.get('official') : S.get('community'),
+                        tagText,
                         style: TextStyle(
                           fontSize: 9,
                           color: tagColor,

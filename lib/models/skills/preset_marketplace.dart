@@ -4,6 +4,7 @@ class PresetMarketplace {
   final String repo; // GitHub owner/repo 格式
   final String description;
   final bool isOfficial;
+  final bool isAuthor; // 是否为本软件作者的市场
   final String? hintKey; // 国际化 hint key
   final String? githubUrl; // GitHub 仓库完整 URL
   final int? fallbackStars; // 备用 star 数（API 失败时显示）
@@ -13,6 +14,7 @@ class PresetMarketplace {
     required this.repo,
     required this.description,
     required this.isOfficial,
+    this.isAuthor = false,
     this.hintKey,
     this.githubUrl,
     this.fallbackStars,
@@ -85,5 +87,14 @@ const List<PresetMarketplace> presetMarketplaces = [
     isOfficial: false,
     hintKey: 'marketplace_hint_madappgang',
     fallbackStars: 200,
+  ),
+  PresetMarketplace(
+    name: 'yukon-claude-marketplace',
+    repo: 'lovelyJason/yukon-claude-marketplace',
+    description: 'MCP Switch author\'s plugin collection',
+    isOfficial: false,
+    isAuthor: true,
+    hintKey: 'marketplace_hint_yukon',
+    fallbackStars: 0,
   ),
 ];

@@ -1,3 +1,17 @@
+## v1.0.6
+
+### ✨ 新增特性
+- **Plugins**: 新增 Claude Code Skills 预设市场列表，支持快速添加官方及社区精选插件库 (e.g., Official, Superpowers, mcp-switch author's collection)。
+
+### 🚀 优化改进
+- **Workflow**: 发布脚本优化
+- **CI/CD**: 优化 Windows 构建流程，自动生成并上传安装包 
+- **i18n**: 更新部分界面文案 (Based on staged locale files)。
+
+### 🐛 问题修复
+- 无
+
+
 ## v1.0.5
 
 ### ✨ 新增特性

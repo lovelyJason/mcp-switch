@@ -238,19 +238,28 @@ class _AddMarketplaceDialogState extends State<_AddMarketplaceDialog> {
                 // 图标和标签
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: (marketplace.isOfficial ? Colors.blue : Colors.purple)
-                            .withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        marketplace.isOfficial ? Icons.verified : Icons.groups,
-                        size: 18,
-                        color: marketplace.isOfficial ? Colors.blue : Colors.purple,
-                      ),
-                    ),
+                    Builder(builder: (_) {
+                      final Color iconColor;
+                      final IconData iconData;
+                      if (marketplace.isOfficial) {
+                        iconColor = Colors.blue;
+                        iconData = Icons.verified;
+                      } else if (marketplace.isAuthor) {
+                        iconColor = Colors.deepOrange;
+                        iconData = Icons.favorite;
+                      } else {
+                        iconColor = Colors.purple;
+                        iconData = Icons.groups;
+                      }
+                      return Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: iconColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(iconData, size: 18, color: iconColor),
+                      );
+                    }),
                     // 问号提示
                     if (_getMarketplaceHint(marketplace) != null)
                       HoverPopover(
@@ -286,22 +295,35 @@ class _AddMarketplaceDialogState extends State<_AddMarketplaceDialog> {
                         ),
                       );
                     }),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: (marketplace.isOfficial ? Colors.blue : Colors.purple)
-                            .withValues(alpha: isDark ? 0.2 : 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        marketplace.isOfficial ? S.get('official') : S.get('community'),
-                        style: TextStyle(
-                          fontSize: 9,
-                          color: marketplace.isOfficial ? Colors.blue : Colors.purple,
-                          fontWeight: FontWeight.w500,
+                    Builder(builder: (_) {
+                      final Color tagColor;
+                      final String tagText;
+                      if (marketplace.isOfficial) {
+                        tagColor = Colors.blue;
+                        tagText = S.get('official');
+                      } else if (marketplace.isAuthor) {
+                        tagColor = Colors.deepOrange;
+                        tagText = S.get('author_tag');
+                      } else {
+                        tagColor = Colors.purple;
+                        tagText = S.get('community');
+                      }
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: tagColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                          borderRadius: BorderRadius.circular(4),
                         ),
-                      ),
-                    ),
+                        child: Text(
+                          tagText,
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: tagColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      );
+                    }),
                   ],
                 ),
                 const SizedBox(height: 12),

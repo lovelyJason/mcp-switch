@@ -7,6 +7,9 @@ on:
       - 'v*'  # 匹配 v1.0.0, v1.0.3 等格式的标签
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest

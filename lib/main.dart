@@ -7,6 +7,7 @@ import 'services/config_service.dart';
 import 'services/prompt_service.dart';
 import 'services/terminal_service.dart';
 import 'services/ai_chat_service.dart';
+import 'services/mcp_health_check_service.dart';
 import 'ui/main_window.dart';
 import 'ui/components/floating_terminal_icon.dart';
 import 'ui/components/global_terminal_panel.dart';
@@ -92,6 +93,13 @@ void main() async {
     model: configService.claudeModel,
   );
 
+  // Initialize MCP Health Check Service
+  final mcpHealthCheckService = McpHealthCheckService();
+  // 延迟 2 秒后执行首次检测（避免启动卡顿）
+  Future.delayed(const Duration(seconds: 2), () {
+    mcpHealthCheckService.checkAllServers();
+  });
+
   runApp(
     MultiProvider(
       providers: [
@@ -99,6 +107,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => PromptService()..init()),
         ChangeNotifierProvider.value(value: terminalService),
         ChangeNotifierProvider.value(value: aiChatService),
+        ChangeNotifierProvider.value(value: mcpHealthCheckService),
       ],
       child: const McpSwitchApp(),
     ),

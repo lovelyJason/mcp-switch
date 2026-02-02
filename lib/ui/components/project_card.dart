@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/mcp_profile.dart';
+import '../../models/mcp_server_health.dart';
 import '../../models/editor_type.dart';
 import '../../services/config_service.dart';
+import '../../services/mcp_health_check_service.dart';
 import '../pages/mcp_config/mcp_server_edit_screen.dart';
 import 'custom_dialog.dart';
 import '../../l10n/s.dart';
@@ -260,7 +262,7 @@ class _ProjectCardState extends State<ProjectCard> {
                 return _buildServerItem(name, config);
               }),
 
-              // Add Button
+              // Add Button + Test Connection Button
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
@@ -273,13 +275,49 @@ class _ProjectCardState extends State<ProjectCard> {
                     ),
                   ),
                 ),
-                child: TextButton.icon(
-                  onPressed: _addServer,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add MCP Server'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.blue,
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton.icon(
+                      onPressed: _addServer,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Add MCP Server'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    // 测试连接按钮（仅全局配置显示）
+                    if (_isGlobalProfile)
+                      Consumer<McpHealthCheckService>(
+                        builder: (context, healthService, _) {
+                          return TextButton.icon(
+                            onPressed: healthService.isChecking
+                                ? null
+                                : () => healthService.checkAllServers(force: true),
+                            icon: healthService.isChecking
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.deepPurple,
+                                    ),
+                                  )
+                                : const Icon(Icons.network_check, size: 14),
+                            label: Text(
+                              healthService.isChecking
+                                  ? S.get('checking_connection')
+                                  : S.get('test_connection'),
+                            ),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.deepPurple,
+                              textStyle: const TextStyle(fontSize: 12),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
                 ),
               ),
             ],
@@ -292,7 +330,9 @@ class _ProjectCardState extends State<ProjectCard> {
   Widget _buildServerItem(String name, dynamic config) {
     final cmd = config is Map ? config['command'] ?? '' : '';
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+    final healthService = Provider.of<McpHealthCheckService>(context);
+    final health = healthService.getServerHealth(name);
+
     bool isEnabled = true;
     if (config is Map) {
       if (config.containsKey('disabled')) {
@@ -315,24 +355,39 @@ class _ProjectCardState extends State<ProjectCard> {
       child: ListTile(
         contentPadding: const EdgeInsets.only(left: 36, right: 24),
         dense: true,
-        leading: Container(
+        leading: SizedBox(
           width: 36,
           height: 36,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isDark ? Colors.white.withOpacity(0.1) : Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isDark ? Colors.transparent : Colors.grey.shade300,
-            ),
-          ),
-          child: Text(
-            name.isNotEmpty ? name[0].toUpperCase() : '',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white70 : Colors.grey.shade700,
-            ),
+          child: Stack(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withOpacity(0.1) : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isDark ? Colors.transparent : Colors.grey.shade300,
+                  ),
+                ),
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : '',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white70 : Colors.grey.shade700,
+                  ),
+                ),
+              ),
+              // 健康状态指示器（右下角）- 仅启用状态的服务器显示
+              if (health != null && isEnabled)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: _buildHealthIndicator(health),
+                ),
+            ],
           ),
         ),
         title: Row(
@@ -536,6 +591,45 @@ class _ProjectCardState extends State<ProjectCard> {
           ),
         ),
       ),
+    );
+  }
+
+  /// 构建健康状态指示器
+  Widget _buildHealthIndicator(McpServerHealth health) {
+    return GestureDetector(
+      onTap: !health.isHealthy ? () => _showHealthErrorDialog(health) : null,
+      child: Container(
+        width: 14,
+        height: 14,
+        decoration: BoxDecoration(
+          color: health.isHealthy ? Colors.green : Colors.red,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: (health.isHealthy ? Colors.green : Colors.red).withOpacity(0.3),
+              blurRadius: 4,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Icon(
+          health.isHealthy ? Icons.check : Icons.close,
+          size: 8,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  /// 显示健康检查错误详情弹窗
+  void _showHealthErrorDialog(McpServerHealth health) {
+    CustomConfirmDialog.show(
+      context,
+      title: S.get('connection_error'),
+      content: '${health.serverName}\n\n${health.errorMessage ?? S.get('unknown_error')}',
+      confirmText: S.get('ok'),
+      cancelText: '',
     );
   }
 

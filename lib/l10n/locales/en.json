@@ -215,6 +215,12 @@
   "plugin_force_deleted": "Plugin force deleted",
   "plugin_force_delete_failed": "Force delete failed, please clean up manually",
   "plugin_delete_cli_conflict": "Delete failed: Claude Code is running. Please close Claude Code in VS Code and try again",
+  "click_to_convert_user": "Click to convert to global scope",
+  "convert_to_user_scope_title": "Convert Scope",
+  "convert_to_user_scope_content": "Convert plugin \"{name}\" from project scope to global scope?\n\nAfter conversion, this plugin will be available in all projects.",
+  "convert": "Convert",
+  "convert_to_user_scope_success": "Converted to global scope",
+  "convert_to_user_scope_failed": "Conversion failed, please check config file",
   "plugin_remote_source_warning": "⚠️ This plugin is sourced from a remote repository. The slash commands below may not work directly. Please check the README for proper installation instructions.",
   "try_install_marketplace": "Try Install Marketplace",
   "marketplace_install_started": "Marketplace install command executed. Check \"Added Marketplaces\" below.",
@@ -401,5 +407,9 @@
   "search_slash_commands": "Search Slash Commands",
   "search_hint": "Type command name or description...",
   "found_commands": "Found {count} commands",
-  "no_matching_commands": "No matching commands"
+  "no_matching_commands": "No matching commands",
+  "skill_usage_title": "Skill Usage",
+  "skill_usage_count": "Used {count} times",
+  "skill_usage_last_used": "Last used",
+  "no_skill_usage": "No usage records"
 }

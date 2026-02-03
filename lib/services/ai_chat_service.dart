@@ -780,11 +780,15 @@ class AiChatService extends ChangeNotifier {
     if (plugin == null) {
       return '未找到名为 "$name" 的插件。';
     }
+    // 从 plugin.name 中提取 marketplace 名称
+    final nameParts = plugin.name.split('@');
+    final marketplace = nameParts.length > 1 ? nameParts[1] : 'unknown';
     return '''
 插件详情：
 - 名称: ${plugin.name}
 - 版本: ${plugin.version}
-- 来源: ${plugin.scope}
+- 来源: $marketplace
+- 作用域: ${plugin.scope}
 - 安装路径: ${plugin.installPath}
 - 安装时间: ${_skillsService.formatDate(plugin.installedAt)}
 - 最后更新: ${_skillsService.formatDate(plugin.lastUpdated)}

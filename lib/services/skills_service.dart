@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../models/skills/installed_plugin.dart';
 import '../models/skills/installed_marketplace.dart';
 import '../models/skills/community_skill.dart';
+import '../models/skills/skill_usage_item.dart';
 import '../models/skills/slash_command.dart';
 import '../utils/platform_utils.dart';
 
@@ -54,11 +55,15 @@ class SkillsService {
         }
 
         if (item != null) {
-          // 解析 scope：从 key 中提取（如 feature-dev@claude-plugins-official）
+          // 解析 key：从 key 中提取（如 feature-dev@claude-plugins-official）
           final parts = key.split('@');
           final pluginName = parts[0];
-          final marketplace =
-              parts.length > 1 ? parts[1] : (item['scope'] ?? 'unknown');
+          final marketplace = parts.length > 1 ? parts[1] : 'unknown';
+
+          // 读取真正的 scope（user, project, local, managed）
+          final scope = item['scope'] as String? ?? 'user';
+          // 读取 projectPath（仅 project scope 时有值）
+          final projectPath = item['projectPath'] as String?;
 
           // 获取启用状态，默认为 true
           final isEnabled = enabledPlugins[key] ?? true;
@@ -68,7 +73,7 @@ class SkillsService {
 
           plugins.add(InstalledPlugin(
             name: key,
-            scope: marketplace,
+            scope: scope,
             version: item['version'] ?? 'unknown',
             installPath: item['installPath'] ?? '',
             installedAt:
@@ -77,6 +82,7 @@ class SkillsService {
                 DateTime.tryParse(item['lastUpdated'] ?? '') ?? DateTime.now(),
             isEnabled: isEnabled,
             isDeprecated: isDeprecated,
+            projectPath: projectPath,
           ));
         }
       }
@@ -204,6 +210,48 @@ class SkillsService {
       return (true, null);
     } catch (e) {
       return (false, e.toString());
+    }
+  }
+
+  /// 将插件从 project scope 转换为 user scope
+  /// 修改 installed_plugins.json 中的 scope 字段，并删除 projectPath
+  Future<bool> convertPluginToUserScope(InstalledPlugin plugin) async {
+    try {
+      final pluginsFilePath = PlatformUtils.joinPath(_home, '.claude', 'plugins', 'installed_plugins.json');
+      final pluginsFile = File(pluginsFilePath);
+
+      if (!await pluginsFile.exists()) return false;
+
+      final content = await pluginsFile.readAsString();
+      final json = jsonDecode(content) as Map<String, dynamic>;
+      final pluginsMap = json['plugins'] as Map<String, dynamic>? ?? {};
+
+      if (!pluginsMap.containsKey(plugin.name)) return false;
+
+      final pluginData = pluginsMap[plugin.name];
+      Map<String, dynamic>? item;
+
+      // 支持数组格式和对象格式
+      if (pluginData is List && pluginData.isNotEmpty) {
+        item = pluginData[0] as Map<String, dynamic>;
+      } else if (pluginData is Map<String, dynamic>) {
+        item = pluginData;
+      }
+
+      if (item == null) return false;
+
+      // 修改 scope 为 user，删除 projectPath
+      item['scope'] = 'user';
+      item.remove('projectPath');
+
+      // 写回文件
+      await pluginsFile.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(json),
+      );
+
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 
@@ -336,6 +384,29 @@ class SkillsService {
       }
     }
     return null;
+  }
+
+  /// 加载 Skill 调用记录（从 ~/.claude.json 的 skillUsage 字段）
+  Future<List<SkillUsageItem>> loadSkillUsage() async {
+    final file = File(PlatformUtils.joinPath(_home, '.claude.json'));
+    if (!await file.exists()) return [];
+
+    try {
+      final content = await file.readAsString();
+      final json = jsonDecode(content) as Map<String, dynamic>;
+      final skillUsage = json['skillUsage'] as Map<String, dynamic>?;
+      if (skillUsage == null || skillUsage.isEmpty) return [];
+
+      final items = skillUsage.entries.map((e) {
+        return SkillUsageItem.fromJson(e.key, e.value as Map<String, dynamic>);
+      }).toList();
+
+      // 按最后使用时间降序排列
+      items.sort((a, b) => b.lastUsedAt.compareTo(a.lastUsedAt));
+      return items;
+    } catch (e) {
+      return [];
+    }
   }
 
   /// 格式化日期

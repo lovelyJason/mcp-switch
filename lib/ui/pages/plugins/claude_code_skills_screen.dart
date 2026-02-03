@@ -16,6 +16,7 @@ import '../../../services/config_service.dart';
 import '../../../utils/platform_utils.dart';
 import '../../../models/skills/preset_marketplace.dart';
 import '../../../models/skills/installed_plugin.dart';
+import '../../../models/skills/skill_usage_item.dart';
 import '../../../models/skills/installed_marketplace.dart';
 import '../../../models/skills/community_skill.dart';
 import '../../../models/skills/slash_command.dart';
@@ -37,6 +38,8 @@ part 'claude_code_skills/dialogs/community_skill_detail_dialog.dart';
 part 'claude_code_skills/dialogs/custom_skill_install_dialog.dart';
 part 'claude_code_skills/dialogs/slash_command_search_dialog.dart';
 
+part 'claude_code_skills/dialogs/skill_usage_dialog.dart';
+
 /// Skills 管理页面
 class SkillsScreen extends StatefulWidget {
   const SkillsScreen({super.key});
@@ -53,6 +56,7 @@ class _SkillsScreenState extends State<SkillsScreen> {
   List<InstalledPlugin> _plugins = [];
   List<InstalledMarketplace> _marketplaces = [];
   List<CommunitySkill> _communitySkills = [];
+  List<SkillUsageItem> _skillUsageItems = [];
   bool _loading = true;
   bool _wasTerminalOpen = false;
   TerminalService? _terminalService;
@@ -98,14 +102,18 @@ class _SkillsScreenState extends State<SkillsScreen> {
     setState(() => _loading = true);
 
     try {
-      final plugins = await _skillsService.loadPlugins();
-      final marketplaces = await _skillsService.loadMarketplaces();
-      final communitySkills = await _skillsService.loadCommunitySkills();
+      final results = await Future.wait([
+        _skillsService.loadPlugins(),
+        _skillsService.loadMarketplaces(),
+        _skillsService.loadCommunitySkills(),
+        _skillsService.loadSkillUsage(),
+      ]);
 
       setState(() {
-        _plugins = plugins;
-        _marketplaces = marketplaces;
-        _communitySkills = communitySkills;
+        _plugins = results[0] as List<InstalledPlugin>;
+        _marketplaces = results[1] as List<InstalledMarketplace>;
+        _communitySkills = results[2] as List<CommunitySkill>;
+        _skillUsageItems = results[3] as List<SkillUsageItem>;
         _loading = false;
       });
     } catch (e) {
@@ -113,6 +121,7 @@ class _SkillsScreenState extends State<SkillsScreen> {
         _plugins = [];
         _marketplaces = [];
         _communitySkills = [];
+        _skillUsageItems = [];
         _loading = false;
       });
     }
@@ -195,6 +204,13 @@ class _SkillsScreenState extends State<SkillsScreen> {
         installedPlugins: _plugins,
         onInstalled: _loadData,
       ),
+    );
+  }
+
+  Future<void> _showSkillUsageDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => _SkillUsageDialog(items: _skillUsageItems),
     );
   }
 
@@ -333,6 +349,13 @@ class _SkillsScreenState extends State<SkillsScreen> {
             onSwitch: _switchToEditor,
           ),
           const Spacer(),
+          // Skill 调用记录按钮
+          if (_skillUsageItems.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.bar_chart_rounded, color: Color(0xFFD97757)),
+              onPressed: _showSkillUsageDialog,
+              tooltip: S.get('skill_usage_title'),
+            ),
           // 搜索斜线指令按钮
           IconButton(
             icon: const Icon(Icons.search),
@@ -486,7 +509,7 @@ class _SkillsScreenState extends State<SkillsScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // 版本和日期
+                  // 版本、scope 和日期
                   Row(
                     children: [
                       Icon(Icons.tag, size: 11, color: Colors.grey.withValues(alpha: 0.7)),
@@ -501,7 +524,35 @@ class _SkillsScreenState extends State<SkillsScreen> {
                           fontFamily: 'monospace',
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      // Scope 标识（仅 project 显示，悬浮显示 projectPath，点击可转 user）
+                      if (plugin.scope == 'project') ...[
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message: '${plugin.projectPath ?? 'Unknown'}\n${S.get('click_to_convert_user')}',
+                          preferBelow: false,
+                          verticalOffset: 14,
+                          child: InkWell(
+                            onTap: () => _convertToUserScope(plugin),
+                            borderRadius: BorderRadius.circular(3),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withValues(alpha: isDark ? 0.2 : 0.1),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: const Text(
+                                'project',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 6),
                       Icon(Icons.calendar_today, size: 11, color: Colors.grey.withValues(alpha: 0.7)),
                       const SizedBox(width: 3),
                       Text(
@@ -579,7 +630,9 @@ class _SkillsScreenState extends State<SkillsScreen> {
     terminalService.setFloatingTerminal(true);
     terminalService.openTerminalPanel();
     await Future.delayed(const Duration(milliseconds: 500));
-    terminalService.sendCommand('claude plugin update ${plugin.name}');
+    // 需要根据插件的 scope 来指定更新范围
+    final scopeArg = plugin.scope.isNotEmpty ? '--scope ${plugin.scope}' : '';
+    terminalService.sendCommand('claude plugin update ${plugin.name} $scopeArg'.trim());
   }
 
   /// 切换插件启用状态
@@ -657,6 +710,38 @@ class _SkillsScreenState extends State<SkillsScreen> {
           Toast.show(
             context,
             message: S.get('plugin_force_delete_failed'),
+            type: ToastType.error,
+          );
+        }
+      }
+    }
+  }
+
+  /// 将插件从 project scope 转换为 user scope
+  Future<void> _convertToUserScope(InstalledPlugin plugin) async {
+    final confirmed = await CustomConfirmDialog.show(
+      context,
+      title: S.get('convert_to_user_scope_title'),
+      content: S.get('convert_to_user_scope_content').replaceAll('{name}', plugin.name.split('@').first),
+      confirmText: S.get('convert'),
+      cancelText: S.get('cancel'),
+      confirmColor: Colors.deepPurple,
+    );
+
+    if (confirmed == true && mounted) {
+      final success = await _skillsService.convertPluginToUserScope(plugin);
+      if (mounted) {
+        if (success) {
+          Toast.show(
+            context,
+            message: S.get('convert_to_user_scope_success'),
+            type: ToastType.success,
+          );
+          _loadData();
+        } else {
+          Toast.show(
+            context,
+            message: S.get('convert_to_user_scope_failed'),
             type: ToastType.error,
           );
         }

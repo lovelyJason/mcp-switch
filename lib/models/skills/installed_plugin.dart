@@ -9,6 +9,8 @@ class InstalledPlugin {
   final bool isEnabled;
   /// 是否已被官方废弃（源目录不存在）
   final bool isDeprecated;
+  /// 项目路径（仅 scope 为 project 时有值）
+  final String? projectPath;
 
   InstalledPlugin({
     required this.name,
@@ -19,5 +21,6 @@ class InstalledPlugin {
     required this.lastUpdated,
     this.isEnabled = true,
     this.isDeprecated = false,
+    this.projectPath,
   });
 }

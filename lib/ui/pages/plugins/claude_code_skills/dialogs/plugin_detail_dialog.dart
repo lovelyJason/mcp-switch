@@ -87,19 +87,20 @@ class _PluginDetailDialogState extends State<_PluginDetailDialog> {
         final plugins = json['plugins'] as List<dynamic>?;
 
         if (plugins != null && plugins.isNotEmpty) {
-          // 取第一个插件的 source
+          // 取第一个插件的 source（可能是 String 路径或 Map 对象）
           final firstPlugin = plugins[0] as Map<String, dynamic>;
-          final source = firstPlugin['source'] as Map<String, dynamic>?;
+          final sourceRaw = firstPlugin['source'];
 
-          if (source != null) {
-            final sourceType = source['source'] as String?;
+          if (sourceRaw is Map<String, dynamic>) {
+            final sourceType = sourceRaw['source'] as String?;
             if (sourceType == 'github') {
-              final repo = source['repo'] as String?;
+              final repo = sourceRaw['repo'] as String?;
               if (repo != null && repo.isNotEmpty) {
                 setState(() => _remoteMarketplaceRepo = repo);
               }
             }
           }
+          // source 为 String 时（如 "./"）表示本地路径，跳过
         }
       }
     } catch (e) {
@@ -143,10 +144,11 @@ class _PluginDetailDialogState extends State<_PluginDetailDialog> {
         final content = await knownMarketplacesFile.readAsString();
         final json = jsonDecode(content) as Map<String, dynamic>;
 
-        // scope 就是 marketplace 的名称
-        final scope = widget.plugin.scope;
-        if (json.containsKey(scope)) {
-          final marketplaceInfo = json[scope] as Map<String, dynamic>;
+        // 从 plugin.name 中提取 marketplace 名称（格式：pluginName@marketplace）
+        final nameParts = widget.plugin.name.split('@');
+        final marketplace = nameParts.length > 1 ? nameParts[1] : '';
+        if (json.containsKey(marketplace)) {
+          final marketplaceInfo = json[marketplace] as Map<String, dynamic>;
           final marketplaceSource = marketplaceInfo['source'] as Map<String, dynamic>?;
           final installLocation = marketplaceInfo['installLocation'] as String?;
 
@@ -239,21 +241,72 @@ class _PluginDetailDialogState extends State<_PluginDetailDialog> {
     try {
       final skills = <Map<String, String>>[];
       final installPath = widget.plugin.installPath;
-      final pluginDir = Directory(installPath);
 
-      if (await pluginDir.exists()) {
-        // 遍历插件目录，查找所有 SKILL.md 文件
-        await for (final entity in pluginDir.list(recursive: true)) {
-          if (entity is File && entity.path.endsWith('SKILL.md')) {
-            final content = await entity.readAsString();
-            // 解析 SKILL.md 获取名称和描述
-            final name = _parseSkillName(content, entity.path);
+      // 从 .claude-plugin/marketplace.json 读取 skills 定义
+      final marketplaceJsonPath = '$installPath/.claude-plugin/marketplace.json';
+      final marketplaceJsonFile = File(marketplaceJsonPath);
+
+      List<String> definedSkills = [];
+
+      if (await marketplaceJsonFile.exists()) {
+        final content = await marketplaceJsonFile.readAsString();
+        final json = jsonDecode(content) as Map<String, dynamic>;
+        final plugins = json['plugins'] as List<dynamic>?;
+
+        // 从 marketplace.json 中查找当前插件的 skills
+        final pluginName = widget.plugin.name.split('@').first;
+        if (plugins != null) {
+          for (final plugin in plugins) {
+            if (plugin is Map<String, dynamic> && plugin['name'] == pluginName) {
+              final skillsList = plugin['skills'] as List<dynamic>?;
+              if (skillsList != null) {
+                definedSkills = skillsList.map((e) => e.toString()).toList();
+              }
+              break;
+            }
+          }
+        }
+      }
+
+      // 根据定义的 skills 路径加载 SKILL.md
+      if (definedSkills.isNotEmpty) {
+        for (final skillPath in definedSkills) {
+          // 处理相对路径（如 "./skills/weekly-report"）
+          final normalizedPath = skillPath.startsWith('./')
+              ? skillPath.substring(2)
+              : skillPath;
+          final skillMdPath = '$installPath/$normalizedPath/SKILL.md';
+          final skillMdFile = File(skillMdPath);
+
+          if (await skillMdFile.exists()) {
+            final content = await skillMdFile.readAsString();
+            final name = _parseSkillName(content, skillMdPath);
             final description = _skillsService.parseSkillDescription(content) ?? '';
             skills.add({
               'name': name,
               'description': description,
-              'path': entity.path,
+              'path': skillMdPath,
             });
+          }
+        }
+      } else {
+        // 兜底：如果 marketplace.json 没有定义 skills，则扫描 skills 目录
+        final skillsDir = Directory('$installPath/skills');
+        if (await skillsDir.exists()) {
+          await for (final entity in skillsDir.list()) {
+            if (entity is Directory) {
+              final skillMdFile = File('${entity.path}/SKILL.md');
+              if (await skillMdFile.exists()) {
+                final content = await skillMdFile.readAsString();
+                final name = _parseSkillName(content, skillMdFile.path);
+                final description = _skillsService.parseSkillDescription(content) ?? '';
+                skills.add({
+                  'name': name,
+                  'description': description,
+                  'path': skillMdFile.path,
+                });
+              }
+            }
           }
         }
       }

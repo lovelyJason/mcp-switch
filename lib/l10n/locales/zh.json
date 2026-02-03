@@ -228,6 +228,12 @@
   "plugin_force_deleted": "插件已强力删除",
   "plugin_force_delete_failed": "强力删除失败，请手动清理",
   "plugin_delete_cli_conflict": "删除失败：Claude Code 正在运行中，请关闭 VS Code 中的 Claude Code 后再试",
+  "click_to_convert_user": "点击转为全局作用域",
+  "convert_to_user_scope_title": "转换作用域",
+  "convert_to_user_scope_content": "确定要将插件「{name}」从项目作用域转为全局作用域吗？\n\n转换后该插件将在所有项目中生效。",
+  "convert": "转换",
+  "convert_to_user_scope_success": "已转为全局作用域",
+  "convert_to_user_scope_failed": "转换失败，请检查配置文件",
   "plugin_remote_source_warning": "⚠️ 此插件来源为远程仓库，下方的斜线命令可能无法直接使用。请查看 README 了解正确的安装方式。",
   "try_install_marketplace": "尝试安装市场",
   "marketplace_install_started": "市场安装命令已执行，请查看下方「已添加市场」",
@@ -414,5 +420,9 @@
   "search_slash_commands": "搜索斜线指令",
   "search_hint": "输入指令名称或描述...",
   "found_commands": "找到 {count} 个指令",
-  "no_matching_commands": "没有匹配的指令"
+  "no_matching_commands": "没有匹配的指令",
+  "skill_usage_title": "Skill 调用记录",
+  "skill_usage_count": "调用 {count} 次",
+  "skill_usage_last_used": "最近使用",
+  "no_skill_usage": "暂无调用记录"
 }

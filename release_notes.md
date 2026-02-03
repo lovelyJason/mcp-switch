@@ -1,3 +1,19 @@
+## v1.0.8
+
+### ✨ 新增特性
+- **Skill Usage**: 新增技能调用统计功能。
+    - 在插件页面新增 "Skill Usage" 入口，点击可查看技能/指令的调用记录。
+    - 展示每个 Skill 的累积调用次数 (Usage Count) 及最后使用时间 (Last Used)。
+    - 数据直接从 `~/.claude.json` 读取，与 Claude CLI 共享统计信息。
+
+### 🚀 优化改进
+- **UI**: 优化插件详情页 (`PluginDetailDialog`) 及插件列表页 (`ClaudeCodeSkillsScreen`) 的视觉体验。
+- **i18n**: 更新中英文翻译文案，支持新功能的国际化显示。
+
+### 🐛 问题修复
+- 无
+
+
 ## v1.0.7
 
 ### ✨ 新增特性

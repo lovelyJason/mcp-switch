@@ -434,7 +434,7 @@ class EditHeader extends StatelessWidget {
       case EditorType.claude:
         return 'assets/icons/claude.svg';
       case EditorType.codex:
-        return 'assets/icons/codex.svg';
+        return 'assets/icons/chatgpt.svg';
       case EditorType.antigravity:
         return 'assets/icons/antigravity.svg';
       case EditorType.gemini:
@@ -473,10 +473,11 @@ class EditHeader extends StatelessWidget {
               _getEditorIconPath(editorType)!,
               width: 24,
               height: 24,
-              colorFilter: (editorType == EditorType.claude ||
-                      editorType == EditorType.codex)
+              colorFilter: editorType == EditorType.claude
                   ? const ColorFilter.mode(Color(0xFFd97757), BlendMode.srcIn)
-                  : null,
+                  : editorType == EditorType.codex
+                      ? ColorFilter.mode(textColor, BlendMode.srcIn)
+                      : null,
             ),
             const SizedBox(width: 8),
           ],

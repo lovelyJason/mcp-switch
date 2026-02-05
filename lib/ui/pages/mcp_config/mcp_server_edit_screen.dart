@@ -666,7 +666,11 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
               onSaveModeChanged: (mode) => setState(() => _claudeSaveMode = mode),
               onImport: _importPresets,
               onExport: _exportPresets,
-              onBack: () => Navigator.of(context).pop(),
+              onBack: () {
+                // 返回前刷新数据，确保列表页显示最新状态
+                context.read<ConfigService>().reloadProfiles();
+                Navigator.of(context).pop();
+              },
               onEditorTypeChanged: _onEditorTypeChanged,
             ),
             Expanded(
@@ -704,7 +708,11 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
             ),
             EditBottomBar(
               isEditMode: isEditMode,
-              onCancel: () => Navigator.of(context).pop(),
+              onCancel: () {
+                // 返回前刷新数据，确保列表页显示最新状态
+                context.read<ConfigService>().reloadProfiles();
+                Navigator.of(context).pop();
+              },
               onSave: _save,
             ),
           ],
@@ -905,10 +913,15 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
       return const SizedBox.shrink();
     }
 
+    // 分离布尔字段和文本字段
+    final boolFields = preset.formFields.where((f) => f.isBoolean).toList();
+    final textFields = preset.formFields.where((f) => !f.isBoolean).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: preset.formFields.map((field) {
-        return Column(
+      children: [
+        // 文本字段
+        ...textFields.map((field) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 12),
@@ -928,8 +941,63 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
                   : null,
             ),
           ],
-        );
-      }).toList(),
+        )),
+        // 布尔字段（紧凑横向排列）
+        if (boolFields.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 16,
+            runSpacing: 8,
+            children: boolFields.map((field) => _buildBooleanChip(field, preset)).toList(),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// 构建布尔类型字段（紧凑 Checkbox 样式）
+  Widget _buildBooleanChip(McpFormField field, McpPreset preset) {
+    final controller = _getFieldController(field.id);
+    final isOn = controller.text.toLowerCase() == 'true';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          controller.text = isOn ? 'false' : 'true';
+          _onDynamicFieldChanged(preset, field);
+        });
+      },
+      borderRadius: BorderRadius.circular(4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: Checkbox(
+              value: isOn,
+              onChanged: (value) {
+                setState(() {
+                  controller.text = value == true ? 'true' : 'false';
+                  _onDynamicFieldChanged(preset, field);
+                });
+              },
+              activeColor: Colors.deepPurple,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            field.displayLabel,
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

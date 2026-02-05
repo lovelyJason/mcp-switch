@@ -110,6 +110,7 @@ class _EditorSelectorState extends State<EditorSelector> {
                 mainAxisSize: MainAxisSize.min,
                 children: EditorType.values.map((type) {
                   final isSelected = type == widget.selected;
+                  final isDark = Theme.of(context).brightness == Brightness.dark;
                   return GestureDetector(
                     onTap: widget.enabled ? () => widget.onChanged(type) : null,
                     child: Container(
@@ -118,12 +119,14 @@ class _EditorSelectorState extends State<EditorSelector> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: isSelected ? Colors.white : Colors.transparent,
+                      color: isSelected
+                          ? (isDark ? const Color(0xFF3A3A3C) : Colors.white)
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(6),
                       boxShadow: isSelected
                           ? [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
+                                color: Colors.black.withOpacity(isDark ? 0.3 : 0.1),
                                 blurRadius: 4,
                                 offset: const Offset(0, 1),
                               ),
@@ -144,11 +147,8 @@ class _EditorSelectorState extends State<EditorSelector> {
                                   ? FontWeight.w600
                                   : FontWeight.normal,
                               color: isSelected
-                                  ? Colors.black87
-                                  : (Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.white
-                                        : Colors.black87),
+                                  ? (isDark ? Colors.white : Colors.black87)
+                                  : (isDark ? Colors.white70 : Colors.black87),
                             ),
                           ),
                         ],

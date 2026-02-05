@@ -184,6 +184,80 @@ presets:
     form_fields: []
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # MySQL MCP (社区版 - benborla/mcp-server-mysql)
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: mysql
+    name: MySQL
+    default_cli_name: mysql
+    icon: assets/icons/mysql.svg
+    tips_key: mysql_tips
+
+    connection_types:
+      - type: local
+        recommended: true
+        config:
+          command: npx
+          args: ['-y', '@benborla29/mcp-server-mysql']
+        claude_cli: 'claude mcp add --scope user {{name}} -e MYSQL_HOST="{{mysql_host}}" -e MYSQL_PORT="{{mysql_port}}" -e MYSQL_USER="{{mysql_user}}" -e MYSQL_PASS="{{mysql_pass}}" -e MYSQL_DB="{{mysql_db}}" -e ALLOW_INSERT_OPERATION="{{allow_insert}}" -e ALLOW_UPDATE_OPERATION="{{allow_update}}" -e ALLOW_DELETE_OPERATION="{{allow_delete}}" -- npx -y @benborla29/mcp-server-mysql'
+
+    form_fields:
+      - id: mysql_host
+        label_key: mysql_host
+        placeholder: '127.0.0.1'
+        required: true
+        apply_mode: env
+        env_key: MYSQL_HOST
+
+      - id: mysql_port
+        label_key: mysql_port
+        placeholder: '3306'
+        required: false
+        apply_mode: env
+        env_key: MYSQL_PORT
+
+      - id: mysql_user
+        label_key: mysql_user
+        placeholder: 'root'
+        required: true
+        apply_mode: env
+        env_key: MYSQL_USER
+
+      - id: mysql_pass
+        label_key: mysql_pass
+        placeholder: ''
+        required: true
+        apply_mode: env
+        env_key: MYSQL_PASS
+
+      - id: mysql_db
+        label_key: mysql_db
+        placeholder: 'your_database'
+        required: true
+        apply_mode: env
+        env_key: MYSQL_DB
+
+      - id: allow_insert
+        label_key: mysql_allow_insert
+        field_type: boolean
+        required: false
+        apply_mode: env
+        env_key: ALLOW_INSERT_OPERATION
+
+      - id: allow_update
+        label_key: mysql_allow_update
+        field_type: boolean
+        required: false
+        apply_mode: env
+        env_key: ALLOW_UPDATE_OPERATION
+
+      - id: allow_delete
+        label_key: mysql_allow_delete
+        field_type: boolean
+        required: false
+        apply_mode: env
+        env_key: ALLOW_DELETE_OPERATION
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # 自定义配置（特殊预设）
   # ─────────────────────────────────────────────────────────────────────────────
   - id: custom

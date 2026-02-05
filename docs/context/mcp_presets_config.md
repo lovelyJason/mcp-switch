@@ -2,7 +2,7 @@
 
 ## 概述
 
-2025-01-19 实现了 MCP 预设配置化系统，将原本硬编码在 `mcp_server_edit_screen.dart` 中的预设抽离到 YAML 配置文件，支持用户自定义、导入/导出。
+MCP 预设配置化系统，将原本硬编码在 `mcp_server_edit_screen.dart` 中的预设抽离到 YAML 配置文件。
 
 ## 设计目标
 
@@ -10,34 +10,33 @@
 2. **连接类型选择** - 支持 local/http/sse 三种模式，带推荐徽章
 3. **动态表单字段** - 根据配置生成 API Key 等输入框
 4. **Claude CLI 命令模板** - 为每种连接类型配置对应的 CLI 命令
-5. **用户可编辑** - 配置复制到用户目录，可自行修改
-6. **导入/导出** - 支持分享配置给他人
-7. **错误容错** - YAML 解析失败不会崩溃
+5. **导入/导出** - 支持运行时导入外部配置
+6. **错误容错** - YAML 解析失败不会崩溃
 
 ## 文件结构
 
 ```
 assets/config/
-└── mcp_presets.yaml          # 出厂默认配置
+└── mcp_presets.yaml          # 出厂默认配置（打包在 app 内）
 
 lib/config/
 └── mcp_presets_config.dart   # 配置加载器 + 数据模型
-
-~/.mcp-switch/config/
-└── mcp_presets.yaml          # 用户配置（首次运行从 assets 复制）
 ```
 
-## 配置加载顺序
+## 配置加载策略（当前版本）
+
+**简化策略：直接从 assets 读取**
 
 ```
-1. 检查 ~/.mcp-switch/config/mcp_presets.yaml 是否存在
-   ├── 不存在 → 从 assets/config/mcp_presets.yaml 复制
-   └── 存在 → 直接读取
-
-2. 解析 YAML
+1. 从 assets/config/mcp_presets.yaml 读取（rootBundle.loadString）
    ├── 成功 → 使用解析结果
-   └── 失败 → Fallback 到 assets，再失败则用硬编码默认值
+   └── 失败 → Fallback 到硬编码默认配置（只有 custom 选项）
 ```
+
+**注意**：
+- 没有用户配置文件，预设配置跟随 app 打包
+- 用户想自定义预设需要修改项目源码中的 `assets/config/mcp_presets.yaml`，然后重新打包
+- 运行时可通过 `importFromString()` 临时加载外部配置（内存加载，不持久化）
 
 ## YAML 配置结构
 
@@ -265,11 +264,19 @@ void _onDynamicFieldChanged(McpPreset preset, McpFormField field) {
 
 1. **YAML 语法错误** - 捕获 `YamlException`，显示具体错误位置
 2. **字段缺失** - 使用默认值，不崩溃
-3. **文件不存在** - 从 assets 复制或使用硬编码默认值
+3. **assets 读取失败** - 使用硬编码默认值（只有 custom 选项）
 4. **导入验证** - 导入前验证 YAML 格式和必要字段
+
+## 如何新增预设
+
+由于当前策略是直接从 assets 读取，新增预设需要：
+
+1. 编辑 `assets/config/mcp_presets.yaml`
+2. 添加对应的 i18n 字符串到 `lib/l10n/locales/zh.json` 和 `en.json`
+3. 如需图标，添加 SVG 到 `assets/icons/`
+4. 重新打包 app
 
 ## 后续扩展
 
-1. **新增预设** - 直接编辑 `~/.mcp-switch/config/mcp_presets.yaml`
-2. **分享预设** - 导出 YAML 发给他人
-3. **在线预设库** - 未来可从 GitHub 等加载社区预设
+1. **在线预设库** - 未来可从 GitHub 等加载社区预设
+2. **用户自定义预设** - 如需支持用户持久化自定义预设，可改回两级配置策略

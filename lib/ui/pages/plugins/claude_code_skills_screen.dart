@@ -5,12 +5,14 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'dart:convert';
 import '../../../l10n/s.dart';
 import '../../../models/editor_type.dart';
 import '../../../services/terminal_service.dart';
 import '../../../services/skills_service.dart';
+import '../../../services/skills_archive_service.dart';
 import '../../../services/translation_service.dart';
 import '../../../services/config_service.dart';
 import '../../../utils/platform_utils.dart';
@@ -39,6 +41,8 @@ part 'claude_code_skills/dialogs/custom_skill_install_dialog.dart';
 part 'claude_code_skills/dialogs/slash_command_search_dialog.dart';
 
 part 'claude_code_skills/dialogs/skill_usage_dialog.dart';
+part 'claude_code_skills/dialogs/skills_export_dialog.dart';
+part 'claude_code_skills/dialogs/skills_import_dialog.dart';
 
 /// Skills 管理页面
 class SkillsScreen extends StatefulWidget {
@@ -754,13 +758,49 @@ class _SkillsScreenState extends State<SkillsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitleWithAction(
-          S.get('community_skills'),
-          Icons.folder_special,
-          Colors.teal,
-          actionIcon: Icons.add_circle_outline,
-          actionTooltip: S.get('custom_skill_install'),
-          onAction: _showCustomSkillInstallDialog,
+        // 标题行：带多个 action 按钮
+        Row(
+          children: [
+            const Icon(Icons.folder_special, size: 20, color: Colors.teal),
+            const SizedBox(width: 8),
+            Text(
+              S.get('community_skills'),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).textTheme.titleMedium?.color,
+              ),
+            ),
+            const Spacer(),
+            // 导入按钮
+            IconButton(
+              icon: const Icon(Icons.download_rounded, size: 20, color: Colors.teal),
+              onPressed: _importSkills,
+              tooltip: S.get('import_skills'),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+            // 导出按钮
+            IconButton(
+              icon: Icon(
+                Icons.upload_rounded,
+                size: 20,
+                color: _communitySkills.isEmpty ? Colors.grey : Colors.teal,
+              ),
+              onPressed: _communitySkills.isEmpty ? null : _showExportSkillsDialog,
+              tooltip: S.get('export_skills'),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+            // 添加按钮
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline, size: 20, color: Colors.teal),
+              onPressed: _showCustomSkillInstallDialog,
+              tooltip: S.get('custom_skill_install'),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ],
         ),
         const SizedBox(height: 4),
         Padding(
@@ -786,6 +826,47 @@ class _SkillsScreenState extends State<SkillsScreen> {
         onInstalled: _loadData,
       ),
     );
+  }
+
+  /// 导出 Skills
+  Future<void> _showExportSkillsDialog() async {
+    if (_communitySkills.isEmpty) {
+      Toast.show(context, message: S.get('no_skills_to_export'), type: ToastType.info);
+      return;
+    }
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => _SkillsExportDialog(skills: _communitySkills),
+    );
+
+    if (result == true) {
+      _loadData();
+    }
+  }
+
+  /// 导入 Skills
+  Future<void> _importSkills() async {
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: S.get('select_import_file'),
+      type: FileType.custom,
+      allowedExtensions: ['zip'],
+    );
+
+    if (result == null || result.files.isEmpty) return;
+    if (!mounted) return;
+
+    final filePath = result.files.first.path;
+    if (filePath == null) return;
+
+    final imported = await showDialog<bool>(
+      context: context,
+      builder: (context) => _SkillsImportDialog(zipPath: filePath),
+    );
+
+    if (imported == true && mounted) {
+      _loadData();
+    }
   }
 
   Widget _buildCommunitySkillCards(bool isDark) {

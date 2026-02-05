@@ -425,6 +425,7 @@ class McpFormField {
   final String? subLabelKey;
   final String? placeholder;
   final bool required;
+  final String fieldType; // text, boolean（默认 text）
   final String? applyMode; // env, arg, null表示使用extra_args模板
   final String? envKey; // 用于 env 模式
   final String? argKey; // 用于 arg 模式
@@ -436,11 +437,15 @@ class McpFormField {
     this.subLabelKey,
     this.placeholder,
     this.required = false,
+    this.fieldType = 'text', // 默认文本输入框
     this.applyMode, // 默认 null，由 extra_args 处理
     this.envKey,
     this.argKey,
     this.argFormat,
   });
+
+  /// 是否为布尔类型字段
+  bool get isBoolean => fieldType == 'boolean';
 
   /// 获取显示标签
   String get displayLabel {
@@ -467,6 +472,7 @@ class McpFormField {
       subLabelKey: map['sub_label_key']?.toString(),
       placeholder: map['placeholder']?.toString(),
       required: map['required'] == true,
+      fieldType: map['field_type']?.toString() ?? 'text',
       applyMode: map['apply_mode']?.toString(),
       envKey: map['env_key']?.toString(),
       argKey: map['arg_key']?.toString(),

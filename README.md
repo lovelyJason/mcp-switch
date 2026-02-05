@@ -54,6 +54,11 @@ MCP Switch 是一个跨平台（macOS / Windows）的 Flutter 应用，旨在帮
   - 支持 GitHub URL 安装自定义 Skill
 - **Antigravity**：Skills 管理 + 社区 Skills 一键安装
 
+### 🔐 MCP OAuth 授权引导
+- **半自动化授权**：添加需要 OAuth 的 MCP 后，自动进入 Claude REPL → 打开 `/mcp` 管理界面
+- **智能提示**：Toast 引导用户选择目标 MCP 完成浏览器授权
+- **支持场景**：Jira、Figma 等需要 OAuth 2.1 + PKCE 流程的 MCP 服务
+
 ### 🔧 其他优化
 - 🏪 **插件市场**：支持添加官方/第三方市场，一键安装插件，查看文档和源码
 - 🎯 **Skills 管理**：浏览已安装的社区技能，支持文档翻译
@@ -70,6 +75,12 @@ MCP Switch 是一个跨平台（macOS / Windows）的 Flutter 应用，旨在帮
 ![可视化安装插件](https://github.com/user-attachments/assets/10e9648e-e939-4a10-8ad2-fc97d838e571)
 
 > 点击浏览插件市场，选择心仪的插件一键安装，支持查看文档和源码。
+
+### MCP OAuth 授权
+
+![claude-mcp-auth](https://github.com/user-attachments/assets/32a71c47-9d74-42a8-b300-6733d39af386)
+
+> 添加需要 OAuth 授权的 MCP（如 Jira、Figma 等）时，自动进入 Claude REPL 并打开 /mcp 管理界面，引导完成浏览器授权。
 
 ### 通过 AI 助手安装插件
 
@@ -128,6 +139,15 @@ MCP Switch 是一个跨平台（macOS / Windows）的 Flutter 应用，旨在帮
 - **模型偏好保存**：自动记住上次选择的模型
 - **悬浮终端**：可设为悬浮窗口，随时唤起
 
+### 🔐 MCP OAuth 授权引导
+
+为需要 OAuth 授权的 MCP 服务（如 Jira、Figma 等）提供半自动化引导：
+
+- **自动化流程**：添加 MCP 后自动进入 Claude REPL，执行 `/mcp` 打开管理界面
+- **智能提示**：通过 Toast 提示引导用户手动选择目标 MCP 完成授权
+- **Trust 处理**：自动处理首次进入目录的 Trust 确认弹窗
+- **CLI 模式支持**：CLI 模式下智能等待命令执行完毕后启动授权流程
+
 内部集成了几个免费的翻译引擎，在预览plugin, skill的文档的同时支持对其进行翻译并缓存，这样更方便阅读
 
 <img width="900" height="600" alt="image" src="https://github.com/user-attachments/assets/32e5b5f7-206b-4a5f-80c1-48eb427d4f6d" />
@@ -157,6 +177,7 @@ MCP Switch 是一个跨平台（macOS / Windows）的 Flutter 应用，旨在帮
 - [x] **Gemini CLI Extensions**：支持 Extensions 安装与管理
 - [x] **内置终端 AI 集成**：Command+I 唤起 AI 输入框，支持多模型选择
 - [x] **Windows 平台支持**：新增 Windows 适配，支持 PowerShell/CMD
+- [x] **MCP OAuth 授权引导**：半自动化 OAuth 授权流程，引导完成浏览器授权
 
 ### Phase 2: 生态互联 (In Progress)
 - [ ] **多配置方案 (Profiles)**

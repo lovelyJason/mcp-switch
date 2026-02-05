@@ -456,5 +456,10 @@
   "mysql_db": "数据库名",
   "mysql_allow_insert": "允许插入",
   "mysql_allow_update": "允许更新",
-  "mysql_allow_delete": "允许删除"
+  "mysql_allow_delete": "允许删除",
+  "oauth_auth_title": "OAuth 授权",
+  "oauth_auth_content": "该 MCP 是否需要 OAuth 授权登录？\n\n如果你的 MCP（如 Figma、Jira 等）需要授权登录，且配置中没有 API Key / Token，说明走的是 OAuth 流程，需要通过浏览器完成授权。",
+  "oauth_auth_yes": "需要授权",
+  "oauth_auth_no": "不需要",
+  "oauth_manual_hint": "请在终端中用方向键选中 {name}，按回车进入详情页，再选择 Authenticate 完成授权"
 }

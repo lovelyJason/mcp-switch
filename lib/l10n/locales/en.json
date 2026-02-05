@@ -443,5 +443,10 @@
   "mysql_db": "Database",
   "mysql_allow_insert": "Allow Insert",
   "mysql_allow_update": "Allow Update",
-  "mysql_allow_delete": "Allow Delete"
+  "mysql_allow_delete": "Allow Delete",
+  "oauth_auth_title": "OAuth Authorization",
+  "oauth_auth_content": "Does this MCP require OAuth authorization?\n\nIf your MCP (e.g. Figma, Jira) requires login and no API Key / Token is configured, it uses OAuth flow and needs browser-based authorization.",
+  "oauth_auth_yes": "Authorize",
+  "oauth_auth_no": "Not needed",
+  "oauth_manual_hint": "Use arrow keys to select {name} in the terminal, press Enter to open details, then choose Authenticate"
 }

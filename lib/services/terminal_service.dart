@@ -9,6 +9,9 @@ import '../utils/platform_utils.dart';
 import '../ui/components/windows_shell_selector_dialog.dart' show WindowsShellType;
 import 'config_service.dart';
 
+/// PTY 输出回调
+typedef TerminalOutputCallback = void Function(String data);
+
 class TerminalService extends ChangeNotifier {
   ConfigService? _configService;
 
@@ -22,6 +25,19 @@ class TerminalService extends ChangeNotifier {
   bool _isInitialized = false;
   bool _floatingTerminalEnabled = false;
   bool _terminalPanelOpen = false;
+
+  /// PTY 输出监听器列表
+  final List<TerminalOutputCallback> _outputListeners = [];
+
+  /// 注册输出监听器
+  void addOutputListener(TerminalOutputCallback callback) {
+    _outputListeners.add(callback);
+  }
+
+  /// 移除输出监听器
+  void removeOutputListener(TerminalOutputCallback callback) {
+    _outputListeners.remove(callback);
+  }
 
   bool get isPtyActive => _pty != null;
   bool get floatingTerminalEnabled => _floatingTerminalEnabled;
@@ -188,6 +204,10 @@ class TerminalService extends ChangeNotifier {
 
     _pty!.output.cast<List<int>>().transform(Utf8Decoder()).listen((data) {
       terminal.write(data);
+      // 通知输出监听器
+      for (final listener in List.of(_outputListeners)) {
+        listener(data);
+      }
     });
 
     terminal.onOutput = (data) {
@@ -246,16 +266,24 @@ class TerminalService extends ChangeNotifier {
 
   void write(String input) {
     if (_pty != null) {
-      // Direct writing to terminal (local echo) happens via pty echo usually, 
+      // Direct writing to terminal (local echo) happens via pty echo usually,
       // but if we want to send command input we write to terminal input which pipes to pty
        terminal.textInput(input);
     }
   }
-  
+
   // Specific method to send commands gracefully (like exit)
   void sendCommand(String command) {
     if (_pty != null) {
       terminal.textInput('$command\r');
+    }
+  }
+
+  /// 直接写 raw bytes 到 PTY（绕过 terminal.textInput）
+  /// 用于 TUI 程序交互，避免 textInput 的逐字处理干扰
+  void writeToPty(String input) {
+    if (_pty != null) {
+      _pty!.write(const Utf8Encoder().convert(input));
     }
   }
 

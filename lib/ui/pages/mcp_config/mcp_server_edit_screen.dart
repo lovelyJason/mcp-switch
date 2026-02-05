@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,10 @@ import '../../../models/mcp_profile.dart';
 import '../../../services/config_service.dart';
 import '../../../services/terminal_service.dart';
 import '../../../l10n/s.dart';
+import '../../../services/mcp_oauth_automation_service.dart';
+import '../../../utils/ansi_parser.dart';
+import '../../../utils/global_keys.dart';
+import '../../components/custom_dialog.dart';
 import '../../components/custom_toast.dart';
 import 'edit/mcp_edit_widgets.dart';
 import 'edit/mcp_preset_utils.dart';
@@ -1166,7 +1171,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
   // 保存逻辑
   // ═══════════════════════════════════════════════════════════════════════════
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
     try {
@@ -1210,7 +1215,10 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
             return;
           }
           _clearDraft(); // 通过 CLI 添加，清除草稿
-          _saveViaCli(name, serverConfig);
+          // CLI 模式：先弹 OAuth 弹窗，再执行 CLI（避免终端面板遮挡弹窗）
+          if (mounted) {
+            await _showOAuthDialogForCli(name, serverConfig);
+          }
           return;
         }
 
@@ -1269,7 +1277,14 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
       }
 
       _clearDraft(); // 保存成功，清除草稿
-      Navigator.of(context).pop();
+      // Claude Code 新增模式下弹窗询问 OAuth 授权
+      if (_currentEditorType == EditorType.claude && widget.profile == null) {
+        if (mounted) {
+          _showOAuthDialogIfNeeded(name);
+        }
+      } else {
+        Navigator.of(context).pop();
+      }
     } catch (e) {
       Toast.show(context, message: 'Error saving: $e', type: ToastType.error);
     }
@@ -1280,62 +1295,153 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
     return RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(name);
   }
 
-  Future<void> _saveViaCli(
-      String name, Map<String, dynamic> serverConfig) async {
+  /// CLI 模式：先弹 OAuth 弹窗，再执行 CLI 命令（避免终端面板遮挡弹窗）
+  Future<void> _showOAuthDialogForCli(String name, Map<String, dynamic> serverConfig) async {
     final terminalService = context.read<TerminalService>();
+    final configService = context.read<ConfigService>();
+    final navigator = Navigator.of(context);
 
-    // 尝试从配置获取 CLI 命令模板
-    String? cliCommand;
+    final confirmed = await CustomConfirmDialog.show(
+      context,
+      title: S.get('oauth_auth_title'),
+      content: S.get('oauth_auth_content'),
+      confirmText: S.get('oauth_auth_yes'),
+      cancelText: S.get('oauth_auth_no'),
+      confirmColor: Colors.blue,
+    );
+
+    // 无论选什么，都先执行 CLI 命令并返回列表页
+    configService.reloadProfiles();
+    navigator.pop();
+    await _executeCli(name, serverConfig, terminalService);
+
+    if (confirmed == true) {
+      // 智能等待 CLI 命令完成（检测终端输出中的完成标志）
+      await _waitForCliComplete(terminalService);
+      _startOAuthFlow(name, terminalService);
+    }
+  }
+
+  /// 保存后弹窗询问是否需要 OAuth 授权（文件模式，仅 Claude Code 新增模式）
+  Future<void> _showOAuthDialogIfNeeded(String mcpName) async {
+    final terminalService = context.read<TerminalService>();
+    final configService = context.read<ConfigService>();
+    final navigator = Navigator.of(context);
+
+    final confirmed = await CustomConfirmDialog.show(
+      context,
+      title: S.get('oauth_auth_title'),
+      content: S.get('oauth_auth_content'),
+      confirmText: S.get('oauth_auth_yes'),
+      cancelText: S.get('oauth_auth_no'),
+      confirmColor: Colors.blue,
+    );
+
+    configService.reloadProfiles();
+    navigator.pop();
+
+    if (confirmed == true) {
+      _startOAuthFlow(mcpName, terminalService);
+    }
+  }
+
+  /// 智能等待 CLI 命令执行完成（监听终端输出）
+  Future<void> _waitForCliComplete(TerminalService terminalService) async {
+    final completer = Completer<void>();
+    final buffer = StringBuffer();
+
+    late TerminalOutputCallback listener;
+    listener = (data) {
+      buffer.write(data);
+      final text = AnsiParser.strip(buffer.toString());
+      // 检测 CLI 完成标志：输出包含 "File modified" 或 "Added" 且出现 shell prompt
+      if ((text.contains('File modified') || text.contains('Added')) &&
+          !completer.isCompleted) {
+        completer.complete();
+      }
+    };
+    terminalService.addOutputListener(listener);
+
+    // 超时保底 5 秒
+    final timeout = Timer(const Duration(seconds: 5), () {
+      if (!completer.isCompleted) completer.complete();
+    });
+
+    await completer.future;
+    timeout.cancel();
+    terminalService.removeOutputListener(listener);
+    // CLI 输出完成后再等一小段让 shell prompt 完全渲染
+    await Future.delayed(const Duration(milliseconds: 300));
+  }
+
+  /// 启动 OAuth 半自动化流程：自动进入 /mcp 列表后 Toast 提示用户手动操作
+  Future<void> _startOAuthFlow(
+    String mcpName,
+    TerminalService terminalService,
+  ) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final service = McpOAuthAutomationService(terminalService);
+    final success = await service.startOAuthFlow(mcpName);
+
+    // 用全局 context 显示 Toast（因为当前页面已经 pop 了）
+    final ctx = globalNavigatorKey.currentContext;
+    if (ctx != null && success) {
+      Toast.show(
+        ctx,
+        message: S.get('oauth_manual_hint').replaceAll('{name}', mcpName),
+        type: ToastType.info,
+        duration: const Duration(seconds: 6),
+      );
+    }
+  }
+
+  /// 生成 CLI 命令字符串
+  String _buildCliCommand(String name, Map<String, dynamic> serverConfig) {
     final preset = McpPresetsConfig.getPresetById(_selectedPresetId);
     if (preset != null && !preset.isCustom) {
-      // 找到当前连接类型的配置
       final connectionConfig = preset.connectionTypes.firstWhere(
         (c) => c.type == _selectedConnectionType,
         orElse: () => preset.connectionTypes.first,
       );
-
-      // 收集表单字段值
       final fieldValues = <String, String>{};
       for (final field in preset.formFields) {
         fieldValues[field.id] = _getFieldController(field.id).text.trim();
       }
-
-      // 使用配置模板生成命令
-      cliCommand = connectionConfig.generateClaudeCliCommand(name, fieldValues);
+      final cmd = connectionConfig.generateClaudeCliCommand(name, fieldValues);
+      if (cmd != null && cmd.isNotEmpty) return cmd;
     }
 
-    // 如果没有配置模板，使用默认生成逻辑
-    if (cliCommand == null || cliCommand.isEmpty) {
-      final configType = serverConfig['type']?.toString() ?? '';
-      final url = serverConfig['url']?.toString() ?? '';
+    final configType = serverConfig['type']?.toString() ?? '';
+    final url = serverConfig['url']?.toString() ?? '';
 
-      if (configType == 'http' && url.isNotEmpty) {
-        // HTTP 远程类型: claude mcp add --transport http --scope user "name" url
-        cliCommand = 'claude mcp add --transport http --scope user "$name" "$url"';
-      } else if (configType == 'sse' && url.isNotEmpty) {
-        // SSE 远程类型: claude mcp add --transport sse --scope user "name" url
-        cliCommand = 'claude mcp add --transport sse --scope user "$name" "$url"';
-      } else {
-        // stdio 本地类型: claude mcp add --scope user "name" -- command args...
-        final command = serverConfig['command'] ?? '';
-        final args = serverConfig['args'] as List? ?? [];
+    if (configType == 'http' && url.isNotEmpty) {
+      return 'claude mcp add --transport http --scope user "$name" "$url"';
+    } else if (configType == 'sse' && url.isNotEmpty) {
+      return 'claude mcp add --transport sse --scope user "$name" "$url"';
+    }
 
-        // --scope user 必须放在 -- 之前，否则会被当成子命令参数
-        final buffer = StringBuffer('claude mcp add --scope user "$name"');
-        if (command.toString().isNotEmpty) {
-          buffer.write(' -- "$command"');
-          for (final arg in args) {
-            final escapedArg = arg.toString().replaceAll('"', '\\"');
-            buffer.write(' "$escapedArg"');
-          }
-        }
-        cliCommand = buffer.toString();
+    final command = serverConfig['command'] ?? '';
+    final args = serverConfig['args'] as List? ?? [];
+    final buffer = StringBuffer('claude mcp add --scope user "$name"');
+    if (command.toString().isNotEmpty) {
+      buffer.write(' -- "$command"');
+      for (final arg in args) {
+        final escapedArg = arg.toString().replaceAll('"', '\\"');
+        buffer.write(' "$escapedArg"');
       }
     }
+    return buffer.toString();
+  }
 
+  /// 执行 CLI 命令（打开终端面板并发送命令）
+  Future<void> _executeCli(
+    String name,
+    Map<String, dynamic> serverConfig,
+    TerminalService terminalService,
+  ) async {
+    final cliCommand = _buildCliCommand(name, serverConfig);
     terminalService.setFloatingTerminal(true);
     terminalService.openTerminalPanel();
-
     await Future.delayed(const Duration(milliseconds: 500));
     terminalService.sendCommand(cliCommand);
   }

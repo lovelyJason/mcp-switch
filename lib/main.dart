@@ -8,6 +8,7 @@ import 'services/prompt_service.dart';
 import 'services/terminal_service.dart';
 import 'services/ai_chat_service.dart';
 import 'services/mcp_health_check_service.dart';
+import 'services/update_service.dart';
 import 'ui/main_window.dart';
 import 'ui/components/floating_terminal_icon.dart';
 import 'ui/components/global_terminal_panel.dart';
@@ -100,6 +101,10 @@ void main() async {
     mcpHealthCheckService.checkAllServers();
   });
 
+  // Initialize Update Service（自动检测更新）
+  final updateService = UpdateService();
+  updateService.init();
+
   runApp(
     MultiProvider(
       providers: [
@@ -108,6 +113,7 @@ void main() async {
         ChangeNotifierProvider.value(value: terminalService),
         ChangeNotifierProvider.value(value: aiChatService),
         ChangeNotifierProvider.value(value: mcpHealthCheckService),
+        ChangeNotifierProvider.value(value: updateService),
       ],
       child: const McpSwitchApp(),
     ),

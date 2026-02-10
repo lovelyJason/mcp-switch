@@ -311,19 +311,15 @@ class PromptService extends ChangeNotifier {
       if (await file.exists()) {
         final content = (await file.readAsString()).trim();
         if (content.isNotEmpty) {
-          // Check if this content is already in our list (Active or Inactive)
-          final existingIndex = _prompts.indexWhere(
+          // 1. 精确内容匹配：如果某条记录内容完全一样，直接激活它
+          final exactIndex = _prompts.indexWhere(
             (p) => p.content.trim() == content,
           );
 
-          if (existingIndex != -1) {
-            // It exists. If it's not active, should we activate it?
-            // Logic: If external file content matches an existing prompt, that prompt 'represents' the file.
-            // We ensure it is marked active to reflect reality.
-            if (!_prompts[existingIndex].isActive) {
-              // Deactivate others
-              _deactivateothers(_prompts[existingIndex].id);
-              _prompts[existingIndex] = _prompts[existingIndex].copyWith(
+          if (exactIndex != -1) {
+            if (!_prompts[exactIndex].isActive) {
+              _deactivateothers(_prompts[exactIndex].id);
+              _prompts[exactIndex] = _prompts[exactIndex].copyWith(
                 isActive: true,
               );
               await _savePrompts();
@@ -331,7 +327,24 @@ class PromptService extends ChangeNotifier {
             return;
           }
 
-          // Content is new (not in config). Import it.
+          // 2. 查找已有的 import 同步记录（id 以 import- 开头）
+          //    如果用户在外部编辑了 CLAUDE.md，应该更新已有记录而非创建新的
+          final importIndex = _prompts.indexWhere(
+            (p) => p.id.startsWith('import-'),
+          );
+
+          if (importIndex != -1) {
+            // 更新已有的 import 记录的内容，而非创建新记录
+            _deactivateothers(_prompts[importIndex].id);
+            _prompts[importIndex] = _prompts[importIndex].copyWith(
+              content: content,
+              isActive: true,
+            );
+            await _savePrompts();
+            return;
+          }
+
+          // 3. 没有任何 import 记录，首次导入
           final now = DateTime.now();
           final formattedDate = DateFormat('yyyy-MM-dd HH:mm').format(now);
           final timestamp = now.millisecondsSinceEpoch ~/ 1000;
@@ -344,10 +357,8 @@ class PromptService extends ChangeNotifier {
             isActive: true,
             updatedAt: now,
           );
-           
-          // Deactivate others since this is the "Live" one
+
           _deactivateothers(newPrompt.id);
-          
           _prompts.insert(0, newPrompt);
           await _savePrompts();
         }

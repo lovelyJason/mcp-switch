@@ -1,20 +1,18 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../constants/version.dart';
 import '../../../models/editor_type.dart';
 import '../../../services/config_service.dart';
 import '../../../services/ai_chat_service.dart';
+import '../../../services/update_service.dart';
 import '../../../utils/platform_utils.dart';
 import '../../../l10n/s.dart';
 import '../../components/styled_popup_menu.dart';
 import '../../components/styled_dropdown.dart';
 import '../../components/custom_toast.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:path_provider/path_provider.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -178,56 +176,20 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Future<void> _checkForUpdates() async {
+    final updateService = Provider.of<UpdateService>(context, listen: false);
+
     try {
-      final response = await http.get(
-        Uri.parse(
-          'https://api.github.com/repos/lovelyJason/mcp-switch/releases/latest',
-        ),
-      );
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final latestVersion = data['tag_name'] as String;
-        // GitHub release 'assets' array
-        final assets = data['assets'] as List;
-        // Find zip asset for macOS
-        String? downloadUrl;
-        for (var asset in assets) {
-          final name = asset['name'].toString().toLowerCase();
-          if (name.endsWith('.zip') && name.contains('macos')) {
-            downloadUrl = asset['browser_download_url'];
-            break;
-          }
-        }
+      final update = await updateService.checkForUpdates();
+      if (!mounted) return;
 
-        final releaseUrl = data['html_url'] as String;
-        final body = data['body'] as String;
-
-        final packageInfo = await PackageInfo.fromPlatform();
-        String normalize(String v) => v.replaceAll('v', '').split('+')[0];
-        final current = normalize(packageInfo.version);
-        final latest = normalize(latestVersion);
-
-        if (latest != current) {
-          if (mounted) {
-            // If we found a zip, we can offer auto-update
-            if (downloadUrl != null) {
-              _showUpdateDialog(latestVersion, body, downloadUrl, isAuto: true);
-            } else {
-              // Fallback to browser
-              _showUpdateDialog(latestVersion, body, releaseUrl, isAuto: false);
-            }
-          }
-        } else {
-          if (mounted) {
-            Toast.show(
-              context,
-              message: S.get('current_latest'),
-              type: ToastType.success,
-            );
-          }
-        }
+      if (update != null) {
+        _showUpdateDialog(update);
       } else {
-        throw Exception('Failed to fetch releases');
+        Toast.show(
+          context,
+          message: S.get('current_latest'),
+          type: ToastType.success,
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -236,26 +198,30 @@ class _SettingsScreenState extends State<SettingsScreen>
     }
   }
 
-  void _showUpdateDialog(
-    String version,
-    String notes,
-    String url, {
-    required bool isAuto,
-  }) {
+  void _showUpdateDialog(UpdateInfo update) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(
-          S.get('new_version_available').replaceAll('{version}', version),
+          S.get('new_version_available').replaceAll('{version}', update.version),
         ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [Text(notes, style: const TextStyle(fontSize: 12))],
+            children: [Text(update.notes, style: const TextStyle(fontSize: 12))],
           ),
         ),
         actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              // 跳过此版本
+              final updateService = Provider.of<UpdateService>(context, listen: false);
+              updateService.skipVersion(update.version);
+            },
+            child: Text(S.get('skip_version')),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: Text(S.get('later')),
@@ -263,13 +229,13 @@ class _SettingsScreenState extends State<SettingsScreen>
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
-              if (isAuto) {
-                _startAutoUpdate(url);
+              if (update.supportsAutoUpdate) {
+                _startAutoUpdate(update.downloadUrl!);
               } else {
-                launchUrl(Uri.parse(url));
+                launchUrl(Uri.parse(update.releaseUrl));
               }
             },
-            child: Text(isAuto ? S.get('install_restart') : 'Download'),
+            child: Text(update.supportsAutoUpdate ? S.get('install_restart') : 'Download'),
           ),
         ],
       ),
@@ -277,7 +243,6 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Future<void> _startAutoUpdate(String zipUrl) async {
-    // Show progress (simplified for now as indefinite)
     Toast.show(
       context,
       message: S.get('downloading_update'),
@@ -285,77 +250,8 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
 
     try {
-      // 1. Download
-      final response = await http.get(Uri.parse(zipUrl));
-      if (response.statusCode != 200) {
-        throw Exception('Download failed code ${response.statusCode}');
-      }
-
-      final tempDir = await getTemporaryDirectory();
-      final zipFile = File('${tempDir.path}/update.zip');
-      await zipFile.writeAsBytes(response.bodyBytes);
-
-      // 2. Unzip
-      final extractDir = Directory('${tempDir.path}/update_extract');
-      if (await extractDir.exists()) await extractDir.delete(recursive: true);
-      await extractDir.create();
-
-      final result = await Process.run('unzip', [
-        '-o',
-        zipFile.path,
-        '-d',
-        extractDir.path,
-      ]);
-      if (result.exitCode != 0) throw Exception('Unzip failed');
-
-      // 3. Find .app
-      final appName = 'MCP Switch.app';
-      final newAppPath = '${extractDir.path}/$appName';
-      if (!await Directory(newAppPath).exists()) {
-        throw Exception('App bundle not found in update');
-      }
-
-      // 4. Create Swap Script
-      // Get current executable path and deduce .app path
-      // Platform.resolvedExecutable -> .../MCP Switch.app/Contents/MacOS/MCP Switch
-      final currentExe = Platform.resolvedExecutable;
-      // We assume standard structure: Remove last 3 segments to get .app
-      // But safer to just find the .app extension
-      String currentAppPath = currentExe;
-      while (currentAppPath.isNotEmpty && !currentAppPath.endsWith('.app')) {
-        currentAppPath = Directory(currentAppPath).parent.path;
-      }
-
-      if (currentAppPath.isEmpty || !currentAppPath.endsWith('.app')) {
-        // Fallback if we can't determine current path (e.g. running from build)
-        throw Exception('Could not determine current app path');
-      }
-
-      final scriptFile = File('${tempDir.path}/update_script.sh');
-      // Script logic:
-      // 1. Wait a bit
-      // 2. Remove old app (rm -rf)
-      // 3. Move new app to old location (mv)
-      // 4. Open new app (open)
-      // Using 'nohup' or just simpler detached process usually works if app exits immediately.
-      await scriptFile.writeAsString('''
-#!/bin/bash
-sleep 2
-rm -rf "$currentAppPath"
-mv "$newAppPath" "$currentAppPath"
-open "$currentAppPath"
-''');
-
-      // 5. Run Script & Exit
-      await Process.run('chmod', ['+x', scriptFile.path]);
-
-      // We must launch detached so it survives our exit
-      await Process.start('sh', [
-        scriptFile.path,
-      ], mode: ProcessStartMode.detached);
-
-      // 6. Quit App
-      exit(0);
+      final updateService = Provider.of<UpdateService>(context, listen: false);
+      await updateService.performAutoUpdate(zipUrl);
     } catch (e) {
       if (mounted) {
         Toast.show(

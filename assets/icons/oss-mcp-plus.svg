@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Alibaba Cloud OSS colors: Orange #FF6A00, Dark #1A1A1A -->
+  <!-- Cloud + bucket icon representing OSS storage -->
+
+  <!-- Cloud shape -->
+  <path d="M6.5 13C4.01 13 2 11.21 2 9c0-2.04 1.72-3.72 3.93-3.96C7.08 3.21 9.27 2 12 2c3.31 0 6 2.24 6 5 2.21 0 4 1.57 4 3.5S20.21 14 18 14H6.5z" fill="#FF6A00" opacity="0.85"/>
+
+  <!-- Arrow up (upload) -->
+  <path d="M12 10V18M12 10l-2.5 2.5M12 10l2.5 2.5" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Bottom bar (storage) -->
+  <rect x="6" y="20" width="12" height="2" rx="1" fill="#FF6A00"/>
+</svg>

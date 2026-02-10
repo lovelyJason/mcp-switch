@@ -258,6 +258,30 @@ presets:
         env_key: ALLOW_DELETE_OPERATION
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # OSS MCP Plus (阿里云 OSS MCP 增强版)
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: oss-mcp-plus
+    name: OSS MCP Plus
+    default_cli_name: oss-mcp-plus
+    icon: assets/icons/oss-mcp-plus.svg
+    tips_key: oss_mcp_plus_tips
+
+    connection_types:
+      - type: local
+        recommended: true
+        config:
+          command: npx
+          args:
+            - 'oss-mcp-plus'
+            - '--oss-config=''{"default":{"region":"oss-cn-xxx","accessKeyId":"xxx","accessKeySecret":"xxx","bucket":"xxx","endpoint":"oss-cn-xxx.aliyuncs.com"}}'''
+            - '--stdio'
+          env:
+            ALLOW_DELETE_OPERATION: 'true'
+        claude_cli: 'claude mcp add --scope user {{name}} -e ALLOW_DELETE_OPERATION="true" -- npx oss-mcp-plus --oss-config=''{"default":{"region":"oss-cn-xxx","accessKeyId":"xxx","accessKeySecret":"xxx","bucket":"xxx","endpoint":"oss-cn-xxx.aliyuncs.com"}}'' --stdio'
+
+    form_fields: []
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # 自定义配置（特殊预设）
   # ─────────────────────────────────────────────────────────────────────────────
   - id: custom

@@ -26,8 +26,8 @@ class _ClaudeTerminalState extends State<ClaudeTerminal> {
       final promptService = context.read<PromptService>();
       final configService = context.read<ConfigService>();
 
-      // 设置 context 和 configService 以支持 Windows Shell 选择弹窗
-      terminalService.setContext(context, configService);
+      // 设置 configService 以支持 Windows Shell 选择
+      terminalService.setConfigService(configService);
 
       terminalService.init(
         () async {

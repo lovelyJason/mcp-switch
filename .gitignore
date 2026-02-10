@@ -70,3 +70,5 @@ scripts/ralph/tasks/running/*
 scripts/ralph/tasks/completed/*
 scripts/ralph/tasks/failed/*
 !scripts/ralph/tasks/*/.gitkeep
+
+.playwright-mcp

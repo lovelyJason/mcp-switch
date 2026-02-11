@@ -178,7 +178,7 @@ MCP Switch 是一个跨平台（macOS / Windows）的 Flutter 应用，旨在帮
 - 🏠 回家用官方直连 → 一键切回官方配置
 - 💰 不同供应商价格不同 → 预设芯片快速切换，无需记住 URL
 
-<img width="900" height="600" alt="Provider Switch" src="https://github.com/user-attachments/assets/ed6355d4-f586-47ac-b8eb-ba4c4e7dbe54" />
+<img width="600" height="600" alt="Provider Switch" src="https://github.com/user-attachments/assets/ed6355d4-f586-47ac-b8eb-ba4c4e7dbe54" />
 
 ### 🤖 AI 智能助手 (New!)
 

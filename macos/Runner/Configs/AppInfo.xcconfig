@@ -8,7 +8,7 @@
 PRODUCT_NAME = MCP Switch
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.mcpSwitch
+PRODUCT_BUNDLE_IDENTIFIER = com.jason.mcpSwitch
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2025 com.example. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2025 com.jason. All rights reserved.

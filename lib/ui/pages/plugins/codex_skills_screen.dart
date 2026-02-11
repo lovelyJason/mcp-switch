@@ -73,10 +73,12 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
     }
   }
 
-  Future<void> _loadCuratedSkills() async {
+  Future<void> _loadCuratedSkills({bool forceRefresh = false}) async {
     setState(() => _loadingCurated = true);
     try {
-      final skills = await _skillsService.loadCuratedSkills();
+      final skills = await _skillsService.loadCuratedSkills(
+        forceRefresh: forceRefresh,
+      );
       setState(() {
         _curatedSkills = skills;
         _loadingCurated = false;
@@ -86,6 +88,18 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
         _curatedSkills = [];
         _loadingCurated = false;
       });
+    }
+  }
+
+  Future<void> _refreshCuratedSkills() async {
+    _skillsService.clearCache();
+    await _loadCuratedSkills(forceRefresh: true);
+    if (mounted) {
+      Toast.show(
+        context,
+        message: S.get('codex_curated_refreshed'),
+        type: ToastType.success,
+      );
     }
   }
 
@@ -308,6 +322,8 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
   }
 
   Widget _buildLocalSkillCard(CodexSkill skill, bool isDark, double cardWidth) {
+    final accentColor = skill.isSystem ? Colors.blue : Colors.green;
+
     return SizedBox(
       width: cardWidth,
       child: InkWell(
@@ -317,58 +333,97 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
           margin: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
-            side: BorderSide(color: Colors.green.withValues(alpha: 0.3), width: 1),
+            side: BorderSide(
+              color: accentColor.withValues(alpha: 0.3),
+              width: 1,
+            ),
           ),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 图标和名称
                 Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.1),
+                        color: accentColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Icon(Icons.folder_special, size: 16, color: Colors.green),
+                      child: Icon(
+                        skill.isSystem ? Icons.settings : Icons.folder_special,
+                        size: 16,
+                        color: accentColor,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         skill.name,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (skill.hasSkillMd)
+                    if (skill.isSystem)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
-                          color: Colors.green.withValues(alpha: isDark ? 0.2 : 0.1),
+                          color: Colors.blue.withValues(
+                            alpha: isDark ? 0.2 : 0.1,
+                          ),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Icon(Icons.check, size: 10, color: Colors.green),
+                        child: Text(
+                          S.get('codex_system_skill'),
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: Colors.blue,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
+                    else if (skill.hasSkillMd)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(
+                            alpha: isDark ? 0.2 : 0.1,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Icon(
+                          Icons.check,
+                          size: 10,
+                          color: Colors.green,
+                        ),
                       ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                // 描述
                 Text(
                   skill.description ?? S.get('no_description'),
-                  style: TextStyle(fontSize: 11, color: Colors.grey.withValues(alpha: 0.8)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.withValues(alpha: 0.8),
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 8),
-                // 操作按钮行
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    // 复制命令按钮
                     InkWell(
                       onTap: () => _copySkillCommand(skill.name),
                       borderRadius: BorderRadius.circular(4),
@@ -377,24 +432,25 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
                         child: Icon(
                           Icons.copy,
                           size: 16,
-                          color: Colors.green.withValues(alpha: 0.7),
+                          color: accentColor.withValues(alpha: 0.7),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 4),
-                    // 删除按钮
-                    InkWell(
-                      onTap: () => _confirmDeleteSkill(skill),
-                      borderRadius: BorderRadius.circular(4),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.delete_outline,
-                          size: 18,
-                          color: Colors.red.withValues(alpha: 0.7),
+                    if (!skill.isSystem) ...[
+                      const SizedBox(width: 4),
+                      InkWell(
+                        onTap: () => _confirmDeleteSkill(skill),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.delete_outline,
+                            size: 18,
+                            color: Colors.red.withValues(alpha: 0.7),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ],
@@ -413,13 +469,34 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitleWithAction(
-          S.get('codex_curated_skills'),
-          Icons.star,
-          Colors.orange,
-          actionIcon: Icons.open_in_new,
-          actionTooltip: S.get('codex_open_github'),
-          onAction: _openGitHub,
+        Row(
+          children: [
+            const Icon(Icons.star, size: 20, color: Colors.orange),
+            const SizedBox(width: 8),
+            Text(
+              S.get('codex_curated_skills'),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).textTheme.titleMedium?.color,
+              ),
+            ),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.refresh, size: 20, color: Colors.orange),
+              onPressed: _refreshCuratedSkills,
+              tooltip: S.get('refresh_config'),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+            IconButton(
+              icon: const Icon(Icons.open_in_new, size: 20, color: Colors.orange),
+              onPressed: _openGitHub,
+              tooltip: S.get('codex_open_github'),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ],
         ),
         const SizedBox(height: 4),
         Padding(

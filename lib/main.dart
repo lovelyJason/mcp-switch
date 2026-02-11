@@ -25,6 +25,8 @@ import 'utils/platform_utils.dart';
 import 'config/platform_commands_config.dart';
 import 'config/mcp_presets_config.dart';
 import 'utils/global_keys.dart';
+import 'data/database.dart';
+import 'services/provider_switch_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,6 +55,7 @@ void main() async {
 
   WindowOptions windowOptions = WindowOptions(
     size: const Size(900, 600),
+    minimumSize: const Size(900, 600),
     center: true,
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
@@ -72,13 +75,23 @@ void main() async {
   await PlatformCommandsConfig.init(); // 加载平台命令配置
   await McpPresetsConfig.init(); // 加载 MCP 预设配置
 
+  final dbPath = await AppDatabase.getDatabasePath();
+  final configPath = '${PlatformUtils.userHome}/.mcp-switch/config.json';
+  final prefsPath = Platform.isMacOS
+      ? '~/Library/Preferences/com.jason.mcpSwitch.plist'
+      : Platform.isWindows
+          ? r'%APPDATA%\com.jason\mcpSwitch\shared_preferences.json'
+          : '~/.local/share/mcpSwitch/shared_preferences.json';
   LoggerService.info('''
   ════════════════════════════════════════════
      🚀 MCP Switch Initialized Successfully 🚀
      ----------------------------------------
-     📁 Home:   ${PlatformUtils.userHome}
-     🌏 Locale: ${S.localeNotifier.value}
-     🛠️ Mode:   ${kReleaseMode ? 'Release' : 'Debug'}
+     📁 Home:              ${PlatformUtils.userHome}
+     🌏 Locale:            ${S.localeNotifier.value}
+     🔧 Mode:              ${kReleaseMode ? 'Release' : 'Debug'}
+     💾 DB:                $dbPath
+     📄 Config:            $configPath
+     📦 SharedPreferences: $prefsPath
   ════════════════════════════════════════════
   ''');
 
@@ -101,6 +114,11 @@ void main() async {
     mcpHealthCheckService.checkAllServers();
   });
 
+  // Initialize Provider Switch Service（供应商配置切换）
+  final db = AppDatabase();
+  final providerSwitchService = ProviderSwitchService(db);
+  await providerSwitchService.init();
+
   // Initialize Update Service（自动检测更新）
   final updateService = UpdateService();
   updateService.init();
@@ -114,6 +132,7 @@ void main() async {
         ChangeNotifierProvider.value(value: aiChatService),
         ChangeNotifierProvider.value(value: mcpHealthCheckService),
         ChangeNotifierProvider.value(value: updateService),
+        ChangeNotifierProvider.value(value: providerSwitchService),
       ],
       child: const McpSwitchApp(),
     ),

@@ -89,11 +89,11 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
+            VALUE "CompanyName", "com.jason" "\0"
             VALUE "FileDescription", "mcp_switch" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "mcp_switch" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.jason. All rights reserved." "\0"
             VALUE "OriginalFilename", "mcp_switch.exe" "\0"
             VALUE "ProductName", "mcp_switch" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"

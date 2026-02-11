@@ -59,6 +59,13 @@ MCP Switch 是一个跨平台（macOS / Windows）的 Flutter 应用，旨在帮
 - **智能提示**：Toast 引导用户选择目标 MCP 完成浏览器授权
 - **支持场景**：Jira、Figma 等需要 OAuth 2.1 + PKCE 流程的 MCP 服务
 
+### 🔄 供应商切换 (Provider Switch)
+- **一键切换**：在官方、DMXAPI、OpenRouter、硅基流动 (SiliconFlow) 及自定义供应商之间快速切换
+
+- **双模式支持**：Claude Code (`settings.json`) 和 Codex (`config.toml` + `auth.json`) 完整适配
+
+![供应商切换](https://github.com/user-attachments/assets/c02e0e2d-9c1c-4da2-ab21-e2e798742f8d)
+
 ### 🔧 其他优化
 - 🏪 **插件市场**：支持添加官方/第三方市场，一键安装插件，查看文档和源码
 - 🎯 **Skills 管理**：浏览已安装的社区技能，支持文档翻译
@@ -154,6 +161,25 @@ MCP Switch 是一个跨平台（macOS / Windows）的 Flutter 应用，旨在帮
 
 
 
+### 🔄 供应商切换 (Provider Switch) (New!)
+
+为 AI CLI 工具提供 **API 供应商一键切换**，告别手动改配置文件：
+
+| 功能 | Claude Code | Codex |
+|------|------------|-------|
+| **配置文件** | `settings.json` | `config.toml` + `auth.json` |
+| **预设供应商** | 官方 / DMXAPI / OpenRouter / 硅基流动 / 自定义 | 官方 / DMXAPI / OpenRouter / 硅基流动 / 自定义 |
+| **Base URL 校验** | ✅ 实时校验 | ✅ 实时校验 |
+| **配置预览** | ✅ JSON 格式化 | ✅ TOML 预览 |
+| **OAuth 保护** | - | ✅ 自动保留 Token |
+
+**使用场景**：
+- 🏢 公司网络需要走代理 → 一键切换到 DMXAPI / OpenRouter
+- 🏠 回家用官方直连 → 一键切回官方配置
+- 💰 不同供应商价格不同 → 预设芯片快速切换，无需记住 URL
+
+<img width="900" height="600" alt="Provider Switch" src="https://github.com/user-attachments/assets/ed6355d4-f586-47ac-b8eb-ba4c4e7dbe54" />
+
 ### 🤖 AI 智能助手 (New!)
 
 集成 Claude API 的对话式助手，用自然语言管理你的 Claude Code：
@@ -180,6 +206,8 @@ MCP Switch 是一个跨平台（macOS / Windows）的 Flutter 应用，旨在帮
 - [x] **MCP OAuth 授权引导**：半自动化 OAuth 授权流程，引导完成浏览器授权
 
 ### Phase 2: 生态互联 (In Progress)
+- [x] **供应商切换 (Provider Switch)**
+  - 一键切换 API 供应商（官方 / DMXAPI / OpenRouter / 硅基流动 / 自定义），支持 Claude Code 和 Codex
 - [ ] **多配置方案 (Profiles)**
   - 为同一个编辑器创建多套 MCP 配置（如 "公司项目" vs "个人项目"），一键秒切
 - [ ] **配置云同步**
@@ -228,7 +256,9 @@ MCP Switch 是一个跨平台（macOS / Windows）的 Flutter 应用，旨在帮
 ## 📞 联系作者
 
 - GitHub: [@lovelyJason](https://github.com/lovelyJason)
-- 即刻: @Jasonhuang
+- 微信群: 扫码加入交流群
+
+![加群](https://github.com/user-attachments/assets/ed6355d4-f586-47ac-b8eb-ba4c4e7dbe54)
 
 ---
 
@@ -241,14 +271,4 @@ MCP Switch 是一个跨平台（macOS / Windows）的 Flutter 应用，旨在帮
 ```bash
 pip install -r scripts/requirements.txt
 python3 scripts/update_icon.py <您的新图片路径>
-```
-
-### 版本发布
-
-```bash
-# 自动递增版本号
-python3 scripts/bump_version.py
-
-# 构建 Release
-flutter build macos --release
 ```

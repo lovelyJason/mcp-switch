@@ -4,12 +4,14 @@ class CodexSkill {
   final String path;
   final String? description;
   final bool hasSkillMd;
+  final bool isSystem;
 
   CodexSkill({
     required this.name,
     required this.path,
     this.description,
     this.hasSkillMd = false,
+    this.isSystem = false,
   });
 }
 

@@ -8,8 +8,8 @@ MCP Switch 使用 **SharedPreferences** 作为本地数据持久化方案，存�
 
 | 平台 | 路径 |
 |------|------|
-| macOS | `~/Library/Preferences/com.example.mcp_switch.plist` |
-| Windows | `%APPDATA%\com.example\mcp_switch\shared_preferences.json` |
+| macOS | `~/Library/Preferences/com.jason.mcp_switch.plist` |
+| Windows | `%APPDATA%\com.jason\mcp_switch\shared_preferences.json` |
 | Linux | `~/.local/share/mcp_switch/shared_preferences.json` |
 
 ## 核心数据结构

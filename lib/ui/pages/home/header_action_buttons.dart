@@ -10,6 +10,7 @@ import '../prompts/claude_prompts_screen.dart';
 import '../plugins/codex_skills_screen.dart';
 import '../plugins/gemini_skills_screen.dart';
 import '../plugins/antigravity_skills_screen.dart';
+import '../provider_switch/provider_list_screen.dart';
 
 /// 头部操作按钮组（胶囊样式）
 /// 根据不同编辑器类型显示不同的按钮组合：
@@ -59,10 +60,11 @@ class HeaderActionButtons extends StatelessWidget {
     }
   }
 
-  /// Claude: Skills + Prompt + More (Rules在下拉菜单)
+  /// Claude: Skills + Prompt + Provider + More (Rules在下拉菜单)
   Widget _buildClaudeButtons(BuildContext context, bool disabled) {
     final skillsBtn = _buildSkillsButton(context, disabled);
     final promptBtn = _buildPromptButton(context, disabled);
+    final providerBtn = _buildProviderButton(context, disabled, 'claude');
     final moreBtn = _buildMoreButton(context, disabled);
 
     return _buildCapsuleContainer(
@@ -72,12 +74,14 @@ class HeaderActionButtons extends StatelessWidget {
         _buildDivider(),
         promptBtn,
         _buildDivider(),
+        providerBtn,
+        _buildDivider(),
         moreBtn,
       ],
     );
   }
 
-  /// Codex: Skills only
+  /// Codex: Skills + Provider
   Widget _buildCodexButtons(BuildContext context, bool disabled) {
     final codexSkillsBtn = IconButton(
       icon: Icon(
@@ -95,7 +99,16 @@ class HeaderActionButtons extends StatelessWidget {
       },
     );
 
-    return _buildSingleButtonContainer(context, codexSkillsBtn);
+    final providerBtn = _buildProviderButton(context, disabled, 'codex');
+
+    return _buildCapsuleContainer(
+      context,
+      children: [
+        codexSkillsBtn,
+        _buildDivider(),
+        providerBtn,
+      ],
+    );
   }
 
   /// Gemini: Skills only
@@ -176,6 +189,27 @@ class HeaderActionButtons extends StatelessWidget {
           await Future.delayed(const Duration(milliseconds: 500));
           terminalService.sendCommand(command);
         }
+      },
+    );
+  }
+
+  /// Provider 按钮 (Claude / Codex)
+  Widget _buildProviderButton(BuildContext context, bool disabled, String editorType) {
+    return IconButton(
+      icon: Icon(
+        Icons.swap_horiz,
+        size: 18,
+        color: disabled ? Colors.grey : const Color(0xFFd97757),
+      ),
+      tooltip: disabled ? '' : S.get('provider_switch_tooltip'),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      onPressed: disabled ? null : () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ProviderListScreen(initialEditorType: editorType),
+          ),
+        );
       },
     );
   }

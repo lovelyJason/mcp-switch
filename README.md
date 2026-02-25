@@ -272,3 +272,16 @@ MCP Switch 是一个跨平台（macOS / Windows）的 Flutter 应用，旨在帮
 pip install -r scripts/requirements.txt
 python3 scripts/update_icon.py <您的新图片路径>
 ```
+
+## MacOS安装注意事项
+
+如果打不开，提示包损坏，需要开启隐私安全里面的【允许以下来源的应用程序： 任何来源】，如果没有这个选项，需要
+
+```bash
+sudo spctl --master-disable
+```
+
+<img width="715" height="576" alt="image" src="https://github.com/user-attachments/assets/bdd45484-e281-4c2a-bf08-2473bf004ad0" />
+
+然后更新软件覆盖的时候可能也会打不开，这个是由于macos非付费签名的限制，需要再回到隐私安全这里来，点击【仍要打开】
+

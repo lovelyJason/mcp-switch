@@ -1,3 +1,25 @@
+## v1.4.0
+
+### ✨ 新增特性
+
+**Gemini CLI 深度支持**
+
+- **Extension MCP 展示**：Gemini 标签页现在自动读取 `~/.gemini/extensions/` 下所有已安装扩展的 MCP 服务器配置，独立展示为 "Extension MCPs" 区块，支持 `${extensionPath}`、`${/}` 占位符自动解析
+- **Context 文件管理**：新增 Gemini Context 页面，展示全局 `~/.gemini/GEMINI.md` 及各扩展的 context 文件（GEMINI.md、WORKSPACE-Context.md、SPANNER.md 等），支持展开预览、一键复制
+- **全局 Context 编辑**：全局 `GEMINI.md` 支持在 App 内直接编辑，内置 Markdown 编辑器，保存后实时刷新列表
+- **Gemini 顶部按钮扩展**：Gemini 页面顶部胶囊按钮新增 Context 入口（💡图标），与 Skills、Provider 并列展示
+
+**设置 - 环境检测优化**
+
+- 每个工具卡片新增单独刷新按钮，无需全量重新检测即可更新单个工具的版本和安装状态
+- 全局刷新进行中时，所有单项刷新按钮自动置灰禁用，避免并发冲突
+
+### 🚀 优化改进
+
+- **Provider 编辑页重构**：将臃肿的单文件拆分为 `provider_config_preview.dart`（配置预览组件）和 `provider_edit_form_fields.dart`（表单字段组件），代码可维护性大幅提升
+- **Gemini MCP 列表修复**：修复当 `~/.gemini/settings.json` 中 `mcpServers` 为空时，Gemini 标签页直接返回"暂无配置"导致 Extension MCP 区域无法显示的问题
+
+
 ## v1.3.0
 
 ### ✨ 新增特性

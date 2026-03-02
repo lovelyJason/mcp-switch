@@ -5,9 +5,11 @@ import '../../../models/editor_type.dart';
 import '../../../models/mcp_profile.dart';
 import '../../../services/config_service.dart';
 import '../../../services/plugin_mcp_service.dart';
+import '../../../services/gemini_extension_mcp_service.dart';
 import '../../components/profile_card.dart';
 import '../../components/project_card.dart';
 import '../../components/plugin_mcp_card.dart';
+import '../../components/gemini_extension_mcp_card.dart';
 import '../../components/custom_dialog.dart';
 import '../../components/custom_toast.dart';
 import '../../../l10n/s.dart';
@@ -24,7 +26,10 @@ class ConfigListScreen extends StatefulWidget {
 
 class _ConfigListScreenState extends State<ConfigListScreen> {
   final PluginMcpService _pluginMcpService = PluginMcpService();
+  final GeminiExtensionMcpService _geminiExtensionMcpService = GeminiExtensionMcpService();
   bool _projectSortDescending = true; // 默认倒序排列
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -33,6 +38,19 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
     if (widget.editorType == EditorType.claude) {
       _pluginMcpService.loadPluginMcpServers();
     }
+    // Gemini 加载 Extension MCP
+    if (widget.editorType == EditorType.gemini) {
+      _geminiExtensionMcpService.loadExtensionMcpServers();
+    }
+    _searchController.addListener(() {
+      setState(() => _searchQuery = _searchController.text.trim().toLowerCase());
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -42,18 +60,16 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
         final profiles = configService.getProfiles(widget.editorType);
         final activeId = configService.getActiveProfileId(widget.editorType);
 
-        if (profiles.isEmpty) {
-          String message = '暂无配置';
-          IconData icon = Icons.inbox_outlined;
-
+        // Gemini 有 Extension MCPs，不能在 profiles.isEmpty 时直接返回
+        if (profiles.isEmpty && widget.editorType != EditorType.gemini) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 60, color: Colors.grey.shade300),
+                Icon(Icons.inbox_outlined, size: 60, color: Colors.grey.shade300),
                 const SizedBox(height: 16),
                 Text(
-                  message,
+                  '暂无配置',
                   style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
                 ),
               ],
@@ -132,20 +148,25 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                             if (globalProfile != null ||
                                 _pluginMcpService.mcpServers.isNotEmpty)
                               _buildProjectSectionHeader(),
-                            ...(  _projectSortDescending
-                                ? projectProfiles.reversed
-                                : projectProfiles
-                            ).map(
-                              (profile) => ProjectCard(
-                                profile: profile,
-                                onDelete: () =>
-                                    _confirmDelete(context, configService, profile),
-                                // 传递全局 MCP 配置，用于显示继承的 MCP
-                                globalMcpServers: globalProfile?.content['mcpServers'] is Map
-                                    ? Map<String, dynamic>.from(globalProfile!.content['mcpServers'])
-                                    : null,
-                              ),
-                            ),
+                            ...() {
+                              var filtered = _searchQuery.isEmpty
+                                  ? projectProfiles
+                                  : projectProfiles.where((p) =>
+                                      p.name.toLowerCase().contains(_searchQuery)).toList();
+                              if (_projectSortDescending) {
+                                filtered = filtered.reversed.toList();
+                              }
+                              return filtered.map(
+                                (profile) => ProjectCard(
+                                  profile: profile,
+                                  onDelete: () =>
+                                      _confirmDelete(context, configService, profile),
+                                  globalMcpServers: globalProfile?.content['mcpServers'] is Map
+                                      ? Map<String, dynamic>.from(globalProfile!.content['mcpServers'])
+                                      : null,
+                                ),
+                              );
+                            }(),
                           ],
                         ],
                       );
@@ -154,6 +175,70 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                 ),
               ),
             ],
+          );
+        }
+
+        if (widget.editorType == EditorType.gemini) {
+          return ListenableBuilder(
+            listenable: _geminiExtensionMcpService,
+            builder: (context, child) {
+              return ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  children: [
+                    if (_geminiExtensionMcpService.mcpServers.isNotEmpty) ...[
+                      _buildSectionHeader(
+                        'Extension MCPs @ ~/.gemini/extensions/',
+                        tooltip: '来自已安装的 Gemini CLI 扩展',
+                      ),
+                      GeminiExtensionMcpCard(
+                        mcpServers: _geminiExtensionMcpService.mcpServers,
+                      ),
+                    ],
+                    if (profiles.isNotEmpty) ...[
+                      _buildSectionHeader('MCP Servers @ ~/.gemini/settings.json'),
+                      ...profiles.map((profile) => ProfileCard(
+                        profile: profile,
+                        isActive: profile.id == activeId,
+                        onSelect: () => configService.toggleServerStatus(
+                            widget.editorType, profile.id),
+                        onDelete: () =>
+                            _confirmDelete(context, configService, profile),
+                        onEdit: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => McpServerEditScreen(
+                                editorType: widget.editorType,
+                                profile: profile,
+                              ),
+                            ),
+                          );
+                        },
+                      )),
+                    ],
+                    if (_geminiExtensionMcpService.mcpServers.isEmpty &&
+                        profiles.isEmpty)
+                      Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox(height: 80),
+                            Icon(Icons.inbox_outlined,
+                                size: 60, color: Colors.grey.shade300),
+                            const SizedBox(height: 16),
+                            Text(
+                              '暂无配置',
+                              style: TextStyle(
+                                  color: Colors.grey.shade500, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
           );
         }
 
@@ -233,6 +318,37 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
             ),
           ),
           const Spacer(),
+          SizedBox(
+            width: 180,
+            height: 30,
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(fontSize: 12),
+              decoration: InputDecoration(
+                hintText: S.get('project_search_hint'),
+                hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                prefixIcon: Icon(Icons.search, size: 16, color: Colors.grey.shade400),
+                prefixIconConstraints: const BoxConstraints(minWidth: 32),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? GestureDetector(
+                        onTap: () => _searchController.clear(),
+                        child: Icon(Icons.close, size: 14, color: Colors.grey.shade500),
+                      )
+                    : null,
+                suffixIconConstraints: const BoxConstraints(minWidth: 28),
+                filled: true,
+                fillColor: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey.shade800
+                    : Colors.grey.shade100,
+                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           Tooltip(
             message: _projectSortDescending ? '当前：最新在前' : '当前：最早在前',
             child: InkWell(
@@ -249,7 +365,7 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                       ? Icons.arrow_downward
                       : Icons.arrow_upward,
                   size: 16,
-                  color: Colors.deepPurple.shade300,
+                  color: Colors.orange.shade300,
                 ),
               ),
             ),

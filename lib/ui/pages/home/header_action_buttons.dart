@@ -7,6 +7,7 @@ import '../../components/custom_toast.dart';
 import '../rules/rules_screen.dart';
 import '../plugins/claude_code_skills_screen.dart';
 import '../prompts/claude_prompts_screen.dart';
+import '../prompts/gemini_prompts_screen.dart';
 import '../plugins/codex_skills_screen.dart';
 import '../plugins/gemini_skills_screen.dart';
 import '../plugins/antigravity_skills_screen.dart';
@@ -111,7 +112,7 @@ class HeaderActionButtons extends StatelessWidget {
     );
   }
 
-  /// Gemini: Skills only
+  /// Gemini: Skills + Prompt + Provider
   Widget _buildGeminiButtons(BuildContext context, bool disabled) {
     final geminiSkillsBtn = IconButton(
       icon: Icon(
@@ -129,7 +130,34 @@ class HeaderActionButtons extends StatelessWidget {
       },
     );
 
-    return _buildSingleButtonContainer(context, geminiSkillsBtn);
+    final geminiPromptBtn = IconButton(
+      icon: Icon(
+        Icons.tips_and_updates_outlined,
+        size: 18,
+        color: disabled ? Colors.grey : Colors.orange,
+      ),
+      tooltip: disabled ? S.get('gemini_not_installed_title') : 'Gemini Context',
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      onPressed: disabled ? null : () {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const GeminiPromptsScreen()),
+        );
+      },
+    );
+
+    final providerBtn = _buildProviderButton(context, disabled, 'gemini');
+
+    return _buildCapsuleContainer(
+      context,
+      children: [
+        geminiSkillsBtn,
+        _buildDivider(),
+        geminiPromptBtn,
+        _buildDivider(),
+        providerBtn,
+      ],
+    );
   }
 
   /// Antigravity: Skills + Rules

@@ -135,10 +135,21 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
   }
 
   Widget _buildEditorSwitcher(bool isDark) {
+    // (type, label, icon, fixedColor, useOriginalColor)
     final editors = [
-      ('claude', 'Claude Code', 'assets/icons/claude.svg', const Color(0xFFd97757)),
-      ('codex', 'Codex', 'assets/icons/chatgpt.svg', null),
+      ('claude', 'Claude Code', 'assets/icons/claude.svg', const Color(0xFFd97757), false),
+      ('codex', 'Codex', 'assets/icons/chatgpt.svg', null, false),
+      ('gemini', 'Gemini', 'assets/icons/gemini.svg', null, true),
     ];
+
+    ColorFilter? colorFilter(Color? fixedColor, bool useOriginal) {
+      if (useOriginal) return null;
+      if (fixedColor != null) return ColorFilter.mode(fixedColor, BlendMode.srcIn);
+      return ColorFilter.mode(
+        isDark ? Colors.white70 : Colors.black87,
+        BlendMode.srcIn,
+      );
+    }
 
     return PopupMenuButton<String>(
       offset: const Offset(0, 8),
@@ -149,7 +160,7 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
       tooltip: S.get('provider_switch_tooltip'),
       onSelected: (type) => setState(() => _selectedEditor = type),
       itemBuilder: (context) => editors.map((e) {
-        final (type, label, icon, fixedColor) = e;
+        final (type, label, icon, fixedColor, useOriginal) = e;
         final isSelected = _selectedEditor == type;
         return PopupMenuItem<String>(
           value: type,
@@ -161,11 +172,7 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
                 icon,
                 width: 16,
                 height: 16,
-                colorFilter: fixedColor != null
-                    ? ColorFilter.mode(fixedColor, BlendMode.srcIn)
-                    : (isDark
-                        ? ColorFilter.mode(Colors.white70, BlendMode.srcIn)
-                        : ColorFilter.mode(Colors.black87, BlendMode.srcIn)),
+                colorFilter: colorFilter(fixedColor, useOriginal),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -197,14 +204,10 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
               editors.firstWhere((e) => e.$1 == _selectedEditor).$3,
               width: 16,
               height: 16,
-              colorFilter: editors.firstWhere((e) => e.$1 == _selectedEditor).$4 != null
-                  ? ColorFilter.mode(
-                      editors.firstWhere((e) => e.$1 == _selectedEditor).$4!,
-                      BlendMode.srcIn,
-                    )
-                  : (isDark
-                      ? ColorFilter.mode(Colors.white70, BlendMode.srcIn)
-                      : ColorFilter.mode(Colors.black87, BlendMode.srcIn)),
+              colorFilter: colorFilter(
+                editors.firstWhere((e) => e.$1 == _selectedEditor).$4,
+                editors.firstWhere((e) => e.$1 == _selectedEditor).$5,
+              ),
             ),
             const SizedBox(width: 4),
             Icon(
@@ -260,7 +263,9 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
 
         final configPath = _selectedEditor == 'claude'
             ? S.get('provider_claude_file_path')
-            : S.get('provider_codex_file_path');
+            : _selectedEditor == 'gemini'
+                ? S.get('provider_gemini_file_path')
+                : S.get('provider_codex_file_path');
 
         return Column(
           children: [

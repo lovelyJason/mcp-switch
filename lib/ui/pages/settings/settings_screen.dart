@@ -13,6 +13,7 @@ import '../../components/styled_popup_menu.dart';
 import '../../components/styled_dropdown.dart';
 import '../../components/custom_toast.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'environment_check_tab.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -37,7 +38,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadPaths();
     _checkInstalledApps();
   }
@@ -295,6 +296,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   _buildGeneralTab(),
                   _buildAiTab(),
                   _buildAdvancedTab(),
+                  const EnvironmentCheckTab(),
                   _buildAboutTab(),
                 ],
               ),
@@ -386,6 +388,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           Tab(text: S.get('general')),
           Tab(text: S.get('ai_settings')),
           Tab(text: S.get('advanced')),
+          Tab(text: S.get('env_check')),
           Tab(text: S.get('about')),
         ],
       ),
@@ -557,7 +560,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       borderRadius: BorderRadius.circular(8),
                       borderSide: BorderSide.none,
                     ),
-                    prefixIcon: const Icon(Icons.key, size: 18, color: Colors.deepPurple),
+                    prefixIcon: const Icon(Icons.key, size: 18, color: Colors.orange),
                   ),
                   style: const TextStyle(fontSize: 13),
                 ),
@@ -568,10 +571,10 @@ class _SettingsScreenState extends State<SettingsScreen>
               onPressed: () {
                 launchUrl(Uri.parse('https://console.anthropic.com/'));
               },
-              icon: const Icon(Icons.open_in_new, size: 14, color: Colors.deepPurple),
+              icon: const Icon(Icons.open_in_new, size: 14, color: Colors.orange),
               label: Text(S.get('get_api_key')),
               style: TextButton.styleFrom(
-                foregroundColor: Colors.deepPurple,
+                foregroundColor: Colors.orange,
                 textStyle: const TextStyle(fontSize: 12),
               ),
             ),
@@ -583,10 +586,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                 configService,
                 aiService,
               ),
-              icon: const Icon(Icons.download, size: 14, color: Colors.deepPurple),
+              icon: const Icon(Icons.download, size: 14, color: Colors.orange),
               label: Text(S.get('load_from_claude')),
               style: TextButton.styleFrom(
-                foregroundColor: Colors.deepPurple,
+                foregroundColor: Colors.orange,
                 textStyle: const TextStyle(fontSize: 12),
               ),
             ),
@@ -632,7 +635,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       borderRadius: BorderRadius.circular(8),
                       borderSide: BorderSide.none,
                     ),
-                    prefixIcon: const Icon(Icons.link, size: 18, color: Colors.deepPurple),
+                    prefixIcon: const Icon(Icons.link, size: 18, color: Colors.orange),
                   ),
                   style: const TextStyle(fontSize: 13),
                 ),
@@ -1036,11 +1039,11 @@ class _SettingsScreenState extends State<SettingsScreen>
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isSelected
-              ? (isDark ? Colors.deepPurple.shade900 : Colors.deepPurple.shade50)
+              ? (isDark ? Colors.orange.shade900 : Colors.orange.shade50)
               : (isDark ? Colors.grey.shade800 : Colors.white),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isSelected ? Colors.deepPurple : Colors.transparent,
+            color: isSelected ? Colors.orange : Colors.transparent,
             width: 2,
           ),
         ),
@@ -1080,7 +1083,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             ),
             if (isSelected) ...[
               const SizedBox(height: 4),
-              Icon(Icons.check_circle, color: Colors.deepPurple, size: 16),
+              Icon(Icons.check_circle, color: Colors.orange, size: 16),
             ],
           ],
         ),
@@ -1112,7 +1115,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide.none,
               ),
-              prefixIcon: const Icon(Icons.key, size: 18, color: Colors.deepPurple),
+              prefixIcon: const Icon(Icons.key, size: 18, color: Colors.orange),
             ),
             style: const TextStyle(fontSize: 13),
             onChanged: (value) async {
@@ -1128,7 +1131,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           icon: const Icon(Icons.open_in_new, size: 14),
           label: Text(S.get('get_api_key')),
           style: TextButton.styleFrom(
-            foregroundColor: Colors.deepPurple,
+            foregroundColor: Colors.orange,
             textStyle: const TextStyle(fontSize: 12),
           ),
         ),
@@ -1671,22 +1674,22 @@ class _TestConnectionButtonState extends State<_TestConnectionButton> {
               height: 14,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: Colors.deepPurple.shade300,
+                color: Colors.orange.shade300,
               ),
             )
           : Icon(
               _lastLatency != null ? Icons.check_circle : Icons.speed,
               size: 14,
-              color: _lastLatency != null ? Colors.green : Colors.deepPurple,
+              color: _lastLatency != null ? Colors.green : Colors.orange,
             ),
       label: Text(
         labelText,
         style: TextStyle(
-          color: _lastLatency != null ? Colors.green : Colors.deepPurple,
+          color: _lastLatency != null ? Colors.green : Colors.orange,
         ),
       ),
       style: TextButton.styleFrom(
-        foregroundColor: _lastLatency != null ? Colors.green : Colors.deepPurple,
+        foregroundColor: _lastLatency != null ? Colors.green : Colors.orange,
         textStyle: const TextStyle(fontSize: 12),
       ),
     );

@@ -11,7 +11,7 @@ import '../utils/platform_utils.dart';
 
 /// 供应商配置切换服务
 ///
-/// 管理 Claude Code 和 Codex 的供应商（API 代理/中转站）配置，
+/// 管理 Claude Code、Codex 和 Gemini 的供应商（API 代理/中转站）配置，
 /// 支持多配置方案保存和一键切换激活。
 class ProviderSwitchService extends ChangeNotifier {
   final AppDatabase _db;
@@ -20,12 +20,14 @@ class ProviderSwitchService extends ChangeNotifier {
   // 内存缓存
   List<ProviderProfile> _claudeProfiles = [];
   List<ProviderProfile> _codexProfiles = [];
+  List<ProviderProfile> _geminiProfiles = [];
   List<String>? _cachedCodexModels;
   DateTime? _cachedCodexModelsAt;
   Future<List<String>>? _codexModelsFetchFuture;
 
   List<ProviderProfile> get claudeProfiles => _claudeProfiles;
   List<ProviderProfile> get codexProfiles => _codexProfiles;
+  List<ProviderProfile> get geminiProfiles => _geminiProfiles;
 
   /// 官方配置的固定 ID 前缀
   static const String officialIdPrefix = 'official-';
@@ -51,9 +53,11 @@ class ProviderSwitchService extends ChangeNotifier {
   Future<void> _seedOfficialProfiles() async {
     await _syncClaudeOfficial();
     await _syncCodexOfficial();
+    await _syncGeminiOfficial();
     // 根据配置文件实际内容，校正激活状态
     await _reconcileActiveFromConfig('claude');
     await _reconcileActiveFromConfig('codex');
+    await _reconcileActiveFromConfig('gemini');
     await _loadProfiles();
   }
 
@@ -82,6 +86,24 @@ class ProviderSwitchService extends ChangeNotifier {
               fileApiToken = env['ANTHROPIC_AUTH_TOKEN'] as String?;
             }
           }
+        }
+      } else if (editorType == 'gemini') {
+        // Gemini：读取 ~/.gemini/.env
+        final home = PlatformUtils.userHome;
+        final envPath = PlatformUtils.joinPath(home, '.gemini', '.env');
+        final envFile = File(envPath);
+        if (await envFile.exists()) {
+          final lines = await envFile.readAsLines();
+          for (final line in lines) {
+            final trimmed = line.trim();
+            if (trimmed.startsWith('GEMINI_API_KEY=')) {
+              fileApiToken = trimmed.substring('GEMINI_API_KEY='.length).trim();
+            } else if (trimmed.startsWith('GOOGLE_GEMINI_BASE_URL=')) {
+              fileBaseUrl = trimmed.substring('GOOGLE_GEMINI_BASE_URL='.length).trim();
+            }
+          }
+          if (fileApiToken?.isEmpty == true) fileApiToken = null;
+          if (fileBaseUrl?.isEmpty == true) fileBaseUrl = null;
         }
       } else {
         // Codex：读取 config.toml + auth.json，匹配 DB 中的 profile
@@ -301,6 +323,32 @@ class ProviderSwitchService extends ChangeNotifier {
     }
   }
 
+  Future<void> _syncGeminiOfficial() async {
+    final officialId = '${officialIdPrefix}gemini';
+    final existing = await _db.getProfileById(officialId);
+    final now = DateTime.now();
+
+    if (existing != null) return;
+
+    await _db.insertProfile(
+      ProviderProfilesCompanion.insert(
+        id: officialId,
+        editorType: 'gemini',
+        name: 'Official',
+        description: const Value('Google Official'),
+        isActive: const Value(true),
+        apiToken: const Value(null),
+        baseUrl: const Value(null),
+        model: const Value(null),
+        maxOutputTokens: const Value(null),
+        maxThinkingTokens: const Value(null),
+        website: const Value('https://gemini.google.com'),
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+  }
+
   /// 从 TOML 行中提取值，如 'model = "gpt-4o"' → 'gpt-4o'
   static String? _extractTomlValue(String line) {
     final idx = line.indexOf('=');
@@ -315,6 +363,7 @@ class ProviderSwitchService extends ChangeNotifier {
   Future<void> _loadProfiles() async {
     _claudeProfiles = await _db.getProfilesByEditor('claude');
     _codexProfiles = await _db.getProfilesByEditor('codex');
+    _geminiProfiles = await _db.getProfilesByEditor('gemini');
   }
 
   /// 手动刷新：重新读取配置文件，校正 DB 激活状态
@@ -325,7 +374,9 @@ class ProviderSwitchService extends ChangeNotifier {
 
   /// 获取指定编辑器的配置列表
   List<ProviderProfile> getProfiles(String editorType) {
-    return editorType == 'claude' ? _claudeProfiles : _codexProfiles;
+    if (editorType == 'claude') return _claudeProfiles;
+    if (editorType == 'gemini') return _geminiProfiles;
+    return _codexProfiles;
   }
 
   /// 获取激活的配置
@@ -450,6 +501,8 @@ class ProviderSwitchService extends ChangeNotifier {
         await _writeClaudeSettings(profile);
       } else if (editorType == 'codex') {
         await _writeCodexConfig(profile);
+      } else if (editorType == 'gemini') {
+        await _writeGeminiEnv(profile);
       }
     } catch (e) {
       // 写入失败时回滚 DB 激活状态
@@ -467,6 +520,8 @@ class ProviderSwitchService extends ChangeNotifier {
         await _clearClaudeSettings();
       } else if (editorType == 'codex') {
         await _clearCodexConfig();
+      } else if (editorType == 'gemini') {
+        await _clearGeminiEnv();
       }
     } catch (e) {
       print('Error clearing config file: $e');
@@ -529,6 +584,78 @@ class ProviderSwitchService extends ChangeNotifier {
         }
       } catch (_) {}
     }
+  }
+
+  /// 写入 Gemini 配置 (~/.gemini/.env)
+  ///
+  /// dotenv 格式，读取现有内容后修改目标 key，保留其他 key 不变。
+  Future<void> _writeGeminiEnv(ProviderProfile profile) async {
+    final home = PlatformUtils.userHome;
+    final geminiDir = PlatformUtils.joinPath(home, '.gemini');
+    final dir = Directory(geminiDir);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+
+    final envPath = PlatformUtils.joinPath(geminiDir, '.env');
+    final envFile = File(envPath);
+
+    // 读取现有内容，按行解析成 Map
+    final Map<String, String> envMap = {};
+    final List<String> keyOrder = [];
+    if (await envFile.exists()) {
+      final lines = await envFile.readAsLines();
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+        final eqIdx = trimmed.indexOf('=');
+        if (eqIdx < 0) continue;
+        final key = trimmed.substring(0, eqIdx).trim();
+        final value = trimmed.substring(eqIdx + 1).trim();
+        if (!keyOrder.contains(key)) keyOrder.add(key);
+        envMap[key] = value;
+      }
+    }
+
+    // 写入 / 移除目标字段
+    void setOrRemove(String key, String? value) {
+      if (value != null && value.isNotEmpty) {
+        if (!keyOrder.contains(key)) keyOrder.add(key);
+        envMap[key] = value;
+      } else {
+        keyOrder.remove(key);
+        envMap.remove(key);
+      }
+    }
+
+    setOrRemove('GEMINI_API_KEY', profile.apiToken);
+    setOrRemove('GOOGLE_GEMINI_BASE_URL', profile.baseUrl);
+    setOrRemove('GEMINI_MODEL', profile.model);
+
+    // 重新序列化
+    final output = keyOrder.map((k) => '$k=${envMap[k]}').join('\n');
+    await envFile.writeAsString(output.isEmpty ? '' : '$output\n');
+  }
+
+  /// 清理 Gemini .env 中的供应商字段
+  Future<void> _clearGeminiEnv() async {
+    final home = PlatformUtils.userHome;
+    final envPath = PlatformUtils.joinPath(home, '.gemini', '.env');
+    final envFile = File(envPath);
+    if (!await envFile.exists()) return;
+
+    try {
+      final lines = await envFile.readAsLines();
+      final keysToRemove = {'GEMINI_API_KEY', 'GOOGLE_GEMINI_BASE_URL', 'GEMINI_MODEL'};
+      final remaining = lines.where((line) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty || trimmed.startsWith('#')) return true;
+        final key = trimmed.split('=').first.trim();
+        return !keysToRemove.contains(key);
+      }).toList();
+      final output = remaining.join('\n');
+      await envFile.writeAsString(output.isEmpty ? '' : '$output\n');
+    } catch (_) {}
   }
 
   /// 写入 Claude Code 配置 (~/.claude/settings.json)
@@ -687,6 +814,15 @@ class ProviderSwitchService extends ChangeNotifier {
     'gpt-4.1-nano',
     'gpt-4o',
     'gpt-4o-mini',
+  ];
+
+  /// 获取 Gemini 可用模型列表
+  static const List<String> geminiModels = [
+    'gemini-3.1-pro-preview',
+    'gemini-3-flash',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite-preview-06-17',
   ];
 
   /// Codex reasoning effort 选项
@@ -975,6 +1111,31 @@ class ProviderSwitchService extends ChangeNotifier {
     return file.readAsString();
   }
 
+  /// 读取 Gemini .env 完整内容（用于预览）
+  static Future<String> readGeminiEnvFile() async {
+    final home = PlatformUtils.userHome;
+    final path = PlatformUtils.joinPath(home, '.gemini', '.env');
+    final file = File(path);
+    if (!await file.exists()) return '';
+    return file.readAsString();
+  }
+
+  /// 读取 Gemini settings.json 完整内容（用于预览）
+  static Future<String> readGeminiSettingsFile() async {
+    final home = PlatformUtils.userHome;
+    final path = PlatformUtils.joinPath(home, '.gemini', 'settings.json');
+    final file = File(path);
+    if (!await file.exists()) return '';
+    final raw = await file.readAsString();
+    try {
+      final decoded = jsonDecode(raw);
+      const encoder = JsonEncoder.withIndent('  ');
+      return encoder.convert(decoded);
+    } catch (_) {
+      return raw;
+    }
+  }
+
   /// 读取 Codex auth.json 完整内容（用于预览）
   static Future<String> readCodexAuthFile() async {
     final home = PlatformUtils.userHome;
@@ -998,6 +1159,21 @@ class ProviderSwitchService extends ChangeNotifier {
     }
     const encoder = JsonEncoder.withIndent('  ');
     return encoder.convert({'OPENAI_API_KEY': apiKey.trim()});
+  }
+
+  /// 生成 Gemini 配置预览 dotenv（与实际写入逻辑保持一致）
+  String generateGeminiPreview(ProviderProfile profile) {
+    final lines = <String>[];
+    if (profile.apiToken != null && profile.apiToken!.isNotEmpty) {
+      lines.add('GEMINI_API_KEY=${profile.apiToken}');
+    }
+    if (profile.baseUrl != null && profile.baseUrl!.isNotEmpty) {
+      lines.add('GOOGLE_GEMINI_BASE_URL=${profile.baseUrl}');
+    }
+    if (profile.model != null && profile.model!.isNotEmpty) {
+      lines.add('GEMINI_MODEL=${profile.model}');
+    }
+    return lines.isEmpty ? '# (empty)' : lines.join('\n');
   }
 
   /// 生成 Codex 配置预览 TOML（与实际写入逻辑保持一致）

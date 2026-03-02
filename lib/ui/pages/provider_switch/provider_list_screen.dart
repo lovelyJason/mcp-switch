@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../l10n/s.dart';
 import '../../../data/database.dart';
@@ -412,8 +413,26 @@ class _ProviderListItemState extends State<_ProviderListItem> {
                           // 悬停操作
                           if (_isHovering) ...[
                             const SizedBox(width: 12),
+                            if (isActive)
+                              Container(
+                                height: 32,
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFd97757).withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  S.get('provider_in_use'),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFFd97757),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
                             if (!isActive) _buildActivateButton(),
-                            if (!isActive) const SizedBox(width: 8),
+                            const SizedBox(width: 8),
                             _buildEditButton(),
                             const SizedBox(width: 8),
                             _buildDeleteButton(),
@@ -462,6 +481,22 @@ class _ProviderListItemState extends State<_ProviderListItem> {
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+            if (widget.profile.website?.isNotEmpty == true) ...[
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: () {
+                  final url = Uri.tryParse(widget.profile.website!);
+                  if (url != null) launchUrl(url);
+                },
+                child: Icon(
+                  Icons.open_in_new,
+                  size: 14,
+                  color: widget.isDark
+                      ? Colors.deepPurple.shade300
+                      : Colors.deepPurple,
                 ),
               ),
             ],

@@ -178,6 +178,13 @@ class _SettingsScreenState extends State<SettingsScreen>
   Future<void> _checkForUpdates() async {
     final updateService = Provider.of<UpdateService>(context, listen: false);
 
+    Toast.show(
+      context,
+      message: S.get('checking_for_updates'),
+      type: ToastType.info,
+      duration: const Duration(seconds: 5),
+    );
+
     try {
       final update = await updateService.checkForUpdates();
       if (!mounted) return;
@@ -1162,13 +1169,29 @@ class _SettingsScreenState extends State<SettingsScreen>
             style: TextStyle(color: Colors.grey),
           ),
           const SizedBox(height: 24),
-          OutlinedButton.icon(
-            onPressed: _checkForUpdates,
-            icon: const Icon(Icons.refresh, size: 16),
-            label: Text(S.get('check_for_updates')),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Theme.of(context).primaryColor,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _checkForUpdates,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: Text(S.get('check_for_updates')),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Theme.of(context).primaryColor,
+                ),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: () {
+                  launchUrl(Uri.parse('https://github.com/lovelyJason/mcp-switch/releases'));
+                },
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: const Text('Releases'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Theme.of(context).primaryColor,
+                ),
+              ),
+            ],
           ),
         ],
       ),

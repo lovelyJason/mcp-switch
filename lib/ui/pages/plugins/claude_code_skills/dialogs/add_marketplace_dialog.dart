@@ -665,7 +665,7 @@ class _CustomMarketplaceInputDialogState extends State<_CustomMarketplaceInputDi
     super.dispose();
   }
 
-  /// 解析输入，提取 owner/repo 格式
+  /// 解析输入，提取 owner/repo 格式或 git URL
   String? _parseMarketplaceInput(String input) {
     final trimmed = input.trim();
     if (trimmed.isEmpty) return null;
@@ -696,14 +696,20 @@ class _CustomMarketplaceInputDialogState extends State<_CustomMarketplaceInputDi
     final urlPattern = RegExp(r'github\.com/([a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)');
     final urlMatch = urlPattern.firstMatch(trimmed);
     if (urlMatch != null) {
-      // 去掉可能的 .git 后缀和路径
       var repo = urlMatch.group(1)!;
       repo = repo.replaceAll(RegExp(r'\.git$'), '');
-      // 去掉可能的子路径 (如 /tree/main)
       if (repo.contains('/tree/') || repo.contains('/blob/')) {
         repo = repo.split('/').take(2).join('/');
       }
       return repo;
+    }
+
+    // 情况5: 任意 Git URL（https://xxx.com/xxx 或 git@xxx:xxx）
+    if (trimmed.startsWith('https://') ||
+        trimmed.startsWith('http://') ||
+        trimmed.startsWith('git@') ||
+        trimmed.startsWith('ssh://')) {
+      return trimmed;
     }
 
     return null;

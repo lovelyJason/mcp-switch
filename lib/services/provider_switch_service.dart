@@ -187,86 +187,33 @@ class ProviderSwitchService extends ChangeNotifier {
   }
 
   Future<void> _syncClaudeOfficial() async {
-    String? model;
-    String? apiToken;
-    String? baseUrl;
-    String? maxOutputTokens;
-    String? maxThinkingTokens;
-    try {
-      final home = PlatformUtils.userHome;
-      final path = PlatformUtils.joinPath(home, '.claude', 'settings.json');
-      final file = File(path);
-      if (await file.exists()) {
-        final config = jsonDecode(await file.readAsString());
-        if (config is Map<String, dynamic>) {
-          model = config['model'] as String?;
-          final env = config['env'];
-          if (env is Map<String, dynamic>) {
-            apiToken = env['ANTHROPIC_AUTH_TOKEN'] as String?;
-            baseUrl = env['ANTHROPIC_BASE_URL'] as String?;
-            maxOutputTokens = env['CLAUDE_CODE_MAX__OUTPUT_TOKENS'] as String?;
-            maxThinkingTokens = env['MAX_THINKING_TOKENS'] as String?;
-          }
-        }
-      }
-    } catch (_) {}
-
-    // 根据是否配置了自定义 base URL 判断是官方还是第三方中转
-    final isThirdParty = baseUrl != null && baseUrl.isNotEmpty;
-    final name = isThirdParty ? _extractHost(baseUrl) : 'Official';
-    final description = isThirdParty
-        ? 'Third-party Relay'
-        : 'Anthropic Official';
-
     final officialId = '${officialIdPrefix}claude';
     final existing = await _db.getProfileById(officialId);
     final now = DateTime.now();
 
     if (existing != null) {
-      // 已存在：只更新数据字段，不动 isActive
-      await _db.updateProfile(
-        ProviderProfilesCompanion(
-          id: Value(officialId),
-          editorType: const Value('claude'),
-          name: Value(name),
-          description: Value(description),
-          apiToken: Value(apiToken),
-          baseUrl: Value(baseUrl),
-          model: Value(model ?? 'sonnet'),
-          maxOutputTokens: Value(maxOutputTokens),
-          maxThinkingTokens: Value(maxThinkingTokens),
-          updatedAt: Value(now),
-        ),
-      );
-    } else {
-      // 首次创建：默认激活
-      await _db.insertProfile(
-        ProviderProfilesCompanion.insert(
-          id: officialId,
-          editorType: 'claude',
-          name: name,
-          description: Value(description),
-          isActive: const Value(true),
-          apiToken: Value(apiToken),
-          baseUrl: Value(baseUrl),
-          model: Value(model ?? 'sonnet'),
-          maxOutputTokens: Value(maxOutputTokens),
-          maxThinkingTokens: Value(maxThinkingTokens),
-          createdAt: now,
-          updatedAt: now,
-        ),
-      );
+      // 已存在：不动任何字段，保持原样
+      return;
     }
-  }
 
-  /// 从 URL 中提取 host 作为配置名称
-  static String _extractHost(String? url) {
-    if (url == null || url.isEmpty) return 'Unknown';
-    try {
-      return Uri.parse(url).host;
-    } catch (_) {
-      return url.length > 30 ? '${url.substring(0, 27)}...' : url;
-    }
+    // 首次创建：官方配置，字段为空，默认激活
+    await _db.insertProfile(
+      ProviderProfilesCompanion.insert(
+        id: officialId,
+        editorType: 'claude',
+        name: 'Official',
+        description: const Value('Anthropic Official'),
+        isActive: const Value(true),
+        apiToken: const Value(null),
+        baseUrl: const Value(null),
+        model: const Value(null),
+        maxOutputTokens: const Value(null),
+        maxThinkingTokens: const Value(null),
+        website: const Value('https://www.anthropic.com'),
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
   }
 
   Future<void> _syncCodexOfficial() async {
@@ -346,6 +293,7 @@ class ProviderSwitchService extends ChangeNotifier {
           modelReasoningEffort: Value(reasoningEffort ?? 'high'),
           personality: Value(personality ?? 'pragmatic'),
           oauthData: Value(oauthData),
+          website: const Value('https://openai.com'),
           createdAt: now,
           updatedAt: now,
         ),
@@ -602,28 +550,38 @@ class ProviderSwitchService extends ChangeNotifier {
     }
     final env = config['env'] as Map<String, dynamic>;
 
-    // 更新供应商相关字段（仅当 profile 明确设置了值时才写入，未设值时保持原样）
+    // 更新供应商相关字段
     if (profile.apiToken != null && profile.apiToken!.isNotEmpty) {
       env['ANTHROPIC_AUTH_TOKEN'] = profile.apiToken;
+    } else {
+      env.remove('ANTHROPIC_AUTH_TOKEN');
     }
 
     if (profile.baseUrl != null && profile.baseUrl!.isNotEmpty) {
       env['ANTHROPIC_BASE_URL'] = profile.baseUrl;
+    } else {
+      env.remove('ANTHROPIC_BASE_URL');
     }
 
     if (profile.maxOutputTokens != null &&
         profile.maxOutputTokens!.isNotEmpty) {
       env['CLAUDE_CODE_MAX__OUTPUT_TOKENS'] = profile.maxOutputTokens;
+    } else {
+      env.remove('CLAUDE_CODE_MAX__OUTPUT_TOKENS');
     }
 
     if (profile.maxThinkingTokens != null &&
         profile.maxThinkingTokens!.isNotEmpty) {
       env['MAX_THINKING_TOKENS'] = profile.maxThinkingTokens;
+    } else {
+      env.remove('MAX_THINKING_TOKENS');
     }
 
     // model 放在顶层
     if (profile.model != null && profile.model!.isNotEmpty) {
       config['model'] = profile.model;
+    } else {
+      config.remove('model');
     }
 
     final dir = file.parent;

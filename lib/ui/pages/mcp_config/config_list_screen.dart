@@ -24,6 +24,7 @@ class ConfigListScreen extends StatefulWidget {
 
 class _ConfigListScreenState extends State<ConfigListScreen> {
   final PluginMcpService _pluginMcpService = PluginMcpService();
+  bool _projectSortDescending = true; // 默认倒序排列
 
   @override
   void initState() {
@@ -85,9 +86,12 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                         color: Colors.grey,
                       ),
                       const SizedBox(width: 6),
-                      const Text(
-                        '通过claude mcp的cli添加的mcp默认是项目级别的，MCP Switch支持UI添加和终端命令添加两种方式',
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      Expanded(
+                        child: const Text(
+                          '通过claude mcp的cli添加的mcp默认是项目级别的，MCP Switch支持UI添加和终端命令添加两种方式\n'
+                          '切记：Claude Code 如果要启用和禁用 MCP，一定要在对应项目中进行开关操作，全局配置中切换状态无效',
+                          style: TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
                       ),
                     ],
                   ),
@@ -127,11 +131,11 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                           if (projectProfiles.isNotEmpty) ...[
                             if (globalProfile != null ||
                                 _pluginMcpService.mcpServers.isNotEmpty)
-                              _buildSectionHeader(
-                                S.get('project_config_section'),
-                                tooltip: S.get('project_config_tooltip'),
-                              ),
-                            ...projectProfiles.map(
+                              _buildProjectSectionHeader(),
+                            ...(  _projectSortDescending
+                                ? projectProfiles.reversed
+                                : projectProfiles
+                            ).map(
                               (profile) => ProjectCard(
                                 profile: profile,
                                 onDelete: () =>
@@ -190,6 +194,68 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildProjectSectionHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+      child: Row(
+        children: [
+          Text(
+            S.get('project_config_section'),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Tooltip(
+            message: S.get('project_config_tooltip'),
+            preferBelow: false,
+            verticalOffset: 16,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade800,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            textStyle: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              height: 1.5,
+            ),
+            child: Icon(
+              Icons.help_outline,
+              size: 16,
+              color: Colors.grey.shade500,
+            ),
+          ),
+          const Spacer(),
+          Tooltip(
+            message: _projectSortDescending ? '当前：最新在前' : '当前：最早在前',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () {
+                setState(() {
+                  _projectSortDescending = !_projectSortDescending;
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(
+                  _projectSortDescending
+                      ? Icons.arrow_downward
+                      : Icons.arrow_upward,
+                  size: 16,
+                  color: Colors.deepPurple.shade300,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -245,7 +245,7 @@ MCP Switch 是一个跨平台（macOS / Windows）的 Flutter 应用，旨在帮
 
 ## 📄 许可证
 
-[MIT License](LICENSE)
+[GPL-3.0 License](LICENSE)
 
 ## 🙌 贡献
 
@@ -275,7 +275,14 @@ python3 scripts/update_icon.py <您的新图片路径>
 
 ## MacOS安装注意事项
 
-如果打不开，提示包损坏，需要开启隐私安全里面的【允许以下来源的应用程序： 任何来源】，如果没有这个选项，需要
+由于 macOS 的安全机制，非 App Store 下载的应用可能会触发此提示。您可以按照以下步骤快速修复：
+
+
+```bash
+sudo xattr -rd com.apple.quarantine "/Applications/MCP Switch.app"
+```
+
+如果仍然未解决，提示包损坏，需要开启隐私安全里面的【允许以下来源的应用程序： 任何来源】，如果没有这个选项，需要
 
 ```bash
 sudo spctl --master-disable

@@ -132,14 +132,15 @@ class _CodexSkillDetailDialogState extends State<_CodexSkillDetailDialog> {
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                   ),
-                  // 删除按钮
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                    onPressed: _deleteSkill,
-                    tooltip: S.get('delete'),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                  ),
+                  // 删除按钮（系统内置 Skill 不显示）
+                  if (!widget.skill.isSystem)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                      onPressed: _deleteSkill,
+                      tooltip: S.get('delete'),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20),
                     onPressed: () => Navigator.of(context).pop(),

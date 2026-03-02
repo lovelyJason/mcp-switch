@@ -14,8 +14,34 @@ class _CodexCustomSkillInstallDialogState extends State<_CodexCustomSkillInstall
   bool _isInstalling = false;
   String? _statusMessage;
 
+  /// 判断是否为 GitHub 可解析的 URL（含短格式 owner/repo）
+  bool _isGitHubUrl(String url) {
+    if (url.contains('github.com')) return true;
+    // 短格式：owner/repo（无协议前缀、无空格、恰好一个斜杠）
+    if (!url.contains('://') && !url.contains('@') && !url.contains(' ')) {
+      final parts = url.split('/');
+      if (parts.length == 2 && parts[0].isNotEmpty && parts[1].isNotEmpty) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   // 解析 GitHub URL 获取 owner, repo, branch, path
   Map<String, String>? _parseGitHubUrl(String url) {
+    // 短格式：owner/repo → 默认 branch=main, path=根目录
+    if (!url.contains('://') && !url.contains('@') && !url.contains(' ')) {
+      final parts = url.split('/');
+      if (parts.length == 2 && parts[0].isNotEmpty && parts[1].isNotEmpty) {
+        return {
+          'owner': parts[0],
+          'repo': parts[1],
+          'branch': 'main',
+          'path': '',
+        };
+      }
+    }
+
     final treeMatch = RegExp(
       r'github\.com/([^/]+)/([^/]+)/tree/([^/]+)/(.+)',
     ).firstMatch(url);
@@ -45,6 +71,19 @@ class _CodexCustomSkillInstallDialogState extends State<_CodexCustomSkillInstall
         'repo': blobMatch.group(2)!,
         'branch': blobMatch.group(3)!,
         'path': dirPath.isEmpty ? '' : dirPath,
+      };
+    }
+
+    // GitHub 仓库根 URL：github.com/owner/repo
+    final repoMatch = RegExp(
+      r'github\.com/([^/]+)/([^/\s]+)',
+    ).firstMatch(url);
+    if (repoMatch != null) {
+      return {
+        'owner': repoMatch.group(1)!,
+        'repo': repoMatch.group(2)!.replaceAll('.git', ''),
+        'branch': 'main',
+        'path': '',
       };
     }
 
@@ -114,6 +153,15 @@ class _CodexCustomSkillInstallDialogState extends State<_CodexCustomSkillInstall
   }
 
   Future<void> _doInstall(String url, String skillName) async {
+    if (_isGitHubUrl(url)) {
+      await _doInstallFromGitHub(url, skillName);
+    } else {
+      await _doInstallFromGit(url, skillName);
+    }
+  }
+
+  /// 从 GitHub API 安装（原有逻辑）
+  Future<void> _doInstallFromGitHub(String url, String skillName) async {
     final parsed = _parseGitHubUrl(url);
     if (parsed == null) {
       if (mounted) {
@@ -180,6 +228,65 @@ class _CodexCustomSkillInstallDialogState extends State<_CodexCustomSkillInstall
       if (!await skillMdFile.exists()) {
         await skillDir.delete(recursive: true);
         throw Exception('No SKILL.md found in the directory');
+      }
+
+      setState(() {
+        _isInstalling = false;
+        _statusMessage = null;
+      });
+
+      if (mounted) {
+        Toast.show(context, message: S.get('skill_install_success'), type: ToastType.success);
+        Navigator.of(context).pop();
+        widget.onInstalled();
+      }
+    } catch (e) {
+      setState(() {
+        _isInstalling = false;
+        _statusMessage = null;
+      });
+      if (mounted) {
+        Toast.show(context, message: '${S.get('skill_install_failed')}: $e', type: ToastType.error);
+      }
+    }
+  }
+
+  /// 从任意 Git 地址 clone 安装
+  Future<void> _doInstallFromGit(String url, String skillName) async {
+    setState(() {
+      _isInstalling = true;
+      _statusMessage = S.get('fetching_skill');
+    });
+
+    try {
+      final home = PlatformUtils.userHome;
+      final skillDir = Directory(PlatformUtils.joinPath(home, '.codex', 'skills', skillName));
+      if (await skillDir.exists()) {
+        throw Exception('Skill directory already exists: $skillName');
+      }
+
+      setState(() => _statusMessage = S.get('installing_skill'));
+
+      // 用 git clone --depth 1 浅克隆，减少下载量
+      final result = await PlatformUtils.runCommand(
+        'git clone --depth 1 "$url" "${skillDir.path}"',
+      ).timeout(const Duration(seconds: 60));
+
+      if (result.exitCode != 0) {
+        throw Exception('git clone failed: ${result.stderr}');
+      }
+
+      // 删除 .git 目录，只保留文件
+      final gitDir = Directory(PlatformUtils.joinPath(skillDir.path, '.git'));
+      if (await gitDir.exists()) {
+        await gitDir.delete(recursive: true);
+      }
+
+      // 检查 SKILL.md 是否存在
+      final skillMdFile = File(PlatformUtils.joinPath(skillDir.path, 'SKILL.md'));
+      if (!await skillMdFile.exists()) {
+        await skillDir.delete(recursive: true);
+        throw Exception('No SKILL.md found in the repository');
       }
 
       setState(() {
@@ -469,7 +576,7 @@ class _CodexSkillInstallFormDialogState extends State<_CodexSkillInstallFormDial
       return;
     }
 
-    if (url.isEmpty || !url.contains('github.com')) {
+    if (url.isEmpty) {
       setState(() => _errorMessage = S.get('invalid_github_url'));
       return;
     }

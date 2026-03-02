@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/mcp_profile.dart';
@@ -5,9 +7,14 @@ import '../../models/mcp_server_health.dart';
 import '../../models/editor_type.dart';
 import '../../services/config_service.dart';
 import '../../services/mcp_health_check_service.dart';
+import '../../utils/platform_utils.dart';
+import '../../services/terminal_service.dart';
 import '../pages/mcp_config/mcp_server_edit_screen.dart';
 import 'custom_dialog.dart';
+import 'custom_toast.dart';
 import '../../l10n/s.dart';
+import '../../utils/global_keys.dart';
+import '../../utils/project_type_detector.dart';
 
 class ProjectCard extends StatefulWidget {
   final McpProfile profile;
@@ -29,8 +36,107 @@ class ProjectCard extends StatefulWidget {
 class _ProjectCardState extends State<ProjectCard> {
   bool _isHovering = false;
 
+  /// 项目级 MCP 健康状态：serverName -> 状态文字（Connected / Failed to connect / Needs authentication）
+  final Map<String, String> _mcpHealthMap = {};
+  bool _isCheckingHealth = false;
+  bool _hasCheckedHealth = false;
+
+  /// 授权操作自动退出定时器（1分钟后自动退出 Claude REPL）
+  Timer? _authExitTimer;
+
+  /// 项目类型图标信息
+  ProjectIconInfo? _iconInfo;
+
   /// 判断是否是全局配置
   bool get _isGlobalProfile => widget.profile.content['isGlobal'] == true;
+
+  @override
+  void initState() {
+    super.initState();
+    _detectProjectType();
+  }
+
+  @override
+  void dispose() {
+    _authExitTimer?.cancel();
+    super.dispose();
+  }
+
+  /// 异步检测项目类型
+  Future<void> _detectProjectType() async {
+    if (_isGlobalProfile) return;
+    final dir = widget.profile.name;
+    if (dir.isEmpty) return;
+    final info = await ProjectTypeDetector.detect(dir);
+    if (mounted) setState(() => _iconInfo = info);
+  }
+
+  /// 展开时执行 claude mcp list 获取连接状态
+  /// [force] 为 true 时忽略已检查标识，强制重新检查
+  Future<void> _checkProjectMcpHealth({bool force = false}) async {
+    if (_isCheckingHealth || _isGlobalProfile) return;
+    if (_hasCheckedHealth && !force) return;
+
+    // 获取项目目录路径
+    final projectDir = widget.profile.name;
+    if (projectDir.isEmpty || !Directory(projectDir).existsSync()) return;
+
+    setState(() => _isCheckingHealth = true);
+
+    try {
+      final result = await PlatformUtils.runCommand(
+        'claude mcp list',
+        workingDirectory: projectDir,
+      ).timeout(const Duration(seconds: 30));
+
+      if (!mounted) return;
+
+      if (result.exitCode == 0) {
+        _parseMcpListOutput(result.stdout as String);
+      }
+    } catch (_) {
+      // 超时或其他错误，静默处理
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCheckingHealth = false;
+          _hasCheckedHealth = true;
+        });
+      }
+    }
+  }
+
+  /// 解析 claude mcp list 输出
+  void _parseMcpListOutput(String output) {
+    _mcpHealthMap.clear();
+    final lines = output.split('\n');
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty || trimmed.startsWith('Checking')) continue;
+
+      // ✓ Connected
+      final connectedMatch = RegExp(r'^(.+?):\s*.+?\s*-\s*✓\s*Connected$').firstMatch(trimmed);
+      if (connectedMatch != null) {
+        _mcpHealthMap[connectedMatch.group(1)!.trim()] = 'Connected';
+        continue;
+      }
+
+      // ✗ Failed to connect
+      final failedMatch = RegExp(r'^(.+?):\s*.+?\s*-\s*✗\s*Failed to connect').firstMatch(trimmed);
+      if (failedMatch != null) {
+        _mcpHealthMap[failedMatch.group(1)!.trim()] = 'Failed';
+        continue;
+      }
+
+      // ! Needs authentication
+      final authMatch = RegExp(r'^(.+?):\s*.+?\s*-\s*!\s*Needs authentication').firstMatch(trimmed);
+      if (authMatch != null) {
+        _mcpHealthMap[authMatch.group(1)!.trim()] = 'Needs auth';
+        continue;
+      }
+    }
+  }
 
   void _addServer() {
     Navigator.of(context).push(
@@ -108,6 +214,56 @@ class _ProjectCardState extends State<ProjectCard> {
     }
   }
 
+  /// 打开终端面板，cd 到项目目录并执行 claude 进入 REPL 授权
+  void _openAuthTerminal() {
+    final terminalService = Provider.of<TerminalService>(context, listen: false);
+    final projectDir = widget.profile.name;
+
+    // 打开终端面板
+    terminalService.openTerminalPanel();
+
+    // 延迟确保终端已初始化，cd + claude 进入 REPL
+    Future.delayed(const Duration(milliseconds: 500), () {
+      terminalService.sendCommand('cd "$projectDir" && claude');
+    });
+
+    // 启动2分钟自动退出定时器，防止 REPL 会话占用
+    _authExitTimer?.cancel();
+    _authExitTimer = Timer(const Duration(minutes: 2), () {
+      // 先用 Escape 退出可能的 TUI 子界面
+      terminalService.writeToPty('\x1b');
+      Future.delayed(const Duration(milliseconds: 300), () {
+        // 发送 /exit 尝试正常退出 REPL
+        terminalService.writeToPty('/exit');
+        Future.delayed(const Duration(milliseconds: 500), () {
+          terminalService.writeToPty('\r');
+          Future.delayed(const Duration(milliseconds: 1000), () {
+            // Ctrl+C 兜底，确保退出
+            terminalService.writeToPty('\x03');
+          });
+        });
+      });
+    });
+
+    // 等 REPL 启动后，用 writeToPty 发 /mcp + 回车（TUI 模式必须用 raw bytes）
+    Future.delayed(const Duration(milliseconds: 3000), () {
+      terminalService.writeToPty('/mcp');
+      Future.delayed(const Duration(milliseconds: 800), () {
+        terminalService.writeToPty('\r');
+        // 用 globalNavigatorKey 的 context 弹 Toast，确保层级在终端面板之上
+        final ctx = globalNavigatorKey.currentContext;
+        if (ctx != null) {
+          Toast.show(
+            ctx,
+            message: '已进入 /mcp 菜单，请用方向键选择需要授权的 MCP 后回车。操作完成后请 Ctrl+C 退出 Claude 环境，以防会话占用（1分钟后将自动退出）',
+            type: ToastType.info,
+            duration: const Duration(seconds: 6),
+          );
+        }
+      });
+    });
+  }
+
   void _confirmDeleteServer(String name) {
     CustomConfirmDialog.show(
       context,
@@ -168,23 +324,15 @@ class _ProjectCardState extends State<ProjectCard> {
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
+            onExpansionChanged: (expanded) {
+              if (expanded && !_isGlobalProfile) {
+                _checkProjectMcpHealth();
+              }
+            },
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            leading: Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                color: isDark
-                    ? Colors.white.withOpacity(0.1)
-                    : Colors.grey.shade100,
-                border: Border.all(color: borderColor),
-                ),
-              child: Icon(
-                Icons.folder_open,
-                color: isDark ? Colors.white70 : Colors.grey,
-              ),
-            ),
+            leading: _buildProjectIcon(isDark, borderColor),
             title: Row(
               children: [
                 Flexible(
@@ -232,93 +380,150 @@ class _ProjectCardState extends State<ProjectCard> {
               style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
             ),
             children: [
-              // 继承的全局 MCP（仅非全局项目显示）
-              if (!_isGlobalProfile && inheritedMcpServers.isNotEmpty) ...[
-                _buildSectionDivider('继承自全局配置', isDark),
-                ...inheritedMcpServers.keys.map((name) {
-                  final config = inheritedMcpServers[name];
-                  final isDisabled = disabledMcpServers.contains(name);
-                  return _buildInheritedServerItem(
-                    name,
-                    config,
-                    isDisabled: isDisabled,
-                    onToggle: (enabled) => _toggleInheritedServer(name, enabled),
-                  );
-                }),
-              ],
-
-              // 项目自有 MCP
-              if (!_isGlobalProfile && mcpServers.isNotEmpty && inheritedMcpServers.isNotEmpty)
-                _buildSectionDivider('项目配置', isDark),
-
-              if (projectServerCount == 0 && inheritedServerCount == 0)
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text('No servers configured.', style: TextStyle(color: Colors.grey)),
-                ),
-
-              ...mcpServers.keys.map((name) {
-                final config = mcpServers[name];
-                return _buildServerItem(name, config);
-              }),
-
-              // Add Button + Test Connection Button
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border(
-                    top: BorderSide(
-                      color: isDark
-                          ? Colors.white.withOpacity(0.05)
-                          : Colors.grey.shade100,
-                    ),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    TextButton.icon(
-                      onPressed: _addServer,
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Add MCP Server'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.blue,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    // 测试连接按钮（仅全局配置显示）
-                    if (_isGlobalProfile)
-                      Consumer<McpHealthCheckService>(
-                        builder: (context, healthService, _) {
-                          return TextButton.icon(
-                            onPressed: healthService.isChecking
-                                ? null
-                                : () => healthService.checkAllServers(force: true),
-                            icon: healthService.isChecking
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.deepPurple,
-                                    ),
-                                  )
-                                : const Icon(Icons.network_check, size: 14),
-                            label: Text(
-                              healthService.isChecking
-                                  ? S.get('checking_connection')
-                                  : S.get('test_connection'),
-                            ),
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.deepPurple,
-                              textStyle: const TextStyle(fontSize: 12),
-                            ),
+              Stack(
+                children: [
+                  // 展开内容主体
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // 继承的全局 MCP（仅非全局项目显示）
+                      if (!_isGlobalProfile && inheritedMcpServers.isNotEmpty) ...[
+                        _buildSectionDivider('继承自全局配置', isDark),
+                        ...inheritedMcpServers.keys.map((name) {
+                          final config = inheritedMcpServers[name];
+                          final isDisabled = disabledMcpServers.contains(name);
+                          return _buildInheritedServerItem(
+                            name,
+                            config,
+                            isDisabled: isDisabled,
+                            onToggle: (enabled) => _toggleInheritedServer(name, enabled),
                           );
-                        },
+                        }),
+                      ],
+
+                      // 项目自有 MCP
+                      if (!_isGlobalProfile && mcpServers.isNotEmpty && inheritedMcpServers.isNotEmpty)
+                        _buildSectionDivider('项目配置', isDark),
+
+                      if (projectServerCount == 0 && inheritedServerCount == 0)
+                        const Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Text('No servers configured.', style: TextStyle(color: Colors.grey)),
+                        ),
+
+                      ...mcpServers.keys.map((name) {
+                        final config = mcpServers[name];
+                        return _buildServerItem(name, config);
+                      }),
+
+                      // Add Button + Test Connection Button
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            top: BorderSide(
+                              color: isDark
+                                  ? Colors.white.withOpacity(0.05)
+                                  : Colors.grey.shade100,
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            TextButton.icon(
+                              onPressed: _addServer,
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Add MCP Server'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.blue,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            // 刷新连接状态按钮（仅项目级配置显示）
+                            if (!_isGlobalProfile)
+                              TextButton.icon(
+                                onPressed: _isCheckingHealth
+                                    ? null
+                                    : () => _checkProjectMcpHealth(force: true),
+                                icon: _isCheckingHealth
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.deepPurple,
+                                        ),
+                                      )
+                                    : const Icon(Icons.refresh, size: 14),
+                                label: Text(
+                                  _isCheckingHealth ? 'Checking...' : 'Refresh Status',
+                                ),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.deepPurple,
+                                  textStyle: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                            // 测试连接按钮（仅全局配置显示）
+                            if (_isGlobalProfile)
+                              Consumer<McpHealthCheckService>(
+                                builder: (context, healthService, _) {
+                                  return TextButton.icon(
+                                    onPressed: healthService.isChecking
+                                        ? null
+                                        : () => healthService.checkAllServers(force: true),
+                                    icon: healthService.isChecking
+                                        ? const SizedBox(
+                                            width: 14,
+                                            height: 14,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.deepPurple,
+                                            ),
+                                          )
+                                        : const Icon(Icons.network_check, size: 14),
+                                    label: Text(
+                                      healthService.isChecking
+                                          ? S.get('checking_connection')
+                                          : S.get('test_connection'),
+                                    ),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: Colors.deepPurple,
+                                      textStyle: const TextStyle(fontSize: 12),
+                                    ),
+                                  );
+                                },
+                              ),
+                          ],
+                        ),
                       ),
-                  ],
-                ),
+                    ],
+                  ),
+                  // loading 蒙层
+                  if (_isCheckingHealth && !_isGlobalProfile)
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: (isDark ? Colors.black : Colors.white).withOpacity(0.5),
+                          borderRadius: const BorderRadius.only(
+                            bottomLeft: Radius.circular(16),
+                            bottomRight: Radius.circular(16),
+                          ),
+                        ),
+                        child: const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.deepPurple,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ],
           ),
@@ -411,6 +616,12 @@ class _ProjectCardState extends State<ProjectCard> {
                 ),
               ),
             ),
+            if (_mcpHealthMap.containsKey(name) && _mcpHealthMap[name] != 'Connected') ...[
+              const SizedBox(width: 6),
+              _buildConnectionStatusTag(_mcpHealthMap[name]!),
+              if (_mcpHealthMap[name] == 'Needs auth')
+                _buildAuthButton(),
+            ],
           ],
         ),
         subtitle: Text(cmd, style: const TextStyle(fontFamily: 'Menlo', fontSize: 11)),
@@ -573,6 +784,12 @@ class _ProjectCardState extends State<ProjectCard> {
                 ),
               ),
             ),
+            if (_mcpHealthMap.containsKey(name) && _mcpHealthMap[name] != 'Connected') ...[
+              const SizedBox(width: 6),
+              _buildConnectionStatusTag(_mcpHealthMap[name]!),
+              if (_mcpHealthMap[name] == 'Needs auth')
+                _buildAuthButton(),
+            ],
           ],
         ),
         subtitle: Text(
@@ -588,6 +805,121 @@ class _ProjectCardState extends State<ProjectCard> {
             inactiveTrackColor: isDark
                 ? Colors.grey.shade800
                 : Colors.grey.shade300,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 构建连接状态标签（Connected / Failed / Needs auth）
+  Widget _buildConnectionStatusTag(String status) {
+    Color bgColor;
+    Color textColor;
+    String label;
+
+    switch (status) {
+      case 'Connected':
+        bgColor = Colors.green.withOpacity(0.1);
+        textColor = Colors.green;
+        label = 'Connected';
+        break;
+      case 'Failed':
+        bgColor = Colors.red.withOpacity(0.1);
+        textColor = Colors.red;
+        label = 'Failed';
+        break;
+      case 'Needs auth':
+        bgColor = Colors.orange.withOpacity(0.1);
+        textColor = Colors.orange;
+        label = 'Needs auth';
+        break;
+      default:
+        bgColor = Colors.grey.withOpacity(0.1);
+        textColor = Colors.grey;
+        label = status;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          color: textColor,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  /// 构建项目图标（根据检测到的项目类型或 favicon 显示）
+  Widget _buildProjectIcon(bool isDark, Color borderColor) {
+    final info = _iconInfo;
+    // 有 favicon 时显示本地图片
+    if (info?.faviconPath != null) {
+      return Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.grey.shade100,
+          border: Border.all(color: borderColor),
+        ),
+        child: ClipOval(
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Image.file(
+              File(info!.faviconPath!),
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => Icon(
+                Icons.folder_open,
+                color: isDark ? Colors.white70 : Colors.grey,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 根据项目类型显示对应图标
+    final type = info?.type ?? ProjectType.unknown;
+    final iconData = ProjectTypeDetector.getIcon(type);
+    final iconColor = type == ProjectType.unknown
+        ? (isDark ? Colors.white70 : Colors.grey)
+        : ProjectTypeDetector.getColor(type);
+
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.grey.shade100,
+        border: Border.all(color: borderColor),
+      ),
+      child: Icon(iconData, color: iconColor, size: 22),
+    );
+  }
+
+  /// 构建授权按钮（Needs auth 旁边的小钥匙图标）
+  Widget _buildAuthButton() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(4),
+        onTap: _openAuthTerminal,
+        child: Tooltip(
+          message: '打开终端授权',
+          child: Container(
+            padding: const EdgeInsets.all(2),
+            child: const Icon(
+              Icons.vpn_key,
+              size: 12,
+              color: Colors.orange,
+            ),
           ),
         ),
       ),

@@ -1,3 +1,29 @@
+## v1.2.0
+
+### ✨ 新增特性
+
+- **项目级 MCP 健康检测**：展开项目卡片时自动运行 `claude mcp list`，实时显示各 MCP Server 的连接状态（Connected / Failed / Needs auth），Needs auth 状态支持一键打开终端完成 OAuth 授权
+- **智能项目类型识别**：自动检测项目框架类型（Flutter、Vue、React、Nuxt、Next.js、Rust、Go、Python 等 11 种），展示对应框架图标和品牌配色，支持自动识别项目 favicon
+- **项目列表排序**：支持按时间正序/倒序切换项目配置列表的排列顺序
+- **供应商官网链接**：供应商列表中如果配置了官网地址，名称旁会显示跳转图标，点击直接在浏览器中打开
+- **供应商悬浮状态标签**：hover 已激活的供应商时，显示「使用中」标签，视觉更直观
+- **支持任意 Git 仓库安装 Skill**：Codex Skills 自定义安装不再局限于 GitHub，支持任意 Git 仓库地址（SSH / HTTPS）
+- **Marketplace 支持 Git URL**：Claude Code 插件市场添加自定义源时，除了 owner/repo 格式外，现在也支持直接输入 Git 地址
+
+### 🚀 优化改进
+
+- **检查更新体验优化**：点击检查更新时立即显示提示信息，并新增 Releases 按钮作为手动下载的后备方案
+- **命令执行支持工作目录**：`PlatformUtils.runCommand` 新增 `workingDirectory` 参数，支持在指定目录下执行命令
+- **国际化文案更新**：技能安装和市场相关提示文案不再绑定 GitHub，统一为通用仓库链接描述
+- **OAuth 授权定时器延长**：MCP OAuth 授权终端的自动退出时间从 1 分钟延长至 2 分钟，给用户更充裕的操作时间
+
+### 🐛 问题修复
+
+- **修复官方供应商数据被污染**：`official-claude` 预设记录不再从 `settings.json` 同步第三方中转数据，官方配置始终保持干净（name=Official, baseUrl=空）
+- **修复切换官方供应商时残留第三方配置**：激活官方供应商后，`settings.json` 中的 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN` 等第三方字段会被正确清除
+- **修复 Codex 系统技能可被删除**：内置系统技能的详情弹窗中不再显示删除按钮
+
+
 ## v1.1.0
 
 ### ✨ 新增特性

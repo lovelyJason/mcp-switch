@@ -243,12 +243,14 @@ class PlatformUtils {
   /// 执行 shell 命令（跨平台）
   /// - Windows: 使用 PowerShell
   /// - macOS/Linux: 使用 bash -c，并添加常用 PATH
-  static Future<ProcessResult> runCommand(String command) async {
+  /// [workingDirectory] 可选，指定命令执行的工作目录
+  static Future<ProcessResult> runCommand(String command, {String? workingDirectory}) async {
     return Process.run(
       PlatformCommandsConfig.claudeShell,
       [...PlatformCommandsConfig.claudeShellArgs, command],
       runInShell: PlatformCommandsConfig.claudeRunInShell,
       environment: PlatformCommandsConfig.claudeEnvironment,
+      workingDirectory: workingDirectory,
     );
   }
 

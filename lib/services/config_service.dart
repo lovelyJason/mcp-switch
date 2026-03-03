@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'logger_service.dart';
+import 'cursor_workspace_service.dart';
 import '../utils/platform_utils.dart';
 
 /// 配置服务类 (ConfigService)
@@ -24,16 +25,16 @@ class ConfigService extends ChangeNotifier {
   // In-memory storage of profiles for each editor
   final Map<EditorType, List<McpProfile>> _profiles = {};
   final Map<EditorType, String?> _activeProfileIds = {};
-  
+
   // Selected Editor (Redundant Global State)
   EditorType _selectedEditor = EditorType.cursor;
   EditorType get selectedEditor => _selectedEditor;
-  
+
   // Theme
   final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(
     ThemeMode.system,
   );
-  
+
   bool _minimizeToTray = true;
   bool get minimizeToTray => _minimizeToTray;
 
@@ -66,11 +67,11 @@ class ConfigService extends ChangeNotifier {
       } else {
         _editorConfigPaths[type] = _getDefaultPath(type);
       }
-      
+
       String? activeId = prefs.getString('active_${type.name}');
       _activeProfileIds[type] = activeId;
     }
-    
+
     // Load theme
     final themeIndex = prefs.getInt('theme_mode');
     if (themeIndex != null &&
@@ -78,12 +79,12 @@ class ConfigService extends ChangeNotifier {
         themeIndex < ThemeMode.values.length) {
       themeModeNotifier.value = ThemeMode.values[themeIndex];
     }
-    
+
     _minimizeToTray = prefs.getBool('minimize_to_tray') ?? true;
     _launchAtStartup =
         prefs.getBool('launch_at_startup') ??
         false; // Actual check via package done in _initStartup
-    
+
     // Load Log Level
     final logLevel = prefs.getInt('log_level') ?? 0; // Default Error
     logLevelNotifier.value = logLevel;
@@ -99,7 +100,8 @@ class ConfigService extends ChangeNotifier {
     _claudeApiBaseUrl = prefs.getString('claude_api_base_url');
 
     // Load Claude Model
-    _claudeModel = prefs.getString('claude_model') ?? 'claude-sonnet-4-20250514';
+    _claudeModel =
+        prefs.getString('claude_model') ?? 'claude-sonnet-4-20250514';
 
     // Load Chatbot Icon Setting
     _showChatbotIcon = prefs.getBool('show_chatbot_icon') ?? true;
@@ -118,10 +120,25 @@ class ConfigService extends ChangeNotifier {
     _windowsShell = prefs.getString('windows_shell');
 
     // Load Terminal AI Model Preference
-    _terminalAiModelId = prefs.getString('terminal_ai_model_id') ?? 'claude-opus-4-5-20251101';
+    _terminalAiModelId =
+        prefs.getString('terminal_ai_model_id') ?? 'claude-opus-4-5-20251101';
 
     // Load Chat AI Model Preference
-    _chatAiModelId = prefs.getString('chat_ai_model_id') ?? 'claude-sonnet-4-5-20250929';
+    _chatAiModelId =
+        prefs.getString('chat_ai_model_id') ?? 'claude-sonnet-4-5-20250929';
+
+    // Load Remote Claw config
+    _remoteClawTelegramEnabled = prefs.getBool('rc_telegram_enabled') ?? false;
+    _remoteClawTelegramBotToken =
+        prefs.getString('rc_telegram_bot_token') ?? '';
+    _remoteClawTelegramChatId = prefs.getString('rc_telegram_chat_id') ?? '';
+    _remoteClawDingtalkEnabled = prefs.getBool('rc_dingtalk_enabled') ?? false;
+    _remoteClawDingtalkWebhookUrl =
+        prefs.getString('rc_dingtalk_webhook_url') ?? '';
+    _remoteClawDingtalkSecret = prefs.getString('rc_dingtalk_secret') ?? '';
+    _remoteClawPort = prefs.getInt('rc_port') ?? 8099;
+    _remoteClawAutoStart = prefs.getBool('rc_auto_start') ?? false;
+    _remoteClawCallbackHost = prefs.getString('rc_callback_host') ?? '';
   }
 
   String _getDefaultPath(EditorType type) {
@@ -132,13 +149,23 @@ class ConfigService extends ChangeNotifier {
       case EditorType.cursor:
         return PlatformUtils.joinPath(home, '.cursor', 'mcp.json');
       case EditorType.windsurf:
-        return PlatformUtils.joinPath(home, '.codeium', 'windsurf', 'mcp_config.json');
+        return PlatformUtils.joinPath(
+          home,
+          '.codeium',
+          'windsurf',
+          'mcp_config.json',
+        );
       case EditorType.claude:
         return PlatformUtils.joinPath(home, '.claude.json');
       case EditorType.codex:
         return PlatformUtils.joinPath(home, '.codex', 'config.toml');
       case EditorType.antigravity:
-        return PlatformUtils.joinPath(home, '.gemini', 'antigravity', 'mcp_config.json');
+        return PlatformUtils.joinPath(
+          home,
+          '.gemini',
+          'antigravity',
+          'mcp_config.json',
+        );
       case EditorType.gemini:
         return PlatformUtils.joinPath(home, '.gemini', 'settings.json');
     }
@@ -153,17 +180,19 @@ class ConfigService extends ChangeNotifier {
     // 1. Load cached profiles first to preserve IDs and metadata (like descriptions)
     final prefs = await SharedPreferences.getInstance();
     final String? allProfilesJson = prefs.getString('mcp_profiles');
-    
+
     if (allProfilesJson != null) {
       try {
         final Map<String, dynamic> decoded = jsonDecode(allProfilesJson);
         decoded.forEach((key, value) {
           final editor = EditorType.values.firstWhere(
-            (e) => e.name == key, 
-            orElse: () => EditorType.cursor
+            (e) => e.name == key,
+            orElse: () => EditorType.cursor,
           );
           if (value is List) {
-            _profiles[editor] = value.map((e) => McpProfile.fromJson(e)).toList();
+            _profiles[editor] = value
+                .map((e) => McpProfile.fromJson(e))
+                .toList();
           }
         });
       } catch (e) {
@@ -246,7 +275,8 @@ class ConfigService extends ChangeNotifier {
                       projectConfig.containsKey('mcpServers')) {
                     final mcpServers = projectConfig['mcpServers'];
                     // 读取 disabledMcpServers（项目级禁用继承的全局 MCP）
-                    final disabledMcpServers = projectConfig['disabledMcpServers'];
+                    final disabledMcpServers =
+                        projectConfig['disabledMcpServers'];
 
                     if (existingMap.containsKey(projectPath)) {
                       final existing = existingMap[projectPath]!;
@@ -257,7 +287,8 @@ class ConfigService extends ChangeNotifier {
                           description: existing.description,
                           content: {
                             'mcpServers': mcpServers,
-                            if (disabledMcpServers is List) 'disabledMcpServers': disabledMcpServers,
+                            if (disabledMcpServers is List)
+                              'disabledMcpServers': disabledMcpServers,
                           },
                         ),
                       );
@@ -269,7 +300,8 @@ class ConfigService extends ChangeNotifier {
                           description: 'Project Config',
                           content: {
                             'mcpServers': mcpServers,
-                            if (disabledMcpServers is List) 'disabledMcpServers': disabledMcpServers,
+                            if (disabledMcpServers is List)
+                              'disabledMcpServers': disabledMcpServers,
                           },
                         ),
                       );
@@ -309,9 +341,10 @@ class ConfigService extends ChangeNotifier {
                         name: key,
                         description: 'Imported from config',
                         content: {
-                          'mcpServers': {key: value}
-                        }
-                      ));
+                          'mcpServers': {key: value},
+                        },
+                      ),
+                    );
                   }
                 });
               }
@@ -323,21 +356,21 @@ class ConfigService extends ChangeNotifier {
         }
       }
     }
-    
+
     // 3. Persist the synchronized state
     await _persistProfiles();
   }
 
   Future<void> saveProfile(EditorType editor, McpProfile profile) async {
     if (_profiles[editor] == null) _profiles[editor] = [];
-    
+
     final index = _profiles[editor]!.indexWhere((p) => p.id == profile.id);
     if (index >= 0) {
       _profiles[editor]![index] = profile;
     } else {
       _profiles[editor]!.add(profile);
     }
-    
+
     await _persistProfiles();
     await _syncCombinedConfig(editor);
     notifyListeners();
@@ -346,7 +379,7 @@ class ConfigService extends ChangeNotifier {
   Future<void> deleteProfile(EditorType editor, String profileId) async {
     _profiles[editor]?.removeWhere((p) => p.id == profileId);
     if (_activeProfileIds[editor] == profileId) {
-      _activeProfileIds[editor] = null; 
+      _activeProfileIds[editor] = null;
     }
     await _persistProfiles();
     await _syncCombinedConfig(editor);
@@ -367,7 +400,10 @@ class ConfigService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _writeToEditorConfig(EditorType editor, Map<String, dynamic> content) async {
+  Future<void> _writeToEditorConfig(
+    EditorType editor,
+    Map<String, dynamic> content,
+  ) async {
     final path = _editorConfigPaths[editor];
     if (path == null) return;
 
@@ -376,7 +412,7 @@ class ConfigService extends ChangeNotifier {
     if (!await file.exists()) {
       await file.create(recursive: true);
     }
-    
+
     const encoder = JsonEncoder.withIndent('  ');
     await file.writeAsString(encoder.convert(content));
   }
@@ -389,7 +425,7 @@ class ConfigService extends ChangeNotifier {
     });
     await prefs.setString('mcp_profiles', jsonEncode(data));
   }
-  
+
   Future<void> _syncCombinedConfig(EditorType editor) async {
     final profiles = _profiles[editor] ?? [];
 
@@ -461,7 +497,7 @@ class ConfigService extends ChangeNotifier {
       // --- CODEX TOML GENERATION WITH PRESERVATION ---
       final path = getConfigPath(editor);
       final file = File(path);
-      
+
       if (!await file.exists()) {
         await file.create(recursive: true);
         await file.writeAsString('');
@@ -594,13 +630,13 @@ class ConfigService extends ChangeNotifier {
   // 注意：模型名称需要与 Anthropic API 实际支持的名称一致
   // 参考 Claude Code CLI 的 /model 命令
   static const List<String> availableModels = [
-    'claude-opus-4-5-20251101',        // Opus 4.5 (Most capable)
-    'claude-sonnet-4-5-20250929',      // Sonnet 4.5 (Recommended)
-    'claude-sonnet-4-20250514',        // Sonnet 4
-    'claude-haiku-4-5-20251001',       // Haiku 4.5 (Fastest)
-    'claude-3-5-sonnet-20241022',      // Claude 3.5 Sonnet
-    'claude-3-5-haiku-20241022',       // Claude 3.5 Haiku
-    'claude-3-opus-20240229',          // Claude 3 Opus
+    'claude-opus-4-5-20251101', // Opus 4.5 (Most capable)
+    'claude-sonnet-4-5-20250929', // Sonnet 4.5 (Recommended)
+    'claude-sonnet-4-20250514', // Sonnet 4
+    'claude-haiku-4-5-20251001', // Haiku 4.5 (Fastest)
+    'claude-3-5-sonnet-20241022', // Claude 3.5 Sonnet
+    'claude-3-5-haiku-20241022', // Claude 3.5 Haiku
+    'claude-3-opus-20240229', // Claude 3 Opus
   ];
 
   String _claudeModel = 'claude-sonnet-4-20250514';
@@ -659,10 +695,92 @@ class ConfigService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ──────────────────────────────────────────
+  // Remote Claw 配置
+  // ──────────────────────────────────────────
+
+  bool _remoteClawTelegramEnabled = false;
+  String _remoteClawTelegramBotToken = '';
+  String _remoteClawTelegramChatId = '';
+  bool _remoteClawDingtalkEnabled = false;
+  String _remoteClawDingtalkWebhookUrl = '';
+  String _remoteClawDingtalkSecret = '';
+  int _remoteClawPort = 8099;
+  bool _remoteClawAutoStart = false;
+  String _remoteClawCallbackHost = '';
+
+  bool get remoteClawTelegramEnabled => _remoteClawTelegramEnabled;
+  String get remoteClawTelegramBotToken => _remoteClawTelegramBotToken;
+  String get remoteClawTelegramChatId => _remoteClawTelegramChatId;
+  bool get remoteClawDingtalkEnabled => _remoteClawDingtalkEnabled;
+  String get remoteClawDingtalkWebhookUrl => _remoteClawDingtalkWebhookUrl;
+  String get remoteClawDingtalkSecret => _remoteClawDingtalkSecret;
+  int get remoteClawPort => _remoteClawPort;
+  bool get remoteClawAutoStart => _remoteClawAutoStart;
+  String get remoteClawCallbackHost => _remoteClawCallbackHost;
+
+  Future<void> saveRemoteClawConfig({
+    required bool telegramEnabled,
+    required String telegramBotToken,
+    required String telegramChatId,
+    required bool dingtalkEnabled,
+    required String dingtalkWebhookUrl,
+    required String dingtalkSecret,
+    int port = 8099,
+    bool? autoStart,
+  }) async {
+    _remoteClawTelegramEnabled = telegramEnabled;
+    _remoteClawTelegramBotToken = telegramBotToken;
+    _remoteClawTelegramChatId = telegramChatId;
+    _remoteClawDingtalkEnabled = dingtalkEnabled;
+    _remoteClawDingtalkWebhookUrl = dingtalkWebhookUrl;
+    _remoteClawDingtalkSecret = dingtalkSecret;
+    _remoteClawPort = port;
+    if (autoStart != null) _remoteClawAutoStart = autoStart;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('rc_telegram_enabled', telegramEnabled);
+    await prefs.setString('rc_telegram_bot_token', telegramBotToken);
+    await prefs.setString('rc_telegram_chat_id', telegramChatId);
+    await prefs.setBool('rc_dingtalk_enabled', dingtalkEnabled);
+    await prefs.setString('rc_dingtalk_webhook_url', dingtalkWebhookUrl);
+    await prefs.setString('rc_dingtalk_secret', dingtalkSecret);
+    await prefs.setInt('rc_port', port);
+    if (autoStart != null) await prefs.setBool('rc_auto_start', autoStart);
+    notifyListeners();
+  }
+
+  Future<void> saveRemoteClawCallbackHost(String host) async {
+    _remoteClawCallbackHost = host;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('rc_callback_host', host);
+    notifyListeners();
+  }
+
+  Future<void> saveRemoteClawServerConfig({
+    required int port,
+    required String callbackHost,
+  }) async {
+    _remoteClawPort = port;
+    _remoteClawCallbackHost = callbackHost;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('rc_port', port);
+    await prefs.setString('rc_callback_host', callbackHost);
+    notifyListeners();
+  }
+
+  Future<void> saveRemoteClawAutoStart(bool autoStart) async {
+    _remoteClawAutoStart = autoStart;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('rc_auto_start', autoStart);
+    notifyListeners();
+  }
+
   // Getters
   List<McpProfile> getProfiles(EditorType editor) => _profiles[editor] ?? [];
   String? getActiveProfileId(EditorType editor) => _activeProfileIds[editor];
-  String getConfigPath(EditorType editor) => _editorConfigPaths[editor] ?? _getDefaultPath(editor);
+  String getConfigPath(EditorType editor) =>
+      _editorConfigPaths[editor] ?? _getDefaultPath(editor);
 
   Future<void> setMinimizeToTray(bool value) async {
     _minimizeToTray = value;
@@ -732,13 +850,20 @@ class ConfigService extends ChangeNotifier {
           isEnabled = serverConfig['enabled'] == true;
         }
 
-        // Toggle status
-        serverConfig['disabled'] = isEnabled;
+        final nowDisabled = isEnabled; // toggle: was enabled -> now disabled
+
+        serverConfig['disabled'] = nowDisabled;
         serverConfig.remove('enabled');
 
         await saveProfile(editor, profile);
-        // saveProfile calls _syncCombinedConfig, so we are good.
-        // But saveProfile also calls notifyListeners.
+
+        // Cursor: 同步写入所有 workspace 的 SQLite 数据库
+        if (editor == EditorType.cursor) {
+          final cursorWs = CursorWorkspaceService.instance;
+          if (cursorWs.shouldUseSqlite) {
+            await cursorWs.toggleServerInAllWorkspaces(name, nowDisabled);
+          }
+        }
       }
     }
   }
@@ -853,7 +978,7 @@ class ConfigService extends ChangeNotifier {
             ? '"$name"'
             : name;
         buffer.writeln('[mcp_servers.$safeName]');
-        
+
         buffer.writeln('command = "${config['command']}"');
         final args = config['args'];
         if (args is List && args.isNotEmpty) {

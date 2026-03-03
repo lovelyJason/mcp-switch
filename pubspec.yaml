@@ -61,7 +61,11 @@ dependencies:
   pasteboard: ^0.4.0
   archive: ^4.0.0  # ZIP compression for skills import/export
   drift: ^2.22.1  # Type-safe SQLite ORM for provider switch
+  sqlite3: ^2.4.8  # Raw SQLite access for Cursor workspace DB
   sqlite3_flutter_libs: ^0.5.28  # SQLite native libraries
+  shelf: ^1.4.2  # Embedded HTTP server for Remote Claw
+  shelf_router: ^1.1.4  # HTTP routing for Remote Claw
+  crypto: ^3.0.6  # HMAC-SHA256 for DingTalk signature
 
 dev_dependencies:
   flutter_test:

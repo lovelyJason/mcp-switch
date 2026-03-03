@@ -10,6 +10,7 @@ import '../../components/custom_toast.dart';
 import '../../components/windows_shell_selector_dialog.dart';
 import '../settings/settings_screen.dart';
 import '../mcp_config/mcp_server_edit_screen.dart';
+import '../remote_claw/remote_claw_screen.dart';
 import 'header_action_buttons.dart';
 
 /// 首页头部组件
@@ -43,19 +44,23 @@ class HomeHeader extends StatelessWidget {
 
     return Container(
       height: kTitleBarHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.only(left: 16, right: 16, top: 12),
       color: Theme.of(context).scaffoldBackgroundColor,
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // macOS 红绿灯占位
-          const SizedBox(width: 70),
+          // macOS 红绿灯占位（留足够空间，避免重叠）
+          const SizedBox(width: 6),
 
           // 应用标题
           _buildAppTitle(context),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
 
           // 设置按钮
           _buildSettingsButton(context),
+
+          // Remote Claw 按钮
+          _buildRemoteClawButton(context),
 
           // 编辑器选择器（右对齐）
           Expanded(child: _buildEditorSelector(context)),
@@ -111,6 +116,19 @@ class HomeHeader extends StatelessWidget {
         );
       },
       tooltip: 'Settings',
+    );
+  }
+
+  /// Remote Claw 按钮
+  Widget _buildRemoteClawButton(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.phonelink_ring_outlined, size: 20),
+      onPressed: () {
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const RemoteClawScreen()));
+      },
+      tooltip: 'Remote Claw',
     );
   }
 

@@ -24,9 +24,12 @@ import 'services/logger_service.dart';
 import 'utils/platform_utils.dart';
 import 'config/platform_commands_config.dart';
 import 'config/mcp_presets_config.dart';
+import 'constants/editor_features.dart';
+import 'services/cursor_workspace_service.dart';
 import 'utils/global_keys.dart';
 import 'data/database.dart';
 import 'services/provider_switch_service.dart';
+import 'services/remote_claw_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -74,6 +77,8 @@ void main() async {
   await S.init();
   await PlatformCommandsConfig.init(); // 加载平台命令配置
   await McpPresetsConfig.init(); // 加载 MCP 预设配置
+  await EditorFeatures.init(); // 加载编辑器功能版本兼容配置
+  await CursorWorkspaceService.instance.init(); // 检测 Cursor 版本
 
   final dbPath = await AppDatabase.getDatabasePath();
   final configPath = '${PlatformUtils.userHome}/.mcp-switch/config.json';
@@ -123,6 +128,21 @@ void main() async {
   final updateService = UpdateService();
   updateService.init();
 
+  // Initialize Remote Claw Service（远程审批服务）
+  final remoteClawService = RemoteClawService();
+  remoteClawService.loadConfig(
+    telegramEnabled: configService.remoteClawTelegramEnabled,
+    telegramBotToken: configService.remoteClawTelegramBotToken,
+    telegramChatId: configService.remoteClawTelegramChatId,
+    dingtalkEnabled: configService.remoteClawDingtalkEnabled,
+    dingtalkWebhookUrl: configService.remoteClawDingtalkWebhookUrl,
+    dingtalkSecret: configService.remoteClawDingtalkSecret,
+    callbackHost: configService.remoteClawCallbackHost,
+  );
+  if (configService.remoteClawAutoStart) {
+    remoteClawService.start();
+  }
+
   runApp(
     MultiProvider(
       providers: [
@@ -133,6 +153,7 @@ void main() async {
         ChangeNotifierProvider.value(value: mcpHealthCheckService),
         ChangeNotifierProvider.value(value: updateService),
         ChangeNotifierProvider.value(value: providerSwitchService),
+        ChangeNotifierProvider.value(value: remoteClawService),
       ],
       child: const McpSwitchApp(),
     ),

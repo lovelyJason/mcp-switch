@@ -6,6 +6,8 @@ import '../../../models/mcp_profile.dart';
 import '../../../services/config_service.dart';
 import '../../../services/plugin_mcp_service.dart';
 import '../../../services/gemini_extension_mcp_service.dart';
+import '../../../services/cursor_workspace_service.dart';
+import '../../components/cursor_workspace_card.dart';
 import '../../components/profile_card.dart';
 import '../../components/project_card.dart';
 import '../../components/plugin_mcp_card.dart';
@@ -31,6 +33,10 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
+  // Cursor workspace 列表
+  List<CursorWorkspace>? _cursorWorkspaces;
+  bool _loadingWorkspaces = false;
+
   @override
   void initState() {
     super.initState();
@@ -42,9 +48,25 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
     if (widget.editorType == EditorType.gemini) {
       _geminiExtensionMcpService.loadExtensionMcpServers();
     }
+    // Cursor 加载 workspace 列表
+    if (widget.editorType == EditorType.cursor) {
+      _loadCursorWorkspaces();
+    }
     _searchController.addListener(() {
       setState(() => _searchQuery = _searchController.text.trim().toLowerCase());
     });
+  }
+
+  Future<void> _loadCursorWorkspaces() async {
+    if (_loadingWorkspaces) return;
+    _loadingWorkspaces = true;
+    final workspaces = await CursorWorkspaceService.instance.getWorkspaces();
+    if (mounted) {
+      setState(() {
+        _cursorWorkspaces = workspaces;
+        _loadingWorkspaces = false;
+      });
+    }
   }
 
   @override
@@ -242,6 +264,10 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
           );
         }
 
+        if (widget.editorType == EditorType.cursor) {
+          return _buildCursorView(profiles, activeId, configService);
+        }
+
         return ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
           child: ListView.builder(
@@ -257,14 +283,6 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                     configService.toggleServerStatus(widget.editorType, profile.id),
                 onDelete: () => _confirmDelete(context, configService, profile),
                 onEdit: () {
-                  if (widget.editorType == EditorType.cursor) {
-                    Toast.show(
-                      context,
-                      message: 'Cursor 请前往客户端界面进行编辑',
-                      type: ToastType.info,
-                    );
-                    return;
-                  }
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => McpServerEditScreen(
@@ -279,6 +297,116 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildCursorView(
+    List<McpProfile> profiles,
+    String? activeId,
+    ConfigService configService,
+  ) {
+    final serverNames = profiles.map((p) => p.name).toList();
+
+    return Column(
+      children: [
+        _buildCursorDisabledTip(),
+        Expanded(
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              children: [
+                // 全局 MCP 配置
+                _buildSectionHeader(
+                  'MCP Servers @ ~/.cursor/mcp.json',
+                  tooltip: S.get('cursor_global_mcp_tooltip'),
+                ),
+                ...profiles.map((profile) {
+                  final isActive = profile.id == activeId;
+                  return ProfileCard(
+                    profile: profile,
+                    isActive: isActive,
+                    onSelect: () =>
+                        configService.toggleServerStatus(widget.editorType, profile.id),
+                    onDelete: () => _confirmDelete(context, configService, profile),
+                    onEdit: () {
+                      Toast.show(
+                        context,
+                        message: S.get('cursor_edit_in_client'),
+                        type: ToastType.info,
+                      );
+                    },
+                  );
+                }),
+
+                // Workspace 项目级配置
+                if (CursorWorkspaceService.instance.shouldUseSqlite &&
+                    _cursorWorkspaces != null &&
+                    _cursorWorkspaces!.isNotEmpty) ...[
+                  _buildSectionHeader(
+                    S.get('cursor_workspace_section'),
+                    tooltip: S.get('cursor_workspace_tooltip'),
+                  ),
+                  ..._cursorWorkspaces!.map((ws) => CursorWorkspaceCard(
+                    workspace: ws,
+                    globalServerNames: serverNames,
+                  )),
+                ],
+
+                if (_loadingWorkspaces)
+                  const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCursorDisabledTip() {
+    final cursorWs = CursorWorkspaceService.instance;
+    final mechanism = cursorWs.disabledMechanism;
+    if (mechanism == null) return const SizedBox.shrink();
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final version = cursorWs.cursorVersion ?? '';
+    final versionSuffix = version.isNotEmpty ? ' (Cursor v$version)' : '';
+
+    final isSqlite = mechanism == 'sqlite_workspace';
+    final tipText = isSqlite
+        ? '${S.get('cursor_disabled_via_sqlite_sync')}$versionSuffix'
+        : '${S.get('cursor_disabled_via_json')}$versionSuffix';
+    final tipColor = isSqlite ? Colors.green : Colors.blue;
+    final tipIcon = isSqlite ? Icons.check_circle_outline : Icons.info_outline;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: tipColor.withOpacity(isDark ? 0.1 : 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: tipColor.withOpacity(0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(tipIcon, size: 16, color: tipColor.shade700),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              tipText,
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? tipColor.shade300 : tipColor.shade900,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

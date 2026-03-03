@@ -579,6 +579,50 @@ class SkillsService {
     return commands;
   }
 
+  /// 修复 enabledPlugins：将 installed_plugins.json 中所有已安装插件
+  /// 补写进 settings.json 的 enabledPlugins（仅补缺失项，不覆盖已有值）
+  /// 返回实际补写的插件数量
+  Future<int> fixEnabledPlugins() async {
+    final pluginsFile = File(PlatformUtils.joinPath(_home, '.claude', 'plugins', 'installed_plugins.json'));
+    final settingsFile = File(PlatformUtils.joinPath(_home, '.claude', 'settings.json'));
+
+    if (!await pluginsFile.exists()) return 0;
+
+    // 读取已安装插件列表
+    final pluginsContent = await pluginsFile.readAsString();
+    final pluginsJson = jsonDecode(pluginsContent) as Map<String, dynamic>;
+    final installedKeys = (pluginsJson['plugins'] as Map<String, dynamic>? ?? {}).keys.toSet();
+
+    // 读取 settings.json
+    Map<String, dynamic> settings = {};
+    if (await settingsFile.exists()) {
+      try {
+        settings = jsonDecode(await settingsFile.readAsString()) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+
+    final enabledPlugins = (settings['enabledPlugins'] as Map<String, dynamic>?) ?? {};
+    int fixedCount = 0;
+
+    for (final key in installedKeys) {
+      if (!enabledPlugins.containsKey(key)) {
+        enabledPlugins[key] = true;
+        fixedCount++;
+      }
+    }
+
+    if (fixedCount > 0) {
+      settings['enabledPlugins'] = enabledPlugins;
+      if (!await settingsFile.exists()) {
+        await settingsFile.create(recursive: true);
+      }
+      const encoder = JsonEncoder.withIndent('  ');
+      await settingsFile.writeAsString(encoder.convert(settings));
+    }
+
+    return fixedCount;
+  }
+
   /// 解析 command .md 文件中的描述
   String? _parseCommandDescription(String content) {
     // 解析 YAML frontmatter 中的 description

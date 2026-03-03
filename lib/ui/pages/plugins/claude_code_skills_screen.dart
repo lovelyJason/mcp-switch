@@ -381,7 +381,14 @@ class _SkillsScreenState extends State<SkillsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle(S.get('local_plugins'), Icons.extension, Colors.blue),
+        _buildSectionTitleWithAction(
+          S.get('local_plugins'),
+          Icons.extension,
+          Colors.blue,
+          actionIcon: Icons.build_outlined,
+          actionTooltip: S.get('fix_enabled_plugins'),
+          onAction: _fixEnabledPlugins,
+        ),
         const SizedBox(height: 12),
         if (_plugins.isEmpty)
           _buildEmptyCard(S.get('no_skills'))
@@ -389,6 +396,26 @@ class _SkillsScreenState extends State<SkillsScreen> {
           _buildPluginCards(isDark),
       ],
     );
+  }
+
+  Future<void> _fixEnabledPlugins() async {
+    final fixedCount = await _skillsService.fixEnabledPlugins();
+    if (!mounted) return;
+    if (fixedCount > 0) {
+      Toast.show(
+        context,
+        message: S.get('fix_enabled_plugins_success').replaceAll('{count}', '$fixedCount'),
+        type: ToastType.success,
+        duration: const Duration(seconds: 4),
+      );
+      await _loadData();
+    } else {
+      Toast.show(
+        context,
+        message: S.get('fix_enabled_plugins_ok'),
+        type: ToastType.info,
+      );
+    }
   }
 
   Widget _buildPluginCards(bool isDark) {
@@ -1275,38 +1302,6 @@ class _SkillsScreenState extends State<SkillsScreen> {
   }
 
   // ============ 公共组件 ============
-  Widget _buildSectionTitle(String title, IconData icon, Color color, {String? subtitle}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 20, color: color),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context).textTheme.titleMedium?.color,
-              ),
-            ),
-          ],
-        ),
-        if (subtitle != null) ...[
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 28),
-            child: Text(
-              subtitle,
-              style: TextStyle(fontSize: 12, color: Colors.grey.withValues(alpha: 0.7)),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
   Widget _buildSectionTitleWithAction(
     String title,
     IconData icon,

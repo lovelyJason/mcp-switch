@@ -1661,9 +1661,9 @@ class _TestConnectionButtonState extends State<_TestConnectionButton> {
     if (_isTesting) {
       labelText = S.get('testing_connection');
     } else if (_lastLatency != null) {
-      labelText = '${S.get('test_connection')} (${_lastLatency}ms)';
+      labelText = '${S.get('test_connection_speed')} (${_lastLatency}ms)';
     } else {
-      labelText = S.get('test_connection');
+      labelText = S.get('test_connection_speed');
     }
 
     return TextButton.icon(

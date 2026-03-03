@@ -1,0 +1,45 @@
+# AI 编辑器功能版本兼容记录
+# ═══════════════════════════════════════════════════════════════
+#
+# 按编辑器分组，记录各功能在不同版本区间的行为差异。
+#
+# 结构说明：
+#   id:           功能唯一标识，代码中通过此 id 引用
+#   description:  功能描述
+#   doc:          对应的详细文档路径（可选）
+#   versions:     版本区间列表，按版本从旧到新排列
+#     - from:       起始版本（含）
+#       to:         结束版本（不含），null 表示一直到最新版
+#       mechanism:  该版本区间使用的机制（枚举值见各功能注释）
+#
+# ═══════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────
+# Cursor
+# ─────────────────────────────────────────
+cursor:
+  # MCP 启用/禁用状态的管理方式
+  #
+  # mechanism 枚举值：
+  #   json_field        - 通过 mcp.json 中的 "disabled": true/false 字段控制
+  #   sqlite_workspace  - 通过 workspace 级 SQLite 数据库 (state.vscdb) 控制
+  #                       DB Key: cursor/disabledMcpServers
+  #                       DB 路径: ~/Library/Application Support/Cursor/User/workspaceStorage/<id>/state.vscdb
+  - id: mcp_disabled
+    description: MCP 启用/禁用状态管理
+    doc: docs/editor-changes/cursor/mcp_disabled_via_sqlite.md
+    versions:
+      - from: "0.46.0"
+        to: null
+        mechanism: sqlite_workspace
+
+  # 项目级 MCP 配置
+  #
+  # mechanism 枚举值：
+  #   project_json  - 支持项目根目录 .cursor/mcp.json
+  - id: project_mcp
+    description: 项目级 MCP 配置
+    versions:
+      - from: "0.46.0"
+        to: null
+        mechanism: project_json

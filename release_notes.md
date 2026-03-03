@@ -1,3 +1,34 @@
+## v1.5.0
+
+### ✨ 新增特性
+
+- **Remote Claw 远程审批**：全新功能模块，在本机启动 HTTP 服务接收 Claude Code Hook 的权限请求，转发到手机端进行远程审批
+  - 支持钉钉机器人和 Telegram Bot 两种通知渠道
+  - 支持 Tailscale 内网穿透，从任意网络审批
+  - 一键安装/卸载 Hook 脚本，自动配置 `~/.claude/settings.json`
+  - 首页新增 Remote Claw 快捷入口
+
+- **Cursor Workspace 级 MCP 管理**：适配 Cursor 将 MCP 启用/禁用状态迁移至 workspace 级 SQLite 数据库的变更
+  - 自动检测本机 Cursor 版本，智能判断 MCP 禁用管理机制（mcp.json / SQLite）
+  - MCP 列表页新增「Workspace 项目级配置」分区，展示 `~/.cursor/projects` 下的所有项目
+  - 支持逐项目查看和切换各 MCP 服务的启用/禁用状态
+  - 开关操作弹窗解释正反向同步差异，提供「在此操作」和「在 Cursor 中设置」两种路径
+  - 「在 Cursor 中设置」包含双步骤漫游引导图，倒计时自动关闭后打开对应项目窗口
+
+- **编辑器版本兼容框架**：新增 `editor_features.yaml` 数据驱动配置，按编辑器和版本区间记录功能机制变更，便于后续扩展
+
+- **插件开关修复**：新增一键修复功能，解决插件已安装但无法以 slash command 调用的问题
+
+### 🚀 优化改进
+
+- 新增 `.claude/commands` 发版命令和 release notes 草拟命令，标准化发布流程
+- 新增编辑器版本变更文档目录 `docs/editor-changes/`，按编辑器分类记录配置机制变更
+
+### 🐛 问题修复
+
+- 修复设置页 API 测速按钮国际化 key 引用错误
+
+
 ## v1.4.0
 
 ### ✨ 新增特性

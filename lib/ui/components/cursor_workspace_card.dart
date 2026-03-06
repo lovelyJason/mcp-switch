@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../services/cursor_workspace_service.dart';
+import '../../utils/project_type_detector.dart';
 import '../../l10n/s.dart';
 import 'custom_toast.dart';
 import 'cursor_mcp_action_dialog.dart';
@@ -25,6 +27,20 @@ class CursorWorkspaceCard extends StatefulWidget {
 class _CursorWorkspaceCardState extends State<CursorWorkspaceCard> {
   bool _isHovering = false;
   bool _isOpening = false;
+  ProjectIconInfo? _iconInfo;
+
+  @override
+  void initState() {
+    super.initState();
+    _detectProjectType();
+  }
+
+  Future<void> _detectProjectType() async {
+    final dir = widget.workspace.folderPath;
+    if (dir.isEmpty) return;
+    final info = await ProjectTypeDetector.detect(dir);
+    if (mounted) setState(() => _iconInfo = info);
+  }
 
   String get _displayPath {
     final path = widget.workspace.folderPath;
@@ -76,9 +92,15 @@ class _CursorWorkspaceCardState extends State<CursorWorkspaceCard> {
 
     // 引导结束后打开 Cursor 项目窗口
     if (mounted) {
-      await CursorWorkspaceService.instance
-          .openCursorProject(widget.workspace.folderPath);
-      setState(() => _isOpening = false);
+      try {
+        await CursorWorkspaceService.instance
+            .openCursorProject(widget.workspace.folderPath);
+      } catch (e) {
+        if (mounted) {
+          Toast.show(context, message: 'Failed to open Cursor', type: ToastType.error);
+        }
+      }
+      if (mounted) setState(() => _isOpening = false);
     }
   }
 
@@ -112,15 +134,7 @@ class _CursorWorkspaceCardState extends State<CursorWorkspaceCard> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            leading: Container(
-              width: 36, height: 36,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.grey.shade100,
-                border: Border.all(color: borderColor),
-              ),
-              child: Icon(Icons.folder_open, color: Colors.grey.shade600, size: 20),
-            ),
+            leading: _buildProjectIcon(isDark, borderColor),
             title: Text(
               _projectName,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
@@ -219,6 +233,50 @@ class _CursorWorkspaceCardState extends State<CursorWorkspaceCard> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildProjectIcon(bool isDark, Color borderColor) {
+    final info = _iconInfo;
+    if (info?.faviconPath != null) {
+      return Container(
+        width: 36, height: 36,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.grey.shade100,
+          border: Border.all(color: borderColor),
+        ),
+        child: ClipOval(
+          child: Padding(
+            padding: const EdgeInsets.all(5),
+            child: Image.file(
+              File(info!.faviconPath!),
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => Icon(
+                Icons.folder_open,
+                color: isDark ? Colors.white70 : Colors.grey,
+                size: 18,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final type = info?.type ?? ProjectType.unknown;
+    final iconData = ProjectTypeDetector.getIcon(type);
+    final iconColor = type == ProjectType.unknown
+        ? (isDark ? Colors.white70 : Colors.grey)
+        : ProjectTypeDetector.getColor(type);
+
+    return Container(
+      width: 36, height: 36,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.grey.shade100,
+        border: Border.all(color: borderColor),
+      ),
+      child: Icon(iconData, color: iconColor, size: 20),
     );
   }
 }

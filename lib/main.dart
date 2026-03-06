@@ -138,6 +138,7 @@ void main() async {
     dingtalkWebhookUrl: configService.remoteClawDingtalkWebhookUrl,
     dingtalkSecret: configService.remoteClawDingtalkSecret,
     callbackHost: configService.remoteClawCallbackHost,
+    useLocalCallback: configService.remoteClawUseLocalCallback,
   );
   if (configService.remoteClawAutoStart) {
     remoteClawService.start();

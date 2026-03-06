@@ -584,6 +584,8 @@
   "remote_claw_open_tailscale_failed": "无法打开 Tailscale 设备页面",
   "remote_claw_callback_host_hint": "100.x.x.x",
   "remote_claw_callback_host_tooltip": "内网穿透使用方法（Tailscale）：\n1. Mac 安装 Tailscale 并登录，获得 100.x.x.x IP\n2. 在此填入该 IP，回车保存\n3. 手机安装 Tailscale 并登录同一账号\n4. 钉钉消息的同意/拒绝按钮即可从任意网段访问",
+  "remote_claw_use_local_callback": "本机通知渠道走 localhost",
+  "remote_claw_use_local_callback_desc": "开启后，钉钉消息中会额外附加「电脑端」按钮，使用 localhost 回调，方便在电脑钉钉中直接点击",
   "remote_claw_hook_status_installed": "已安装",
   "remote_claw_hook_status_not_installed": "未安装",
   "remote_claw_hook_reinstalled": "Hook 已重新安装（端口已更新）",

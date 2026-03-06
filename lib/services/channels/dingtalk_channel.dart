@@ -14,12 +14,14 @@ class DingtalkChannel {
   final String secret; // 加签密钥（以 SEC 开头）
   final int port;
   final String hostAddress; // 回调地址，手机可访问的 IP 或域名（如 Tailscale IP）
+  final String? localHostAddress; // 本机回调地址，非 null 时会在卡片中额外附加本机按钮
 
   DingtalkChannel({
     required this.webhookUrl,
     required this.secret,
     this.port = 8099,
     this.hostAddress = '127.0.0.1',
+    this.localHostAddress,
   });
 
   // ──────────────────────────────────────────
@@ -46,23 +48,35 @@ ${request.commandSummary.isNotEmpty ? '💻 **命令**: `${request.commandSummar
 🆔 **ID**: ${request.id.substring(0, 8)}
 ''';
 
+    final btns = <Map<String, String>>[
+      {
+        'title': '✅ 同意',
+        'actionURL': 'http://$hostAddress:$port/action/allow/${request.id}',
+      },
+      {
+        'title': '❌ 拒绝',
+        'actionURL': 'http://$hostAddress:$port/action/deny/${request.id}',
+      },
+      if (localHostAddress != null) ...{
+        {
+          'title': '✅ 同意（电脑端）',
+          'actionURL':
+              'http://$localHostAddress:$port/action/allow/${request.id}',
+        },
+        {
+          'title': '❌ 拒绝（电脑端）',
+          'actionURL':
+              'http://$localHostAddress:$port/action/deny/${request.id}',
+        },
+      },
+    ];
+
     return {
       'msgtype': 'actionCard',
       'actionCard': {
         'title': title,
         'text': text,
-        'btns': [
-          {
-            'title': '✅ 同意',
-            'actionURL':
-                'http://$hostAddress:$port/action/allow/${request.id}',
-          },
-          {
-            'title': '❌ 拒绝',
-            'actionURL':
-                'http://$hostAddress:$port/action/deny/${request.id}',
-          },
-        ],
+        'btns': btns,
         'btnOrientation': '1', // 横向排列
       },
     };

@@ -99,7 +99,7 @@ claude_code_download:
 
     # 环境变量（macOS 需要添加常用路径到 PATH）
     environment:
-      PATH: "/usr/local/bin:/opt/homebrew/bin:/Users/${USER}/.local/bin:${PATH}"
+      PATH: "/usr/local/bin:/opt/homebrew/bin:${HOME}/.local/bin:${HOME}/.npm-global/bin:${HOME}/.antigravity/antigravity/bin:${PATH}"
 
     # Shell 配置列表
     shells:
@@ -133,7 +133,7 @@ claude_code_download:
 
     # 环境变量
     environment:
-      PATH: "/usr/local/bin:${HOME}/.local/bin:${PATH}"
+      PATH: "/usr/local/bin:${HOME}/.local/bin:${HOME}/.npm-global/bin:${HOME}/.antigravity/antigravity/bin:${PATH}"
 
     # Shell 配置列表
     shells:
@@ -202,7 +202,7 @@ codex_download:
       - ".npm-global/bin/codex"
 
     environment:
-      PATH: "/usr/local/bin:/opt/homebrew/bin:${HOME}/.npm-global/bin:${PATH}"
+      PATH: "/usr/local/bin:/opt/homebrew/bin:${HOME}/.local/bin:${HOME}/.npm-global/bin:${HOME}/.antigravity/antigravity/bin:${PATH}"
 
     shells:
       # --- Zsh 配置 ---
@@ -232,7 +232,7 @@ codex_download:
       - ".npm-global/bin/codex"
 
     environment:
-      PATH: "/usr/local/bin:${HOME}/.npm-global/bin:${PATH}"
+      PATH: "/usr/local/bin:${HOME}/.local/bin:${HOME}/.npm-global/bin:${HOME}/.antigravity/antigravity/bin:${PATH}"
 
     shells:
       # --- Bash 配置 ---
@@ -300,7 +300,7 @@ gemini_download:
       - ".npm-global/bin/gemini"
 
     environment:
-      PATH: "/usr/local/bin:/opt/homebrew/bin:${HOME}/.npm-global/bin:${PATH}"
+      PATH: "/usr/local/bin:/opt/homebrew/bin:${HOME}/.local/bin:${HOME}/.npm-global/bin:${HOME}/.antigravity/antigravity/bin:${PATH}"
 
     shells:
       # --- Zsh 配置 ---
@@ -330,7 +330,7 @@ gemini_download:
       - ".npm-global/bin/gemini"
 
     environment:
-      PATH: "/usr/local/bin:${HOME}/.npm-global/bin:${PATH}"
+      PATH: "/usr/local/bin:${HOME}/.local/bin:${HOME}/.npm-global/bin:${HOME}/.antigravity/antigravity/bin:${PATH}"
 
     shells:
       # --- Bash 配置 ---

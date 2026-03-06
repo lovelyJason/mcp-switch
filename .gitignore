@@ -54,7 +54,6 @@ app.*.map.json
 .flutter-plugins-dependencies
 
 # IDEs & Editors
-.cursor/
 .windsurf/
 .gemini/
 .codeium/

@@ -155,6 +155,7 @@ class _ServerStatusCardState extends State<_ServerStatusCard> {
       context,
       initialPort: _portCtrl.text.trim(),
       initialCallbackHost: _callbackHostCtrl.text.trim(),
+      initialUseLocalCallback: widget.service.useLocalCallback,
       portEditable: !widget.service.isRunning,
     );
     if (result == null) return;
@@ -180,9 +181,11 @@ class _ServerStatusCardState extends State<_ServerStatusCard> {
     }
 
     widget.service.setCallbackHost(host);
+    widget.service.setUseLocalCallback(result.useLocalCallback);
     await configService.saveRemoteClawServerConfig(
       port: widget.service.port,
       callbackHost: host,
+      useLocalCallback: result.useLocalCallback,
     );
 
     if (!mounted) return;
@@ -404,6 +407,44 @@ class _ServerStatusCardState extends State<_ServerStatusCard> {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            // 本机走 localhost 开关
+            Row(
+              children: [
+                Icon(
+                  Icons.computer,
+                  size: 13,
+                  color: isDark ? Colors.grey[400] : Colors.grey[600],
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  S.get('remote_claw_use_local_callback'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Transform.scale(
+                  scale: 0.75,
+                  alignment: Alignment.centerLeft,
+                  child: Switch(
+                    value: widget.service.useLocalCallback,
+                    activeTrackColor: Colors.orange,
+                    onChanged: (v) async {
+                      widget.service.setUseLocalCallback(v);
+                      await context
+                          .read<ConfigService>()
+                          .saveRemoteClawServerConfig(
+                            port: widget.service.port,
+                            callbackHost: widget.service.callbackHost,
+                            useLocalCallback: v,
+                          );
+                    },
+                  ),
+                ),
+              ],
+            ),
             if (widget.service.lastError != null) ...[
               const SizedBox(height: 8),
               Text(
@@ -460,22 +501,26 @@ class _RemoteClawServerConfigResult {
   const _RemoteClawServerConfigResult({
     required this.port,
     required this.callbackHost,
+    required this.useLocalCallback,
   });
 
   final String port;
   final String callbackHost;
+  final bool useLocalCallback;
 }
 
 class _RemoteClawServerConfigDialog extends StatefulWidget {
   const _RemoteClawServerConfigDialog({
     required this.initialPort,
     required this.initialCallbackHost,
+    required this.initialUseLocalCallback,
     required this.portEditable,
     required this.isDark,
   });
 
   final String initialPort;
   final String initialCallbackHost;
+  final bool initialUseLocalCallback;
   final bool portEditable;
   final bool isDark;
 
@@ -483,6 +528,7 @@ class _RemoteClawServerConfigDialog extends StatefulWidget {
     BuildContext context, {
     required String initialPort,
     required String initialCallbackHost,
+    required bool initialUseLocalCallback,
     required bool portEditable,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -495,6 +541,7 @@ class _RemoteClawServerConfigDialog extends StatefulWidget {
       pageBuilder: (context, anim1, anim2) => _RemoteClawServerConfigDialog(
         initialPort: initialPort,
         initialCallbackHost: initialCallbackHost,
+        initialUseLocalCallback: initialUseLocalCallback,
         portEditable: portEditable,
         isDark: isDark,
       ),
@@ -516,12 +563,14 @@ class _RemoteClawServerConfigDialogState
     extends State<_RemoteClawServerConfigDialog> {
   late final TextEditingController _portCtrl;
   late final TextEditingController _callbackHostCtrl;
+  late bool _useLocalCallback;
 
   @override
   void initState() {
     super.initState();
     _portCtrl = TextEditingController(text: widget.initialPort);
     _callbackHostCtrl = TextEditingController(text: widget.initialCallbackHost);
+    _useLocalCallback = widget.initialUseLocalCallback;
   }
 
   @override
@@ -539,6 +588,7 @@ class _RemoteClawServerConfigDialogState
       _RemoteClawServerConfigResult(
         port: normalizedPort.toString(),
         callbackHost: _callbackHostCtrl.text.trim(),
+        useLocalCallback: _useLocalCallback,
       ),
     );
   }
@@ -641,6 +691,39 @@ class _RemoteClawServerConfigDialogState
                   hintStyle: TextStyle(color: hintColor),
                 ),
                 style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          S.get('remote_claw_use_local_callback'),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: labelColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          S.get('remote_claw_use_local_callback_desc'),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: hintColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _useLocalCallback,
+                    activeThumbColor: Colors.orange,
+                    onChanged: (v) => setState(() => _useLocalCallback = v),
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
               Row(

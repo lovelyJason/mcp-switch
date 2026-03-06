@@ -49,13 +49,28 @@ else
   esac
 fi
 
+# Record old version for comparison
+old_full=$(grep 'version:' pubspec.yaml | awk '{print $2}')
+old_build=$(echo "$old_full" | cut -d'+' -f2)
+
 # bump_version logic
 echo "Bumping version ($type)..."
 python3 scripts/bump_version.py --type $type
 
-# Extract new version
-version=$(grep 'version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1)
-echo "New version: $version"
+# Extract new version (full and semver-only)
+full_version=$(grep 'version:' pubspec.yaml | awk '{print $2}')
+version=$(echo "$full_version" | cut -d'+' -f1)
+new_build=$(echo "$full_version" | cut -d'+' -f2)
+
+echo "New version: $full_version (semver=$version, build=$new_build)"
+
+# Verify build number was actually incremented
+if [ "$new_build" = "$old_build" ] || [ -z "$new_build" ]; then
+  echo "❌ ERROR: Build number was NOT incremented! old=$old_build new=$new_build"
+  echo "   pubspec.yaml version must be MAJOR.MINOR.PATCH+BUILD with BUILD always incrementing."
+  exit 1
+fi
+echo "✅ Build number verified: $old_build -> $new_build"
 
 # Sync notes
 if [ -f "RELEASE_DRAFT.md" ]; then

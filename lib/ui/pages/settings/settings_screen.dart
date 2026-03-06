@@ -484,13 +484,13 @@ class _SettingsScreenState extends State<SettingsScreen>
         _buildDropdownTile(
           S.get('log_level'),
           S.get('log_level_desc'),
-          _logLevel > 1
+          _logLevel > 2
               ? 0
-              : _logLevel, // Safety clamp: Invalid levels fallback to Error (0)
+              : _logLevel,
           {
             0: S.get('log_error'),
             1: S.get('log_warning'),
-            // Removed Info and Verbose as per request
+            2: S.get('log_info'),
           },
           (int newValue) {
             setState(() => _logLevel = newValue);

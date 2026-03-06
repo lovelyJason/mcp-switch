@@ -21,14 +21,28 @@ import 'channels/dingtalk_channel.dart';
 /// 3. 将请求推送到 Telegram / 钉钉
 /// 4. 接收用户决策并更新状态
 class RemoteClawService extends ChangeNotifier {
-  static const String kBindAddress = '127.0.0.1';
   static const int kDefaultPort = 8099;
+
+  /// 跨热重启持久持有 server（静态），新实例可接管旧 server
+  static HttpServer? _staticServer;
 
   int _port = kDefaultPort;
   int get port => _port;
 
   String _callbackHost = '127.0.0.1';
   String get callbackHost => _callbackHost;
+
+  /// 是否在本机通知渠道中使用 localhost 作为回调地址
+  /// 开启后，推送给通知渠道（钉钉/Telegram）的消息里，
+  /// 会额外附带一个 localhost 回调链接，方便电脑端直接点击
+  bool _useLocalCallback = false;
+  bool get useLocalCallback => _useLocalCallback;
+
+  void setUseLocalCallback(bool value) {
+    _useLocalCallback = value;
+    _rebuildChannels();
+    notifyListeners();
+  }
 
   void setPort(int port) {
     if (_isRunning) return; // 运行中不允许修改
@@ -47,7 +61,10 @@ class RemoteClawService extends ChangeNotifier {
     return File('$home/.claude/hooks/remote-claw.sh').exists();
   }
 
-  HttpServer? _server;
+  // 实例字段指向静态 server，热重启时新实例直接接管
+  HttpServer? get _server => _staticServer;
+  set _server(HttpServer? s) => _staticServer = s;
+
   bool _isRunning = false;
   bool get isRunning => _isRunning;
 
@@ -87,19 +104,22 @@ class RemoteClawService extends ChangeNotifier {
     if (_isRunning) return;
     try {
       _rebuildChannels();
-      final router = _buildRouter();
-      final handler = const Pipeline()
-          .addMiddleware(_corsMiddleware())
-          .addHandler(router.call);
 
-      _server = await shelf_io.serve(
-        handler,
-        InternetAddress(kBindAddress, type: InternetAddressType.IPv4),
-        _port,
-      );
+      if (_server != null) {
+        // 热重启场景：Dart VM 保留了静态 server，直接接管，无需重新绑端口
+        LoggerService.info(
+            'RemoteClaw: Hot-restart detected, reusing existing server on port $_port');
+      } else {
+        final router = _buildRouter();
+        final handler = const Pipeline()
+            .addMiddleware(_corsMiddleware())
+            .addHandler(router.call);
+        _server = await _bindWithRetry(handler);
+        LoggerService.info('RemoteClaw: HTTP server started on 0.0.0.0:$_port');
+      }
+
       _isRunning = true;
       _lastError = null;
-      LoggerService.info('RemoteClaw: HTTP server started on $kBindAddress:$_port');
 
       // 启动 Telegram 长轮询
       if (_telegramEnabled && _telegramChannel != null) {
@@ -123,6 +143,26 @@ class RemoteClawService extends ChangeNotifier {
     _isRunning = false;
     notifyListeners();
     LoggerService.info('RemoteClaw: HTTP server stopped');
+  }
+
+  /// 绑端口，若端口被占用（热重启场景旧进程残留）则强杀占用进程后重试一次
+  Future<HttpServer> _bindWithRetry(Handler handler) async {
+    try {
+      return await shelf_io.serve(handler, InternetAddress.anyIPv4, _port);
+    } on SocketException catch (e) {
+      if (e.osError?.errorCode == 48 || e.osError?.errorCode == 98) {
+        // 48 = EADDRINUSE (macOS), 98 = EADDRINUSE (Linux)
+        LoggerService.info(
+            'RemoteClaw: Port $_port in use, killing occupant and retrying...');
+        await Process.run('bash', [
+          '-c',
+          'lsof -ti tcp:$_port | xargs kill -9 2>/dev/null || true',
+        ]);
+        await Future.delayed(const Duration(milliseconds: 300));
+        return await shelf_io.serve(handler, InternetAddress.anyIPv4, _port);
+      }
+      rethrow;
+    }
   }
 
   // ──────────────────────────────────────────
@@ -167,6 +207,7 @@ class RemoteClawService extends ChangeNotifier {
     String dingtalkWebhookUrl = '',
     String dingtalkSecret = '',
     String callbackHost = '127.0.0.1',
+    bool useLocalCallback = false,
   }) {
     _telegramEnabled = telegramEnabled;
     _telegramBotToken = telegramBotToken;
@@ -175,6 +216,7 @@ class RemoteClawService extends ChangeNotifier {
     _dingtalkWebhookUrl = dingtalkWebhookUrl;
     _dingtalkSecret = dingtalkSecret;
     _callbackHost = callbackHost.isEmpty ? '127.0.0.1' : callbackHost;
+    _useLocalCallback = useLocalCallback;
     _rebuildChannels();
   }
 
@@ -192,6 +234,7 @@ class RemoteClawService extends ChangeNotifier {
             secret: _dingtalkSecret,
             port: _port,
             hostAddress: _callbackHost,
+            localHostAddress: _useLocalCallback ? 'localhost' : null,
           )
         : null;
   }
@@ -555,7 +598,7 @@ exit 0
       return (Request request) async {
         final response = await innerHandler(request);
         return response.change(headers: {
-          'Access-Control-Allow-Origin': 'http://127.0.0.1',
+          'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST',
           'Access-Control-Allow-Headers': 'Content-Type',
         });

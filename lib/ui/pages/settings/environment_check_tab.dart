@@ -9,10 +9,11 @@ import '../../../utils/platform_utils.dart';
 /// 工具检测结果
 class _ToolCheckResult {
   final String name;
-  final String icon; // SVG asset path or empty
+  final String icon;
   final bool isInstalled;
   final String? version;
   final String? path;
+  final String? error;
 
   const _ToolCheckResult({
     required this.name,
@@ -20,6 +21,7 @@ class _ToolCheckResult {
     required this.isInstalled,
     this.version,
     this.path,
+    this.error,
   });
 }
 
@@ -58,7 +60,7 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
       _checkCliTool('Claude Code', 'assets/icons/claude.svg', 'claude'),
       _checkCliTool('Codex', 'assets/icons/chatgpt.svg', 'codex'),
       _checkCliTool('Gemini CLI', 'assets/icons/gemini.svg', 'gemini'),
-      _checkCliTool('Antigravity', 'assets/icons/antigravity.svg', 'antigravity'),
+      _checkAppInstalled('Antigravity', 'assets/icons/antigravity.svg', '/Applications/Antigravity.app', 'antigravity'),
       _checkAppInstalled('Cursor', 'assets/icons/cursor.svg', '/Applications/Cursor.app', 'cursor'),
       _checkAppInstalled('Windsurf', 'assets/icons/windsurf.svg', '/Applications/Windsurf.app', 'windsurf'),
     ]);
@@ -78,24 +80,31 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
     setState(() => _refreshingIndices.add(index));
     final old = _results[index];
     _ToolCheckResult updated;
-    if (old.path?.endsWith('.app') == true || (!old.isInstalled && old.icon.contains('cursor') || old.icon.contains('windsurf'))) {
-      // App 类型
-      final appPath = old.path ?? (old.icon.contains('cursor')
-          ? '/Applications/Cursor.app'
-          : '/Applications/Windsurf.app');
-      final cliCmd = old.icon.contains('cursor') ? 'cursor' : null;
-      updated = await _checkAppInstalled(old.name, old.icon, appPath, cliCmd);
+
+    final appInfo = _appCheckInfo(old.name);
+    if (appInfo != null) {
+      updated = await _checkAppInstalled(old.name, old.icon, appInfo.$1, appInfo.$2);
     } else {
-      // CLI 类型，根据名字推断命令
       final cmd = _nameToCommand(old.name);
       updated = await _checkCliTool(old.name, old.icon, cmd);
     }
+
     if (mounted) {
       setState(() {
         _results[index] = updated;
         _cachedResults?[index] = updated;
         _refreshingIndices.remove(index);
       });
+    }
+  }
+
+  /// 返回 (appPath, cliCommand?) 或 null 表示非 App 类型
+  (String, String?)? _appCheckInfo(String name) {
+    switch (name) {
+      case 'Cursor': return ('/Applications/Cursor.app', 'cursor');
+      case 'Windsurf': return ('/Applications/Windsurf.app', 'windsurf');
+      case 'Antigravity': return ('/Applications/Antigravity.app', 'antigravity');
+      default: return null;
     }
   }
 
@@ -114,35 +123,42 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
     String icon,
     String command,
   ) async {
+    String? version;
+    String? path;
+    String? error;
+
+    // 先尝试获取版本
     try {
       final result = await PlatformUtils.runCommand('$command --version');
       if (result.exitCode == 0) {
-        final version = (result.stdout as String).trim();
-        // 获取路径
-        String? path;
-        try {
-          final whichResult = await PlatformUtils.runCommand(
-            Platform.isWindows ? 'where $command' : 'which $command',
-          );
-          if (whichResult.exitCode == 0) {
-            path = (whichResult.stdout as String).trim().split('\n').first;
-          }
-        } catch (_) {}
+        final v = (result.stdout as String).trim();
+        if (v.isNotEmpty) version = v;
+      } else {
+        final stderr = (result.stderr as String).trim();
+        if (stderr.isNotEmpty) error = stderr;
+      }
+    } catch (e) {
+      error = e.toString();
+    }
 
-        return _ToolCheckResult(
-          name: name,
-          icon: icon,
-          isInstalled: true,
-          version: version.isNotEmpty ? version : null,
-          path: path,
-        );
+    // 用 which/where 获取路径（即使 --version 失败也能判断是否安装）
+    try {
+      final whichResult = await PlatformUtils.runCommand(
+        Platform.isWindows ? 'where $command' : 'which $command',
+      );
+      if (whichResult.exitCode == 0) {
+        path = (whichResult.stdout as String).trim().split('\n').first;
       }
     } catch (_) {}
 
+    final isInstalled = version != null || path != null;
     return _ToolCheckResult(
       name: name,
       icon: icon,
-      isInstalled: false,
+      isInstalled: isInstalled,
+      version: version,
+      path: path,
+      error: isInstalled && version == null ? error : null,
     );
   }
 
@@ -154,14 +170,20 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
   ]) async {
     final exists = await Directory(appPath).exists();
     String? version;
+    String? error;
     if (exists && cliCommand != null) {
       try {
         final result = await PlatformUtils.runCommand('$cliCommand --version');
         if (result.exitCode == 0) {
           version = (result.stdout as String).trim();
           if (version.isEmpty) version = null;
+        } else {
+          final stderr = (result.stderr as String).trim();
+          if (stderr.isNotEmpty) error = stderr;
         }
-      } catch (_) {}
+      } catch (e) {
+        error = e.toString();
+      }
     }
     return _ToolCheckResult(
       name: name,
@@ -169,6 +191,7 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
       isInstalled: exists,
       version: version,
       path: exists ? appPath : null,
+      error: exists && version == null && cliCommand != null ? error : null,
     );
   }
 
@@ -229,6 +252,67 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
         else
           ..._results.asMap().entries.map((e) => _buildToolCard(e.value, isDark, e.key)),
       ],
+    );
+  }
+
+  void _showErrorDialog(String toolName, String error) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520, maxHeight: 400),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Colors.amber.shade600, size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '$toolName --version failed',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: SelectableText(
+                    error,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontFamily: 'Menlo',
+                      color: isDark ? Colors.grey.shade300 : Colors.grey.shade800,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: TextButton.styleFrom(foregroundColor: Colors.orange),
+                    child: Text(S.get('close')),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -335,6 +419,19 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
               ),
             ),
             const SizedBox(width: 12),
+          ],
+
+          // 版本检测失败警告图标
+          if (result.error != null) ...[
+            GestureDetector(
+              onTap: () => _showErrorDialog(result.name, result.error!),
+              child: Icon(
+                Icons.warning_amber_rounded,
+                size: 18,
+                color: Colors.amber.shade600,
+              ),
+            ),
+            const SizedBox(width: 8),
           ],
 
           // 状态标签

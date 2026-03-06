@@ -269,11 +269,17 @@ class CursorWorkspaceService {
   }
 
   /// 在新窗口打开 Cursor 项目
+  ///
+  /// 使用 PlatformUtils.runCommand 执行命令，
+  /// 它通过 shell 包装并注入扩展 PATH（含 /usr/local/bin 等），
+  /// 确保 Release 包从 Finder 启动时也能正常找到 cursor CLI。
   Future<bool> openCursorProject(String projectPath) async {
     try {
-      final result = await Process.run('cursor', [projectPath, '-n']);
+      final escaped = projectPath.replaceAll("'", "'\\''");
+      final result = await PlatformUtils.runCommand("cursor '$escaped' -n");
+
       LoggerService.info(
-        'cursor CLI: exit=${result.exitCode}, '
+        'openCursorProject: exit=${result.exitCode}, '
         'stderr=${result.stderr.toString().trim()}',
       );
       return result.exitCode == 0;

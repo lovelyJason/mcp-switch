@@ -40,26 +40,35 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
   @override
   void initState() {
     super.initState();
-    // Claude Code 才加载插件 MCP
-    if (widget.editorType == EditorType.claude) {
-      _pluginMcpService.loadPluginMcpServers();
-    }
-    // Gemini 加载 Extension MCP
-    if (widget.editorType == EditorType.gemini) {
-      _geminiExtensionMcpService.loadExtensionMcpServers();
-    }
-    // Cursor 加载 workspace 列表
-    if (widget.editorType == EditorType.cursor) {
-      _loadCursorWorkspaces();
-    }
+    _loadEditorData(widget.editorType);
     _searchController.addListener(() {
       setState(() => _searchQuery = _searchController.text.trim().toLowerCase());
     });
   }
 
+  @override
+  void didUpdateWidget(ConfigListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.editorType != oldWidget.editorType) {
+      _loadEditorData(widget.editorType);
+    }
+  }
+
+  void _loadEditorData(EditorType type) {
+    if (type == EditorType.claude) {
+      _pluginMcpService.loadPluginMcpServers();
+    }
+    if (type == EditorType.gemini) {
+      _geminiExtensionMcpService.loadExtensionMcpServers();
+    }
+    if (type == EditorType.cursor) {
+      _loadCursorWorkspaces();
+    }
+  }
+
   Future<void> _loadCursorWorkspaces() async {
     if (_loadingWorkspaces) return;
-    _loadingWorkspaces = true;
+    setState(() => _loadingWorkspaces = true);
     final workspaces = await CursorWorkspaceService.instance.getWorkspaces();
     if (mounted) {
       setState(() {

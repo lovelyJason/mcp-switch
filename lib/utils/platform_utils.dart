@@ -242,16 +242,62 @@ class PlatformUtils {
 
   /// 执行 shell 命令（跨平台）
   /// - Windows: 使用 PowerShell
-  /// - macOS/Linux: 使用 bash -c，并添加常用 PATH
+  /// - macOS/Linux: 使用交互式 shell (`zsh -i -c`)，完整加载 .zshrc/.bashrc，
+  ///   行为与用户打开终端后手动执行命令一致。
+  ///   Release 包从 Finder 启动时 PATH 极简，必须用 `-i` 让 shell
+  ///   进入交互模式，否则 .zshrc 中的 `[[ $- != *i* ]] && return`
+  ///   守卫会跳过所有 PATH 配置（fnm、nvm、antigravity 等）。
   /// [workingDirectory] 可选，指定命令执行的工作目录
   static Future<ProcessResult> runCommand(String command, {String? workingDirectory}) async {
-    return Process.run(
-      PlatformCommandsConfig.claudeShell,
-      [...PlatformCommandsConfig.claudeShellArgs, command],
-      runInShell: PlatformCommandsConfig.claudeRunInShell,
-      environment: PlatformCommandsConfig.claudeEnvironment,
-      workingDirectory: workingDirectory,
-    );
+    final String shell;
+    final List<String> shellArgs;
+
+    if (Platform.isWindows) {
+      shell = PlatformCommandsConfig.claudeShell;
+      shellArgs = PlatformCommandsConfig.claudeShellArgs.toList();
+    } else {
+      // 使用用户实际的默认 shell（$SHELL），而非 yaml 配置
+      // macOS 默认为 /bin/zsh，确保加载正确的 rc 文件（.zshrc）
+      shell = Platform.environment['SHELL'] ?? '/bin/zsh';
+      shellArgs = ['-i'];
+      if (shell.contains('zsh') || shell.contains('bash')) {
+        shellArgs.add('+m');
+      }
+      shellArgs.add('-c');
+    }
+
+    final fullArgs = [...shellArgs, command];
+    final env = PlatformCommandsConfig.claudeEnvironment;
+
+    try {
+      final result = await Process.run(
+        shell,
+        fullArgs,
+        runInShell: PlatformCommandsConfig.claudeRunInShell,
+        environment: env,
+        workingDirectory: workingDirectory,
+      );
+
+      final stdout = (result.stdout as String).trim();
+      final stderr = (result.stderr as String).trim();
+
+      if (result.exitCode != 0) {
+        LoggerService.warning(
+          'runCommand FAILED: "$command" exit=${result.exitCode}\n'
+          'stderr=$stderr\n'
+          'PATH(first8)=${env['PATH']?.split(':').take(8).join(':')}',
+        );
+      } else {
+        LoggerService.info(
+          'runCommand OK: "$command" stdout=${stdout.split('\n').first}',
+        );
+      }
+
+      return result;
+    } catch (e, stack) {
+      LoggerService.error('runCommand EXCEPTION: "$command"', e, stack);
+      rethrow;
+    }
   }
 
   /// 在 Finder/Explorer 中打开文件夹并选中文件
@@ -438,7 +484,13 @@ class PlatformUtils {
 
       // 使用用户默认 shell 的交互模式获取完整 PATH（支持各种 shell 配置）
       final shell = Platform.environment['SHELL'] ?? '/bin/zsh';
-      final whichResult = await Process.run(shell, ['-i', '-c', 'which claude'],
+      final shellArgs = ['-i'];
+      if (shell.contains('zsh') || shell.contains('bash')) shellArgs.add('+m');
+      shellArgs.addAll(['-c', 'which claude']);
+
+      final whichResult = await Process.run(
+        shell,
+        shellArgs,
         environment: {'HOME': userHome, 'USER': Platform.environment['USER'] ?? ''},
       );
       if (whichResult.exitCode == 0) {
@@ -499,7 +551,14 @@ class PlatformUtils {
       } else {
         // macOS/Linux: 使用用户默认 shell 的交互模式获取完整 PATH
         final shell = Platform.environment['SHELL'] ?? '/bin/zsh';
-        final whichResult = await Process.run(shell, ['-i', '-c', 'which claude'],
+        final shellArgs = ['-i'];
+        if (shell.contains('zsh') || shell.contains('bash'))
+          shellArgs.add('+m');
+        shellArgs.addAll(['-c', 'which claude']);
+
+        final whichResult = await Process.run(
+          shell,
+          shellArgs,
           environment: {'HOME': userHome, 'USER': Platform.environment['USER'] ?? ''},
         );
         final inPath = whichResult.exitCode == 0;
@@ -887,7 +946,13 @@ class PlatformUtils {
 
       // 使用用户默认 shell 的交互模式获取完整 PATH（支持 fnm/nvm 等）
       final shell = Platform.environment['SHELL'] ?? '/bin/zsh';
-      final whichResult = await Process.run(shell, ['-i', '-c', 'which codex'],
+      final shellArgs = ['-i'];
+      if (shell.contains('zsh') || shell.contains('bash')) shellArgs.add('+m');
+      shellArgs.addAll(['-c', 'which codex']);
+
+      final whichResult = await Process.run(
+        shell,
+        shellArgs,
         environment: {'HOME': userHome, 'USER': Platform.environment['USER'] ?? ''},
       );
       if (whichResult.exitCode == 0) {
@@ -937,7 +1002,14 @@ class PlatformUtils {
       } else {
         // macOS/Linux: 使用用户默认 shell 的交互模式获取完整 PATH
         final shell = Platform.environment['SHELL'] ?? '/bin/zsh';
-        final whichResult = await Process.run(shell, ['-i', '-c', 'which codex'],
+        final shellArgs = ['-i'];
+        if (shell.contains('zsh') || shell.contains('bash'))
+          shellArgs.add('+m');
+        shellArgs.addAll(['-c', 'which codex']);
+
+        final whichResult = await Process.run(
+          shell,
+          shellArgs,
           environment: {'HOME': userHome, 'USER': Platform.environment['USER'] ?? ''},
         );
         final inPath = whichResult.exitCode == 0;
@@ -1180,7 +1252,13 @@ class PlatformUtils {
 
       // 使用用户默认 shell 的交互模式获取完整 PATH（支持 fnm/nvm 等）
       final shell = Platform.environment['SHELL'] ?? '/bin/zsh';
-      final whichResult = await Process.run(shell, ['-i', '-c', 'which gemini'],
+      final shellArgs = ['-i'];
+      if (shell.contains('zsh') || shell.contains('bash')) shellArgs.add('+m');
+      shellArgs.addAll(['-c', 'which gemini']);
+
+      final whichResult = await Process.run(
+        shell,
+        shellArgs,
         environment: {'HOME': userHome, 'USER': Platform.environment['USER'] ?? ''},
       );
       if (whichResult.exitCode == 0) {
@@ -1230,7 +1308,14 @@ class PlatformUtils {
       } else {
         // macOS/Linux: 使用用户默认 shell 的交互模式获取完整 PATH
         final shell = Platform.environment['SHELL'] ?? '/bin/zsh';
-        final whichResult = await Process.run(shell, ['-i', '-c', 'which gemini'],
+        final shellArgs = ['-i'];
+        if (shell.contains('zsh') || shell.contains('bash'))
+          shellArgs.add('+m');
+        shellArgs.addAll(['-c', 'which gemini']);
+
+        final whichResult = await Process.run(
+          shell,
+          shellArgs,
           environment: {'HOME': userHome, 'USER': Platform.environment['USER'] ?? ''},
         );
         final inPath = whichResult.exitCode == 0;

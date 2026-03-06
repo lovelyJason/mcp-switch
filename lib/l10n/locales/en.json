@@ -570,6 +570,8 @@
   "remote_claw_open_tailscale_failed": "Unable to open Tailscale devices page",
   "remote_claw_callback_host_hint": "100.x.x.x",
   "remote_claw_callback_host_tooltip": "How to use with Tailscale:\n1. Install Tailscale on Mac, sign in, get a 100.x.x.x IP\n2. Enter that IP here and press Enter\n3. Install Tailscale on your phone and sign in to the same account\n4. DingTalk Allow/Deny buttons will work from any network",
+  "remote_claw_use_local_callback": "Local channel via localhost",
+  "remote_claw_use_local_callback_desc": "When enabled, DingTalk messages include extra 'PC' buttons using localhost, for clicking directly in desktop DingTalk",
   "remote_claw_hook_status_installed": "Installed",
   "remote_claw_hook_status_not_installed": "Not installed",
   "remote_claw_hook_reinstalled": "Hook reinstalled (port updated)",

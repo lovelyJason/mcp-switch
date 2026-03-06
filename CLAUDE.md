@@ -267,3 +267,42 @@ CustomConfirmDialog.show(
 - 自动生成的代码（如 freezed、json_serializable）
 - 复杂动画序列代码
 - 大量静态配置数据
+
+## 外部命令调用规范
+
+**禁止**直接使用 `Process.run('命令名', ...)` 调用外部 CLI 工具（如 `cursor`、`claude`、`codex`、`gemini` 等）。
+
+**原因**：macOS Release 包从 Finder 启动时，系统 PATH 极简（仅 `/usr/bin:/bin:/usr/sbin:/sbin`），`/usr/local/bin`、`/opt/homebrew/bin` 等常用路径不在其中，直接调用会导致命令找不到，甚至触发原生崩溃。
+
+**正确做法**：统一使用 `PlatformUtils.runCommand()` 执行外部命令。它会：
+1. 在 macOS/Linux 上使用交互式 shell（`zsh -i -c`），完整加载 `.zshrc`，行为与终端一致
+2. 注入 `platform_commands.yaml` 中配置的扩展 PATH
+3. 通过 shell 包装执行，确保 Release 包和开发模式行为一致
+
+**注意**：必须用 `-i`（交互模式），否则 `.zshrc` 中的 `[[ $- != *i* ]] && return` 守卫会跳过所有 PATH 配置。不要用硬编码路径列表来解决 PATH 问题。
+
+```dart
+// ❌ 禁止
+await Process.run('cursor', [projectPath, '-n']);
+await Process.run('codex', ['--version']);
+
+// ✅ 正确
+await PlatformUtils.runCommand("cursor '$projectPath' -n");
+await PlatformUtils.runCommand("codex --version");
+```
+
+**新增工具的 PATH 要求**：如果新增支持的 CLI 工具有自定义安装路径，必须同步更新 `assets/config/platform_commands.yaml` 中所有平台的 `environment.PATH`。
+
+## 版本号规范
+
+**格式**：`MAJOR.MINOR.PATCH+BUILD`（例如 `1.5.1+14`）
+
+**规则**：
+- `MAJOR.MINOR.PATCH` 遵循 SemVer，由 `scripts/bump_version.py --type patch|minor|major` 自动递增
+- `BUILD` 号**每次发版必须 +1**，从当前 pubspec.yaml 中读取并递增，不依赖外部 API
+- `version.dart` 中的 `appVersion` 和 `buildNumber` 由 `bump_version.py` 同步更新
+
+**禁止**：
+- 手动修改 `version.dart`（它由脚本自动生成）
+- 发版时只更新 SemVer 不更新 BUILD 号
+- BUILD 号跳跃式递增或回退

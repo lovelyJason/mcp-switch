@@ -1,0 +1,126 @@
+# 供应商预设配置
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# 字段说明：
+#   id          - 唯一标识符（英文、数字、-、_）
+#   name        - 显示名称
+#   description - 描述文字
+#   base_url    - API 代理地址，空字符串表示使用官方地址
+#   website     - 官方网站链接（点击图标可跳转）
+#   icon        - SVG 图标路径（assets/icons/ 目录下）
+#   is_official - 是否为官方预设（true 时隐藏 apiToken/baseUrl 输入框）
+#
+# is_official = true 的供应商（Anthropic/OpenAI/Google）使用官方配置文件，
+# 不需要用户填写 API Key 和 Base URL。
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+
+presets:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Claude 供应商预设
+  # ─────────────────────────────────────────────────────────────────────────────
+  claude:
+    - id: anthropic
+      name: Anthropic
+      description: Anthropic Official
+      base_url: ''
+      website: https://www.anthropic.com
+      icon: assets/icons/claude.svg
+      is_official: true
+
+    - id: dmxapi
+      name: DMXAPI
+      description: DMX API Relay
+      base_url: https://api.dmxapi.com/v1
+      website: https://www.dmxapi.com
+      icon: assets/icons/dmxapi.svg
+      is_official: false
+
+    - id: openrouter
+      name: OpenRouter
+      description: OpenRouter Relay
+      base_url: https://openrouter.ai/api/v1
+      website: https://openrouter.ai
+      icon: assets/icons/openrouter.svg
+      is_official: false
+
+    - id: siliconflow
+      name: SiliconFlow
+      description: SiliconFlow Relay
+      base_url: https://api.siliconflow.cn/v1
+      website: https://siliconflow.cn
+      icon: assets/icons/siliconflow.svg
+      is_official: false
+
+    - id: deepseek
+      name: DeepSeek
+      description: DeepSeek Anthropic Compatible
+      base_url: https://api.deepseek.com/anthropic
+      website: https://platform.deepseek.com
+      icon: assets/icons/deepseek.svg
+      is_official: false
+
+    - id: minimax
+      name: MiniMax
+      description: MiniMax Anthropic Compatible
+      base_url: https://api.minimaxi.com/anthropic
+      website: https://platform.minimaxi.com
+      icon: assets/icons/minimax.svg
+      is_official: false
+
+    - id: zhipu
+      name: Zhipu GLM
+      description: Zhipu AI Anthropic Compatible
+      base_url: https://open.bigmodel.cn/api/anthropic
+      website: https://open.bigmodel.cn
+      icon: assets/icons/zhipu.svg
+      is_official: false
+
+    - id: kimi
+      name: Kimi
+      description: Moonshot AI Anthropic Compatible
+      base_url: https://api.moonshot.cn/anthropic
+      website: https://platform.moonshot.cn/console
+      icon: assets/icons/kimi.svg
+      is_official: false
+
+    - id: packycode
+      name: PackyCode
+      description: PackyCode API Relay
+      base_url: https://www.packyapi.com
+      website: https://www.packyapi.com
+      icon: assets/icons/packycode.svg
+      is_official: false
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Codex 供应商预设
+  # ─────────────────────────────────────────────────────────────────────────────
+  codex:
+    - id: openai
+      name: OpenAI
+      description: OpenAI Official
+      base_url: ''
+      website: https://openai.com
+      icon: assets/icons/chatgpt.svg
+      is_official: true
+
+    - id: dmxapi
+      name: DMXAPI
+      description: DMX API Relay
+      base_url: https://api.dmxapi.com/v1
+      website: https://www.dmxapi.com
+      icon: assets/icons/dmxapi.svg
+      is_official: false
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Gemini 供应商预设
+  # ─────────────────────────────────────────────────────────────────────────────
+  gemini:
+    - id: google
+      name: Google
+      description: Google Official
+      base_url: ''
+      website: https://gemini.google.com
+      icon: assets/icons/gemini.svg
+      is_official: true

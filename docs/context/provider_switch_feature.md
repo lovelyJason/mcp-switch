@@ -242,6 +242,61 @@ init()
 - ChoiceChip 列表，每个预设有 SVG 图标
 - SVG 图标使用品牌原色（无 colorFilter），不再是单色
 - 默认选中"自定义"预设（`_selectedPresetName = '_custom_'`）
+- **v1.5.1 起**：预设数据从 `assets/config/provider_presets.yaml` 动态加载，新增供应商无需改代码，只需编辑 YAML + 提供图标
+
+### 供应商预设 YAML 管理（v1.5.1+）
+
+预设数据从硬编码 Dart 常量迁移至 YAML 文件：
+
+```
+assets/config/provider_presets.yaml   # 所有供应商预设定义
+lib/config/provider_presets_config.dart  # 加载器 + ProviderPreset 数据模型
+```
+
+**YAML 字段说明：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | String | 唯一标识，用于 `_selectedPresetName` 匹配 |
+| `name` | String | 显示名称 |
+| `description` | String | 描述 |
+| `base_url` | String | API 代理地址，空字符串表示使用官方地址 |
+| `website` | String? | 官方网站 |
+| `icon` | String? | SVG 图标路径 |
+| `is_official` | bool | 为 true 时隐藏 apiToken/baseUrl 输入框 |
+
+**数据按 editorType 分组：**
+
+```yaml
+presets:
+  claude:
+    - id: anthropic
+      is_official: true
+    - id: deepseek
+      base_url: https://api.deepseek.com/anthropic
+  codex:
+    - id: openai
+      is_official: true
+  gemini:
+    - id: google
+      is_official: true
+```
+
+**加载流程：**
+
+```
+main.dart: await ProviderPresetsConfig.init()
+    ↓ rootBundle.loadString('assets/config/provider_presets.yaml')
+    ↓ 解析 YAML → Map<String, List<ProviderPreset>>
+    ↓ 静态缓存
+
+编辑页打开:
+    ↓ ProviderPresetsConfig.presetsFor(editorType) → 预设列表
+    ↓ 追加 _customPreset（id='_custom_'）
+    ↓ 渲染 ChoiceChip
+```
+
+**`_isOfficialPreset` 判断：** 从 YAML `is_official` 字段读取，不再硬编码供应商名称。
 
 ### 品牌色 SVG 图标
 
@@ -250,6 +305,11 @@ init()
 | DMXAPI | `assets/icons/dmxapi.svg` | D=`#17a2b8` M=`#7d5f92` X=`#d72f5a`（三色字母） |
 | OpenRouter | `assets/icons/openrouter.svg` | `#6467F2`（蓝紫色） |
 | SiliconFlow | `assets/icons/siliconflow.svg` | `#6E29F6`（紫色） |
+| DeepSeek | `assets/icons/deepseek.svg` | `#4D6BFE`（蓝色） |
+| MiniMax | `assets/icons/minimax.svg` | `#1A1A2E`（深色） |
+| Zhipu GLM | `assets/icons/zhipu.svg` | `#1461FF`（蓝色） |
+| Kimi | `assets/icons/kimi.svg` | `#1B1B1B`（深色） |
+| PackyCode | `assets/icons/packycode.svg` | `#FF6B35`（橙色） |
 
 预设 chip 的 `SvgPicture.asset` 不使用 `colorFilter`，让 SVG 文件内嵌的品牌色直接生效。
 

@@ -73,6 +73,15 @@ class RemoteClawService extends ChangeNotifier {
       _pendingRequests.values.toList()
         ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
+  // 定时扫描：检测已被外部处理的 pending 请求
+  Timer? _staleCheckTimer;
+
+  /// Hook 脚本轮询间隔为 2 秒，超过 8 秒（4 个间隔）没有新轮询则认为 Hook 已退出
+  static const _staleThreshold = Duration(seconds: 8);
+
+  /// 扫描间隔（略小于 threshold，确保及时触发）
+  static const _staleCheckInterval = Duration(seconds: 5);
+
   // 渠道
   TelegramChannel? _telegramChannel;
   DingtalkChannel? _dingtalkChannel;
@@ -126,6 +135,10 @@ class RemoteClawService extends ChangeNotifier {
         _telegramChannel!.startPolling(_onTelegramDecision);
       }
 
+      // 启动定时扫描：检测被外部（VSCode 插件等）处理的 pending 请求
+      _staleCheckTimer?.cancel();
+      _staleCheckTimer = Timer.periodic(_staleCheckInterval, (_) => _checkStaleRequests());
+
       notifyListeners();
     } catch (e) {
       _lastError = e.toString();
@@ -140,9 +153,41 @@ class RemoteClawService extends ChangeNotifier {
     await _sharedServer?.close(force: true);
     _sharedServer = null;
     _telegramChannel?.stopPolling();
+    _staleCheckTimer?.cancel();
+    _staleCheckTimer = null;
     _isRunning = false;
     notifyListeners();
     LoggerService.info('RemoteClaw: HTTP server stopped');
+  }
+
+  /// 扫描被外部处理的 pending 请求：
+  /// - 若曾被轮询过（lastPolledAt != null）：超过 8 秒没有新轮询，Hook 已退出
+  /// - 若从未被轮询过（lastPolledAt == null）：创建超过 15 秒仍没有任何轮询，
+  ///   说明 Hook 根本没发起轮询（服务降级退出），也视为外部处理
+  void _checkStaleRequests() {
+    final now = DateTime.now();
+    bool changed = false;
+    for (final request in _pendingRequests.values) {
+      if (request.decision != PermissionDecision.pending) continue;
+
+      final bool isStale;
+      if (request.lastPolledAt != null) {
+        // 曾被轮询：超过 threshold 没有新轮询 → Hook 已退出
+        isStale = now.difference(request.lastPolledAt!) > _staleThreshold;
+      } else {
+        // 从未被轮询：给 15 秒宽限（比 threshold 更长），避免网络慢误判
+        isStale = now.difference(request.createdAt) > const Duration(seconds: 15);
+      }
+
+      if (isStale) {
+        request.decision = PermissionDecision.externallyHandled;
+        LoggerService.info(
+          'RemoteClaw: Request [${request.id}] marked as externallyHandled',
+        );
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
   }
 
 
@@ -289,6 +334,9 @@ class RemoteClawService extends ChangeNotifier {
         headers: {'Content-Type': 'application/json'},
       );
     }
+
+    // 记录本次轮询时间（用于检测 Hook 脚本是否已静默结束）
+    request.lastPolledAt = DateTime.now();
 
     if (request.decision == PermissionDecision.pending) {
       return Response.ok(

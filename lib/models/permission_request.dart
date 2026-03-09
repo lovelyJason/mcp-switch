@@ -10,6 +10,9 @@ class PermissionRequest {
   final DateTime createdAt;
   PermissionDecision decision;
 
+  /// 最近一次被 Hook 脚本轮询的时间（null 表示从未被轮询）
+  DateTime? lastPolledAt;
+
   PermissionRequest({
     required this.id,
     required this.sessionId,
@@ -78,4 +81,10 @@ class PermissionRequest {
   }
 }
 
-enum PermissionDecision { pending, allow, deny }
+enum PermissionDecision {
+  pending,
+  allow,
+  deny,
+  /// Hook 脚本已结束（被 VSCode 插件或其他外部渠道处理），本服务未收到决策
+  externallyHandled,
+}

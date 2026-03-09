@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../config/provider_presets_config.dart';
 import '../../../l10n/s.dart';
 import '../../../data/database.dart';
 import '../../../services/provider_switch_service.dart';
@@ -24,85 +25,13 @@ class ProviderEditScreen extends StatefulWidget {
   State<ProviderEditScreen> createState() => _ProviderEditScreenState();
 }
 
-/// 预设供应商数据
-class _ProviderPreset {
-  final String name;
-  final String description;
-  final String baseUrl;
-  final String? website;
-  final String? iconPath;
-
-  const _ProviderPreset({
-    required this.name,
-    required this.description,
-    required this.baseUrl,
-    this.website,
-    this.iconPath,
-  });
-}
-
-const _customPreset = _ProviderPreset(name: '', description: '', baseUrl: '');
-
-const _claudePresets = [
-  _ProviderPreset(
-    name: 'Anthropic',
-    description: 'Anthropic Official',
-    baseUrl: '',
-    website: 'https://www.anthropic.com',
-    iconPath: 'assets/icons/claude.svg',
-  ),
-  _ProviderPreset(
-    name: 'DMXAPI',
-    description: 'DMX API Relay',
-    baseUrl: 'https://api.dmxapi.com/v1',
-    website: 'https://www.dmxapi.com',
-    iconPath: 'assets/icons/dmxapi.svg',
-  ),
-  _ProviderPreset(
-    name: 'OpenRouter',
-    description: 'OpenRouter Relay',
-    baseUrl: 'https://openrouter.ai/api/v1',
-    website: 'https://openrouter.ai',
-    iconPath: 'assets/icons/openrouter.svg',
-  ),
-  _ProviderPreset(
-    name: 'SiliconFlow',
-    description: 'SiliconFlow Relay',
-    baseUrl: 'https://api.siliconflow.cn/v1',
-    website: 'https://siliconflow.cn',
-    iconPath: 'assets/icons/siliconflow.svg',
-  ),
-  _customPreset,
-];
-
-const _codexPresets = [
-  _ProviderPreset(
-    name: 'OpenAI',
-    description: 'OpenAI Official',
-    baseUrl: '',
-    website: 'https://openai.com',
-    iconPath: 'assets/icons/chatgpt.svg',
-  ),
-  _ProviderPreset(
-    name: 'DMXAPI',
-    description: 'DMX API Relay',
-    baseUrl: 'https://api.dmxapi.com/v1',
-    website: 'https://www.dmxapi.com',
-    iconPath: 'assets/icons/dmxapi.svg',
-  ),
-  _customPreset,
-];
-
-const _geminiPresets = [
-  _ProviderPreset(
-    name: 'Google',
-    description: 'Google Official',
-    baseUrl: '',
-    website: 'https://gemini.google.com',
-    iconPath: 'assets/icons/gemini.svg',
-  ),
-  _customPreset,
-];
+// 自定义占位预设（无 icon、空字段），固定追加在预设列表末尾
+final _customPreset = ProviderPreset(
+  id: '_custom_',
+  name: '',
+  description: '',
+  baseUrl: '',
+);
 
 class _ProviderEditScreenState extends State<ProviderEditScreen>
     with _ProviderEditFormFields, _ProviderEditPreview {
@@ -153,10 +82,14 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       widget.profile != null &&
       ProviderSwitchService.isOfficialProfile(widget.profile!);
   @override
-  bool get _isOfficialPreset =>
-      _selectedPresetName == 'Anthropic' ||
-      _selectedPresetName == 'OpenAI' ||
-      _selectedPresetName == 'Google';
+  bool get _isOfficialPreset {
+    if (_selectedPresetName == null || _selectedPresetName == '_custom_') {
+      return false;
+    }
+    final presets = ProviderPresetsConfig.presetsFor(widget.editorType);
+    return presets
+        .any((p) => p.id == _selectedPresetName && p.isOfficial);
+  }
 
   @override
   String _getApiTokenText() => _apiTokenController.text.trim();
@@ -349,8 +282,11 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   }
 
   Widget _buildPresetChips(bool isDark) {
-    final presets =
-        _isClaude ? _claudePresets : _isGemini ? _geminiPresets : _codexPresets;
+    final editorType = widget.editorType;
+    final presets = [
+      ...ProviderPresetsConfig.presetsFor(editorType),
+      _customPreset,
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -367,12 +303,11 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
           spacing: 8,
           runSpacing: 8,
           children: presets.map((preset) {
-            final isCustom = preset == _customPreset;
-            final chipKey = isCustom ? '_custom_' : preset.name;
-            final isSelected = _selectedPresetName == chipKey;
+            final isCustom = preset.id == '_custom_';
+            final isSelected = _selectedPresetName == preset.id;
             return ChoiceChip(
-              avatar: preset.iconPath != null
-                  ? SvgPicture.asset(preset.iconPath!, width: 16, height: 16)
+              avatar: preset.icon != null
+                  ? SvgPicture.asset(preset.icon!, width: 16, height: 16)
                   : Icon(
                       Icons.edit_note,
                       size: 18,
@@ -410,10 +345,9 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
     );
   }
 
-  void _applyPreset(_ProviderPreset preset) {
-    final isCustom = preset == _customPreset;
+  void _applyPreset(ProviderPreset preset) {
     setState(() {
-      _selectedPresetName = isCustom ? '_custom_' : preset.name;
+      _selectedPresetName = preset.id;
       _nameController.text = preset.name;
       _descriptionController.text = preset.description;
       _baseUrlController.text = preset.baseUrl;

@@ -24,6 +24,7 @@ import 'services/logger_service.dart';
 import 'utils/platform_utils.dart';
 import 'config/platform_commands_config.dart';
 import 'config/mcp_presets_config.dart';
+import 'config/provider_presets_config.dart';
 import 'constants/editor_features.dart';
 import 'services/cursor_workspace_service.dart';
 import 'utils/global_keys.dart';
@@ -77,6 +78,7 @@ void main() async {
   await S.init();
   await PlatformCommandsConfig.init(); // 加载平台命令配置
   await McpPresetsConfig.init(); // 加载 MCP 预设配置
+  await ProviderPresetsConfig.init(); // 加载供应商预设配置
   await EditorFeatures.init(); // 加载编辑器功能版本兼容配置
   await CursorWorkspaceService.instance.init(); // 检测 Cursor 版本
 

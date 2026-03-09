@@ -10,6 +10,7 @@ import '../../services/mcp_health_check_service.dart';
 import '../../utils/platform_utils.dart';
 import '../../services/terminal_service.dart';
 import '../pages/mcp_config/mcp_server_edit_screen.dart';
+import '../pages/mcp_config/claude_memory_screen.dart';
 import 'custom_dialog.dart';
 import 'custom_toast.dart';
 import '../../l10n/s.dart';
@@ -465,6 +466,31 @@ class _ProjectCardState extends State<ProjectCard> {
                                   textStyle: const TextStyle(fontSize: 12),
                                 ),
                               ),
+                            // Memory 按钮（Claude 项目级 + 全局均显示，有 memory 文件才出现）
+                            FutureBuilder<bool>(
+                              future: ClaudeMemoryScreen.hasMemoryFiles(widget.profile.name),
+                              builder: (context, snap) {
+                                if (snap.data != true) return const SizedBox.shrink();
+                                final projectName = widget.profile.name.split(Platform.pathSeparator).where((s) => s.isNotEmpty).lastOrNull ?? widget.profile.name;
+                                return TextButton.icon(
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => ClaudeMemoryScreen(
+                                        projectPath: widget.profile.name,
+                                        projectName: projectName,
+                                      ),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.memory_outlined, size: 14),
+                                  label: Text(S.get('claude_memory_button')),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.orange,
+                                    textStyle: const TextStyle(fontSize: 12),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 8),
                             // 测试连接按钮（仅全局配置显示）
                             if (_isGlobalProfile)
                               Consumer<McpHealthCheckService>(

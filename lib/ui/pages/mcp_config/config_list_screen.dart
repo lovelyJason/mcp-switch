@@ -157,6 +157,7 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                           if (globalProfile != null) ...[
                             _buildSectionHeader('全域配置 @ ~/.claude.json'),
                             ProjectCard(
+                              key: ValueKey(globalProfile.id),
                               profile: globalProfile,
                               onDelete: () => _confirmDelete(
                                 context,
@@ -189,6 +190,7 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                               }
                               return filtered.map(
                                 (profile) => ProjectCard(
+                                  key: ValueKey(profile.id),
                                   profile: profile,
                                   onDelete: () =>
                                       _confirmDelete(context, configService, profile),

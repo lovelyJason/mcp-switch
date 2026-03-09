@@ -13,6 +13,7 @@ import '../pages/mcp_config/mcp_server_edit_screen.dart';
 import '../pages/mcp_config/claude_memory_screen.dart';
 import 'custom_dialog.dart';
 import 'custom_toast.dart';
+import 'mcp_failed_dialog.dart';
 import '../../l10n/s.dart';
 import '../../utils/global_keys.dart';
 import '../../utils/project_type_detector.dart';
@@ -34,8 +35,16 @@ class ProjectCard extends StatefulWidget {
   State<ProjectCard> createState() => _ProjectCardState();
 }
 
-class _ProjectCardState extends State<ProjectCard> {
+class _ProjectCardState extends State<ProjectCard>
+    with AutomaticKeepAliveClientMixin {
+  /// 保持 State 不被 ListView 回收，防止滚动或 rebuild 后展开状态丢失
+  @override
+  bool get wantKeepAlive => true;
+
   bool _isHovering = false;
+
+  /// 明确控制展开状态，避免 rebuild 时被 Flutter 内部状态重置
+  final ExpansibleController _expansionController = ExpansibleController();
 
   /// 项目级 MCP 健康状态：serverName -> 状态文字（Connected / Failed to connect / Needs authentication）
   final Map<String, String> _mcpHealthMap = {};
@@ -48,6 +57,9 @@ class _ProjectCardState extends State<ProjectCard> {
   /// 项目类型图标信息
   ProjectIconInfo? _iconInfo;
 
+  /// Memory 文件检测结果缓存（避免 build 里每次重新 start Future）
+  late Future<bool> _hasMemoryFilesFuture;
+
   /// 判断是否是全局配置
   bool get _isGlobalProfile => widget.profile.content['isGlobal'] == true;
 
@@ -55,6 +67,7 @@ class _ProjectCardState extends State<ProjectCard> {
   void initState() {
     super.initState();
     _detectProjectType();
+    _hasMemoryFilesFuture = ClaudeMemoryScreen.hasMemoryFiles(widget.profile.name);
   }
 
   @override
@@ -281,6 +294,7 @@ class _ProjectCardState extends State<ProjectCard> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin 要求
     final Map<String, dynamic> mcpServers =
         (widget.profile.content['mcpServers'] is Map)
             ? widget.profile.content['mcpServers']
@@ -325,6 +339,7 @@ class _ProjectCardState extends State<ProjectCard> {
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
+            controller: _expansionController,
             onExpansionChanged: (expanded) {
               if (expanded && !_isGlobalProfile) {
                 _checkProjectMcpHealth();
@@ -468,7 +483,7 @@ class _ProjectCardState extends State<ProjectCard> {
                               ),
                             // Memory 按钮（Claude 项目级 + 全局均显示，有 memory 文件才出现）
                             FutureBuilder<bool>(
-                              future: ClaudeMemoryScreen.hasMemoryFiles(widget.profile.name),
+                              future: _hasMemoryFilesFuture,
                               builder: (context, snap) {
                                 if (snap.data != true) return const SizedBox.shrink();
                                 final projectName = widget.profile.name.split(Platform.pathSeparator).where((s) => s.isNotEmpty).lastOrNull ?? widget.profile.name;
@@ -573,6 +588,9 @@ class _ProjectCardState extends State<ProjectCard> {
       }
     }
 
+    // 项目级健康状态（claude mcp list 结果）
+    final projectHealth = _mcpHealthMap[name];
+
     return Container(
       decoration: BoxDecoration(
         border: Border(
@@ -611,8 +629,15 @@ class _ProjectCardState extends State<ProjectCard> {
                   ),
                 ),
               ),
-              // 健康状态指示器（右下角）- 仅启用状态的服务器显示
-              if (health != null && isEnabled)
+              // 项目级健康状态优先（claude mcp list 的结果）
+              if (projectHealth != null && isEnabled)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: _buildProjectHealthIndicator(name, projectHealth),
+                )
+              // 无项目级数据时，回落到全局健康服务指示器
+              else if (health != null && isEnabled)
                 Positioned(
                   right: 0,
                   bottom: 0,
@@ -642,10 +667,25 @@ class _ProjectCardState extends State<ProjectCard> {
                 ),
               ),
             ),
-            if (_mcpHealthMap.containsKey(name) && _mcpHealthMap[name] != 'Connected') ...[
+            if (projectHealth != null && projectHealth != 'Connected') ...[
               const SizedBox(width: 6),
-              _buildConnectionStatusTag(_mcpHealthMap[name]!),
-              if (_mcpHealthMap[name] == 'Needs auth')
+              if (projectHealth == 'Failed')
+                MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () {
+                      final servers = widget.profile.content['mcpServers'];
+                      final config = (servers is Map && servers.containsKey(name))
+                          ? Map<String, dynamic>.from(servers[name] as Map)
+                          : <String, dynamic>{};
+                      McpFailedDialog.show(context, serverName: name, config: config);
+                    },
+                    child: _buildConnectionStatusTag(projectHealth),
+                  ),
+                )
+              else
+                _buildConnectionStatusTag(projectHealth),
+              if (projectHealth == 'Needs auth')
                 _buildAuthButton(),
             ],
           ],
@@ -812,7 +852,22 @@ class _ProjectCardState extends State<ProjectCard> {
             ),
             if (_mcpHealthMap.containsKey(name) && _mcpHealthMap[name] != 'Connected') ...[
               const SizedBox(width: 6),
-              _buildConnectionStatusTag(_mcpHealthMap[name]!),
+              if (_mcpHealthMap[name] == 'Failed')
+                MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () {
+                      McpFailedDialog.show(
+                        context,
+                        serverName: name,
+                        config: config is Map ? Map<String, dynamic>.from(config) : {},
+                      );
+                    },
+                    child: _buildConnectionStatusTag(_mcpHealthMap[name]!),
+                  ),
+                )
+              else
+                _buildConnectionStatusTag(_mcpHealthMap[name]!),
               if (_mcpHealthMap[name] == 'Needs auth')
                 _buildAuthButton(),
             ],
@@ -947,6 +1002,64 @@ class _ProjectCardState extends State<ProjectCard> {
               color: Colors.orange,
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// 构建项目级健康状态指示器（基于 claude mcp list 结果，点击失败时弹窗）
+  Widget _buildProjectHealthIndicator(String name, String status) {
+    final isHealthy = status == 'Connected';
+    final color = isHealthy
+        ? Colors.green
+        : (status == 'Needs auth' ? Colors.orange : Colors.red);
+
+    return GestureDetector(
+      onTap: isHealthy
+          ? null
+          : () {
+              if (status == 'Failed') {
+                // 先找项目自有 mcpServers，找不到再找全局继承的 mcpServers
+                final ownServers = widget.profile.content['mcpServers'];
+                final globalServers = widget.globalMcpServers;
+                final rawConfig = (ownServers is Map && ownServers.containsKey(name))
+                    ? ownServers[name]
+                    : (globalServers != null && globalServers.containsKey(name))
+                        ? globalServers[name]
+                        : null;
+                final config = rawConfig is Map
+                    ? Map<String, dynamic>.from(rawConfig)
+                    : <String, dynamic>{};
+                McpFailedDialog.show(context, serverName: name, config: config);
+              } else {
+                CustomConfirmDialog.show(
+                  context,
+                  title: name,
+                  content: S.get('mcp_needs_auth_tip'),
+                  confirmText: S.get('ok'),
+                  cancelText: '',
+                );
+              }
+            },
+      child: Container(
+        width: 14,
+        height: 14,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.3),
+              blurRadius: 4,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Icon(
+          isHealthy ? Icons.check : (status == 'Needs auth' ? Icons.lock : Icons.close),
+          size: 8,
+          color: Colors.white,
         ),
       ),
     );

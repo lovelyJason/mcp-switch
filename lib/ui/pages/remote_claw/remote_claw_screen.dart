@@ -1110,7 +1110,9 @@ class _PendingRequestsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final requests = service.pendingRequests
-        .where((r) => r.decision == PermissionDecision.pending)
+        .where((r) =>
+            r.decision == PermissionDecision.pending ||
+            r.decision == PermissionDecision.externallyHandled)
         .toList();
 
     return Column(
@@ -1164,7 +1166,9 @@ class _PendingRequestsSection extends StatelessWidget {
               child: PendingRequestCard(
                 request: r,
                 onAllow: () => service.approveRequest(r.id),
+                onAllowSession: () => service.approveSessionRequest(r.id),
                 onDeny: () => service.denyRequest(r.id),
+                onAnswer: (answer) => service.answerRequest(r.id, answer),
               ),
             ),
           ),

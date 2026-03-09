@@ -29,14 +29,17 @@ class DingtalkChannel {
   // ──────────────────────────────────────────
 
   Future<void> sendPermissionRequest(PermissionRequest request) async {
-    final message = _buildActionCard(request);
+    final message = request.isAskFollowup
+        ? _buildAskFollowupNotify(request)
+        : _buildActionCard(request);
     await _send(message);
   }
 
   Map<String, dynamic> _buildActionCard(PermissionRequest request) {
     final emoji = _toolEmoji(request.toolName);
-    final title = 'Claude Code 请求授权';
+    const title = 'Claude Code 请求授权';
 
+    final timeStr = _formatTime(request.createdAt);
     final text = '''
 ## 🔔 Claude Code 请求授权
 
@@ -44,8 +47,7 @@ $emoji **工具**: ${request.toolName}
 
 📁 **项目**: ${request.projectName}
 
-${request.commandSummary.isNotEmpty ? '💻 **命令**: `${request.commandSummary}`\n' : ''}
-🆔 **ID**: ${request.id.substring(0, 8)}
+${request.commandSummary.isNotEmpty ? '💻 **命令**: `${request.commandSummary}`\n\n' : ''}🕐 **时间**: $timeStr　🆔 **ID**: ${request.id.substring(0, 8)}
 ''';
 
     final btns = <Map<String, String>>[
@@ -54,20 +56,12 @@ ${request.commandSummary.isNotEmpty ? '💻 **命令**: `${request.commandSummar
         'actionURL': 'http://$hostAddress:$port/action/allow/${request.id}',
       },
       {
+        'title': '🔁 本次全部同意',
+        'actionURL': 'http://$hostAddress:$port/action/allow-session/${request.id}',
+      },
+      {
         'title': '❌ 拒绝',
         'actionURL': 'http://$hostAddress:$port/action/deny/${request.id}',
-      },
-      if (localHostAddress != null) ...{
-        {
-          'title': '✅ 同意（电脑端）',
-          'actionURL':
-              'http://$localHostAddress:$port/action/allow/${request.id}',
-        },
-        {
-          'title': '❌ 拒绝（电脑端）',
-          'actionURL':
-              'http://$localHostAddress:$port/action/deny/${request.id}',
-        },
       },
     ];
 
@@ -77,7 +71,35 @@ ${request.commandSummary.isNotEmpty ? '💻 **命令**: `${request.commandSummar
         'title': title,
         'text': text,
         'btns': btns,
-        'btnOrientation': '1', // 横向排列
+        'btnOrientation': '1',
+      },
+    };
+  }
+
+  /// AskUserQuestion：仅通知，不带操作按钮（答案由 VSCode 插件处理）
+  Map<String, dynamic> _buildAskFollowupNotify(PermissionRequest request) {
+    final timeStr = _formatTime(request.createdAt);
+    final questions = request.askQuestions;
+
+    final sb = StringBuffer();
+    sb.writeln('## ❓ Claude Code 询问\n');
+    sb.writeln('📁 **项目**: ${request.projectName}\n');
+    for (var i = 0; i < questions.length; i++) {
+      final q = questions[i];
+      if (questions.length > 1) {
+        sb.writeln('**问题 ${i + 1}${q.header.isNotEmpty ? ' · ${q.header}' : ''}**: ${q.question}\n');
+      } else {
+        sb.writeln('💬 **问题**: ${q.question}\n');
+      }
+    }
+    sb.writeln('🕐 **时间**: $timeStr');
+    sb.writeln('\n> 请在 Claude Code 客户端选择答案');
+
+    return {
+      'msgtype': 'markdown',
+      'markdown': {
+        'title': 'Claude Code 询问',
+        'text': sb.toString(),
       },
     };
   }
@@ -128,6 +150,15 @@ ${request.commandSummary.isNotEmpty ? '💻 **命令**: `${request.commandSummar
   // ──────────────────────────────────────────
   // 工具
   // ──────────────────────────────────────────
+
+  String _formatTime(DateTime dt) {
+    final mon = dt.month.toString().padLeft(2, '0');
+    final day = dt.day.toString().padLeft(2, '0');
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    final s = dt.second.toString().padLeft(2, '0');
+    return '${dt.year}-$mon-$day $h:$m:$s';
+  }
 
   String _toolEmoji(String toolName) {
     switch (toolName) {

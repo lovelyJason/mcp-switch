@@ -132,7 +132,7 @@ class RemoteClawService extends ChangeNotifier {
 
       // 启动 Telegram 长轮询
       if (_telegramEnabled && _telegramChannel != null) {
-        _telegramChannel!.startPolling(_onTelegramDecision);
+        _telegramChannel!.startPolling(_onTelegramDecision, onAnswer: _onTelegramAnswer);
       }
 
       // 启动定时扫描：检测被外部（VSCode 插件等）处理的 pending 请求
@@ -167,7 +167,22 @@ class RemoteClawService extends ChangeNotifier {
   void _checkStaleRequests() {
     final now = DateTime.now();
     bool changed = false;
+    final toRemove = <String>[];
+
     for (final request in _pendingRequests.values) {
+      if (request.decision == PermissionDecision.externallyHandled) {
+        // AskUserQuestion 通知卡片：5 分钟后自动从列表移除，给用户足够时间查看
+        // 普通 externallyHandled（Hook 已退出）：60 秒后移除
+        final timeout = request.isAskFollowup
+            ? const Duration(minutes: 5)
+            : const Duration(seconds: 60);
+        if (now.difference(request.createdAt) > timeout) {
+          toRemove.add(request.id);
+          changed = true;
+        }
+        continue;
+      }
+
       if (request.decision != PermissionDecision.pending) continue;
 
       final bool isStale;
@@ -186,6 +201,10 @@ class RemoteClawService extends ChangeNotifier {
         );
         changed = true;
       }
+    }
+
+    for (final id in toRemove) {
+      _pendingRequests.remove(id);
     }
     if (changed) notifyListeners();
   }
@@ -207,7 +226,7 @@ class RemoteClawService extends ChangeNotifier {
       _telegramChannel?.stopPolling();
       _rebuildChannels();
       if (enabled && _telegramChannel != null) {
-        _telegramChannel!.startPolling(_onTelegramDecision);
+        _telegramChannel!.startPolling(_onTelegramDecision, onAnswer: _onTelegramAnswer);
       }
     }
     notifyListeners();
@@ -280,7 +299,11 @@ class RemoteClawService extends ChangeNotifier {
 
     // 手动审批（来自 UI 或测试）
     router.post('/action/allow/<requestId>', _handleManualAllow);
+    router.post('/action/allow-session/<requestId>', _handleManualAllowSession);
     router.post('/action/deny/<requestId>', _handleManualDeny);
+    router.post('/action/answer/<requestId>', _handleManualAnswer);
+    // 钉钉 actionCard 按钮走 GET + query param
+    router.get('/action/answer/<requestId>', _handleManualAnswerGet);
 
     // Telegram callback（为 Webhook 模式预留入口，当前使用长轮询）
     router.post('/callback/telegram', _handleTelegramCallback);
@@ -305,10 +328,23 @@ class RemoteClawService extends ChangeNotifier {
       final id = const Uuid().v4();
       final request = PermissionRequest.fromHookInput(json, id);
 
+      LoggerService.info('RemoteClaw: New permission request [$id] tool=${request.toolName}');
+
+      // AskUserQuestion：仅推送通知，不等待决策（由 VSCode 插件原生弹窗处理答案）
+      // Hook 脚本已 exit 0 放行，服务端直接标记为 externallyHandled 展示在 UI
+      if (request.isAskFollowup) {
+        request.decision = PermissionDecision.externallyHandled;
+        _pendingRequests[id] = request;
+        notifyListeners();
+        _pushNotification(request);
+        return Response.ok(
+          jsonEncode({'request_id': id, 'status': 'notify_only'}),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+
       _pendingRequests[id] = request;
       notifyListeners();
-
-      LoggerService.info('RemoteClaw: New permission request [$id] tool=${request.toolName}');
 
       // 推送通知
       _pushNotification(request);
@@ -347,6 +383,7 @@ class RemoteClawService extends ChangeNotifier {
 
     // 已有决策：返回结果并清理
     final decision = request.decision;
+    final answer = request.answer;
     _pendingRequests.remove(requestId);
     notifyListeners();
 
@@ -354,6 +391,7 @@ class RemoteClawService extends ChangeNotifier {
       jsonEncode({
         'status': 'resolved',
         'decision': decision.name,
+        if (answer != null) 'answer': answer,
       }),
       headers: {'Content-Type': 'application/json'},
     );
@@ -363,8 +401,70 @@ class RemoteClawService extends ChangeNotifier {
     return _applyDecision(requestId, PermissionDecision.allow);
   }
 
+  Future<Response> _handleManualAllowSession(Request req, String requestId) async {
+    return _applyDecision(requestId, PermissionDecision.allowSession);
+  }
+
   Future<Response> _handleManualDeny(Request req, String requestId) async {
     return _applyDecision(requestId, PermissionDecision.deny);
+  }
+
+  Future<Response> _handleManualAnswer(Request req, String requestId) async {
+    try {
+      final body = await req.readAsString();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      final answer = json['answer'] as String?;
+      if (answer == null) {
+        return Response.badRequest(body: jsonEncode({'error': 'Missing answer'}));
+      }
+      return _applyAnswer(requestId, answer);
+    } catch (e) {
+      return Response.internalServerError(body: jsonEncode({'error': e.toString()}));
+    }
+  }
+
+  /// 钉钉 actionCard 按钮走 GET + query param ?answer=xxx
+  /// answer 格式：
+  ///   - 单问题：直接是答案文本
+  ///   - 多问题："{questionIndex}:{answerText}"
+  Future<Response> _handleManualAnswerGet(Request req, String requestId) async {
+    final raw = req.url.queryParameters['answer'];
+    if (raw == null || raw.isEmpty) {
+      return Response.badRequest(body: jsonEncode({'error': 'Missing answer'}));
+    }
+
+    final request = _pendingRequests[requestId];
+    if (request == null) {
+      return Response.notFound(
+        jsonEncode({'error': 'Request not found or already resolved'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+
+    // 尝试解析多问题格式 "qi:optText"
+    if (request.isAskFollowup && request.askQuestions.length > 1) {
+      final colonIdx = raw.indexOf(':');
+      if (colonIdx > 0) {
+        final qiStr = raw.substring(0, colonIdx);
+        final optText = raw.substring(colonIdx + 1);
+        final qi = int.tryParse(qiStr);
+        if (qi != null && qi >= 0 && qi < request.askQuestions.length) {
+          final done = request.setQuestionAnswer(qi, optText);
+          notifyListeners();
+          LoggerService.info('RemoteClaw: Answer Q$qi [$requestId] = $optText, allDone=$done');
+          if (done) {
+            return _applyAnswer(requestId, request.finalAnswer);
+          }
+          return Response.ok(
+            jsonEncode({'ok': true, 'status': 'partial', 'qIndex': qi}),
+            headers: {'Content-Type': 'application/json'},
+          );
+        }
+      }
+    }
+
+    // 单问题或无法解析格式：直接作为最终答案
+    return _applyAnswer(requestId, raw);
   }
 
   Future<Response> _handleTelegramCallback(Request req) async {
@@ -428,9 +528,37 @@ class RemoteClawService extends ChangeNotifier {
     _applyDecision(requestId, PermissionDecision.allow);
   }
 
+  /// 供 UI 层调用：本次会话全部同意
+  void approveSessionRequest(String requestId) {
+    _applyDecision(requestId, PermissionDecision.allowSession);
+  }
+
   /// 供 UI 层调用：直接拒绝
   void denyRequest(String requestId) {
     _applyDecision(requestId, PermissionDecision.deny);
+  }
+
+  Response _applyAnswer(String requestId, String answer) {
+    final request = _pendingRequests[requestId];
+    if (request == null) {
+      return Response.notFound(
+        jsonEncode({'error': 'Request not found or already resolved'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+    request.resolvedAnswer = answer;
+    request.decision = PermissionDecision.allow;
+    notifyListeners();
+    LoggerService.info('RemoteClaw: Answer [$requestId] = $answer');
+    return Response.ok(
+      jsonEncode({'ok': true, 'answer': answer}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+
+  /// 供 UI 层调用：回填 AskFollowupQuestion 答案
+  void answerRequest(String requestId, String answer) {
+    _applyAnswer(requestId, answer);
   }
 
   // ──────────────────────────────────────────
@@ -451,22 +579,61 @@ class RemoteClawService extends ChangeNotifier {
     _applyDecision(requestId, decision);
   }
 
+  void _onTelegramAnswer(String requestId, String raw) {
+    final request = _pendingRequests[requestId];
+    if (request == null) return;
+
+    // 尝试解析多问题格式 "qi:optText"
+    if (request.isAskFollowup && request.askQuestions.length > 1) {
+      final colonIdx = raw.indexOf(':');
+      if (colonIdx > 0) {
+        final qiStr = raw.substring(0, colonIdx);
+        final optText = raw.substring(colonIdx + 1);
+        final qi = int.tryParse(qiStr);
+        if (qi != null && qi >= 0 && qi < request.askQuestions.length) {
+          final done = request.setQuestionAnswer(qi, optText);
+          notifyListeners();
+          if (done) {
+            _applyAnswer(requestId, request.finalAnswer);
+          }
+          return;
+        }
+      }
+    }
+
+    _applyAnswer(requestId, raw);
+  }
+
   // ──────────────────────────────────────────
   // Hook 脚本 & settings.json 管理
   // ──────────────────────────────────────────
 
-  /// 生成 Hook 脚本内容
+  /// 生成 Hook 脚本内容（处理 PermissionRequest，AskUserQuestion 也走此 Hook）
   String generateHookScript() {
     return '#!/bin/bash\n'
         '# Remote Claw Hook - Generated by MCP Switch\n'
         '# 将 Claude Code PermissionRequest 转发到 MCP Switch 远程审批服务\n'
         '\n'
         'SERVER="http://127.0.0.1:$_port"\n'
-        r'''TIMEOUT=300  # 等待审批的最大秒数
+        r'''PERMISSION_TIMEOUT=300
 POLL_INTERVAL=2
 
 # 读取 stdin（Claude Code 传入的 JSON）
 INPUT=$(cat)
+
+# 读取 tool_name，区分 AskUserQuestion 和普通 PermissionRequest
+TOOL_NAME=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tool_name',''))" 2>/dev/null)
+
+# AskUserQuestion：快速发通知给 MCP Switch 后立即放行，让 Claude Code 原生弹窗处理
+# 用 --max-time 1 保证最多等 1 秒，不阻塞 Claude Code
+if [ "$TOOL_NAME" = "AskUserQuestion" ]; then
+  if curl -sf --max-time 1 "$SERVER/health" > /dev/null 2>&1; then
+    echo "$INPUT" | curl -sf --max-time 2 -X POST "$SERVER/hook/permission" \
+      -H "Content-Type: application/json" \
+      -d @- > /dev/null 2>&1
+  fi
+  exit 0
+fi
 
 # 检查服务是否可用，不可用则降级（返回空输出让 Claude Code 显示原生弹窗）
 if ! curl -sf "$SERVER/health" > /dev/null 2>&1; then
@@ -488,15 +655,17 @@ if [ -z "$REQUEST_ID" ]; then
   exit 0
 fi
 
-# 轮询决策结果
+# 轮询决策结果，超过 PERMISSION_TIMEOUT 秒后自动拒绝
 ELAPSED=0
-while [ $ELAPSED -lt $TIMEOUT ]; do
+while true; do
   DECISION_RESP=$(curl -sf "$SERVER/decision/$REQUEST_ID" 2>/dev/null)
   STATUS=$(echo "$DECISION_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','pending'))" 2>/dev/null)
 
   if [ "$STATUS" = "resolved" ]; then
     DECISION=$(echo "$DECISION_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('decision','deny'))" 2>/dev/null)
-    if [ "$DECISION" = "allow" ]; then
+    if [ "$DECISION" = "allowSession" ]; then
+      echo '{"decision":"allow_and_dont_ask_again"}'
+    elif [ "$DECISION" = "allow" ]; then
       echo '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow","message":"Approved via MCP Switch Remote Claw"}}}'
     else
       echo '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Denied via MCP Switch Remote Claw"}}}'
@@ -506,11 +675,12 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
 
   sleep $POLL_INTERVAL
   ELAPSED=$((ELAPSED + POLL_INTERVAL))
-done
 
-# 超时：自动拒绝
-echo '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Timeout: no response from MCP Switch Remote Claw"}}}'
-exit 0
+  if [ $ELAPSED -ge $PERMISSION_TIMEOUT ]; then
+    echo '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Timeout: no response from MCP Switch Remote Claw"}}}'
+    exit 0
+  fi
+done
 ''';
   }
 
@@ -542,8 +712,8 @@ exit 0
       } catch (_) {}
     }
 
-    // 构建 Hook 配置
-    final hookConfig = {
+    // PermissionRequest hook（超时 600s）
+    final permissionHookConfig = {
       'matcher': '',
       'hooks': [
         {
@@ -554,26 +724,40 @@ exit 0
       ]
     };
 
-    // 确保 hooks.PermissionRequest 存在
     settings.putIfAbsent('hooks', () => <String, dynamic>{});
     final hooks = settings['hooks'] as Map<String, dynamic>;
+
+    void addIfMissing(List<dynamic> hookList, Map<String, dynamic> config) {
+      final exists = hookList.any((h) {
+        if (h is Map) {
+          final hl = h['hooks'] as List?;
+          return hl?.any((hh) =>
+                  hh is Map &&
+                  (hh['command'] as String? ?? '').contains('remote-claw.sh')) ??
+              false;
+        }
+        return false;
+      });
+      if (!exists) hookList.add(config);
+    }
+
     hooks.putIfAbsent('PermissionRequest', () => <dynamic>[]);
-    final permHooks = hooks['PermissionRequest'] as List<dynamic>;
+    addIfMissing(hooks['PermissionRequest'] as List<dynamic>, permissionHookConfig);
 
-    // 检查是否已存在（避免重复写入）
-    final alreadyExists = permHooks.any((h) {
-      if (h is Map) {
-        final hookList = h['hooks'] as List?;
-        return hookList?.any((hh) =>
-                hh is Map &&
-                (hh['command'] as String? ?? '').contains('remote-claw.sh')) ??
-            false;
-      }
-      return false;
-    });
-
-    if (!alreadyExists) {
-      permHooks.add(hookConfig);
+    // 清理旧版本可能遗留的 PreToolUse AskUserQuestion hook
+    final preToolUseList = hooks['PreToolUse'] as List<dynamic>?;
+    if (preToolUseList != null) {
+      preToolUseList.removeWhere((h) {
+        if (h is Map) {
+          final hl = h['hooks'] as List?;
+          return hl?.any((hh) =>
+                  hh is Map &&
+                  (hh['command'] as String? ?? '').contains('remote-claw.sh')) ??
+              false;
+        }
+        return false;
+      });
+      if (preToolUseList.isEmpty) hooks.remove('PreToolUse');
     }
 
     if (!await file.exists()) {
@@ -596,19 +780,29 @@ exit 0
       final hooks = settings['hooks'] as Map<String, dynamic>?;
       if (hooks == null) return;
 
-      final permHooks = hooks['PermissionRequest'] as List<dynamic>?;
-      if (permHooks == null) return;
+      bool removeFromList(List<dynamic>? list) {
+        if (list == null) return false;
+        final before = list.length;
+        list.removeWhere((h) {
+          if (h is Map) {
+            final hookList = h['hooks'] as List?;
+            return hookList?.any((hh) =>
+                    hh is Map &&
+                    (hh['command'] as String? ?? '').contains('remote-claw.sh')) ??
+                false;
+          }
+          return false;
+        });
+        return list.length != before;
+      }
 
-      permHooks.removeWhere((h) {
-        if (h is Map) {
-          final hookList = h['hooks'] as List?;
-          return hookList?.any((hh) =>
-                  hh is Map &&
-                  (hh['command'] as String? ?? '').contains('remote-claw.sh')) ??
-              false;
-        }
-        return false;
-      });
+      final changed1 = removeFromList(hooks['PermissionRequest'] as List<dynamic>?);
+      // 同时清理旧版本可能遗留的 PreToolUse hook
+      final changed2 = removeFromList(hooks['PreToolUse'] as List<dynamic>?);
+      if (hooks['PreToolUse'] is List && (hooks['PreToolUse'] as List).isEmpty) {
+        hooks.remove('PreToolUse');
+      }
+      if (!changed1 && !changed2) return;
 
       const encoder = JsonEncoder.withIndent('  ');
       await file.writeAsString(encoder.convert(settings));

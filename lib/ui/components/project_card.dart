@@ -349,6 +349,38 @@ class _ProjectCardState extends State<ProjectCard>
             collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             leading: _buildProjectIcon(isDark, borderColor),
+            trailing: FutureBuilder<bool>(
+              future: _hasMemoryFilesFuture,
+              builder: (context, snap) {
+                if (snap.data != true) return const Icon(Icons.expand_more);
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        final projectName = widget.profile.name
+                            .split(Platform.pathSeparator)
+                            .where((s) => s.isNotEmpty)
+                            .lastOrNull ?? widget.profile.name;
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => ClaudeMemoryScreen(
+                            projectPath: widget.profile.name,
+                            projectName: projectName,
+                          ),
+                        ));
+                      },
+                      icon: const Icon(Icons.memory_outlined, size: 14),
+                      label: Text(S.get('claude_memory_button')),
+                      style: TextButton.styleFrom(
+                        foregroundColor: isDark ? Colors.orange.shade300 : Colors.orange,
+                        textStyle: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    const Icon(Icons.expand_more),
+                  ],
+                );
+              },
+            ),
             title: Row(
               children: [
                 Flexible(
@@ -481,30 +513,6 @@ class _ProjectCardState extends State<ProjectCard>
                                   textStyle: const TextStyle(fontSize: 12),
                                 ),
                               ),
-                            // Memory 按钮（Claude 项目级 + 全局均显示，有 memory 文件才出现）
-                            FutureBuilder<bool>(
-                              future: _hasMemoryFilesFuture,
-                              builder: (context, snap) {
-                                if (snap.data != true) return const SizedBox.shrink();
-                                final projectName = widget.profile.name.split(Platform.pathSeparator).where((s) => s.isNotEmpty).lastOrNull ?? widget.profile.name;
-                                return TextButton.icon(
-                                  onPressed: () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => ClaudeMemoryScreen(
-                                        projectPath: widget.profile.name,
-                                        projectName: projectName,
-                                      ),
-                                    ),
-                                  ),
-                                  icon: const Icon(Icons.memory_outlined, size: 14),
-                                  label: Text(S.get('claude_memory_button')),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.orange,
-                                    textStyle: const TextStyle(fontSize: 12),
-                                  ),
-                                );
-                              },
-                            ),
                             const SizedBox(width: 8),
                             // 测试连接按钮（仅全局配置显示）
                             if (_isGlobalProfile)

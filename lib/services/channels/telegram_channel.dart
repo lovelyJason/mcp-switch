@@ -22,6 +22,7 @@ class TelegramChannel {
   bool _polling = false;
 
   void Function(String requestId, PermissionDecision decision)? _onDecision;
+  void Function(String requestId, String answer)? _onAnswer;
 
   TelegramChannel({required this.botToken, required this.chatId});
 
@@ -29,15 +30,26 @@ class TelegramChannel {
   // 推送权限请求消息
   // ──────────────────────────────────────────
 
+  // 缓存 requestId → [[q0 options], [q1 options], ...]，供 callback 查表
+  final Map<String, List<List<String>>> _optionsCache = {};
+
   Future<void> sendPermissionRequest(PermissionRequest request) async {
-    final text = _formatMessage(request);
-    final keyboard = _buildInlineKeyboard(request.id);
+    // AskUserQuestion：仅通知，不带操作按钮（答案由 VSCode 插件原生弹窗处理）
+    if (request.isAskFollowup) {
+      final text = _formatAskFollowup(request);
+      await _callApi('sendMessage', {
+        'chat_id': chatId,
+        'text': text,
+        'parse_mode': 'HTML',
+      });
+      return;
+    }
 
     await _callApi('sendMessage', {
       'chat_id': chatId,
-      'text': text,
+      'text': _formatMessage(request),
       'parse_mode': 'HTML',
-      'reply_markup': jsonEncode(keyboard),
+      'reply_markup': jsonEncode(_buildInlineKeyboard(request.id)),
     });
   }
 
@@ -55,11 +67,31 @@ class TelegramChannel {
     return buffer.toString().trim();
   }
 
+  String _formatAskFollowup(PermissionRequest request) {
+    final buffer = StringBuffer();
+    buffer.writeln('❓ <b>Claude Code 询问</b>');
+    buffer.writeln('');
+    buffer.writeln('📁 项目: <code>${_escape(request.projectName)}</code>');
+    final questions = request.askQuestions;
+    if (questions.length == 1) {
+      buffer.writeln('💬 ${_escape(questions[0].question)}');
+    } else {
+      for (var i = 0; i < questions.length; i++) {
+        final q = questions[i];
+        final header = q.header.isNotEmpty ? ' · ${q.header}' : '';
+        buffer.writeln('<b>Q${i + 1}$header</b>: ${_escape(q.question)}');
+      }
+    }
+    buffer.writeln('🆔 ID: <code>${request.id.substring(0, 8)}</code>');
+    return buffer.toString().trim();
+  }
+
   Map<String, dynamic> _buildInlineKeyboard(String requestId) {
     return {
       'inline_keyboard': [
         [
           {'text': '✅ 同意', 'callback_data': 'allow:$requestId'},
+          {'text': '🔁 本次全部同意', 'callback_data': 'allowSession:$requestId'},
           {'text': '❌ 拒绝', 'callback_data': 'deny:$requestId'},
         ]
       ]
@@ -71,11 +103,13 @@ class TelegramChannel {
   // ──────────────────────────────────────────
 
   void startPolling(
-    void Function(String requestId, PermissionDecision decision) onDecision,
-  ) {
+    void Function(String requestId, PermissionDecision decision) onDecision, {
+    void Function(String requestId, String answer)? onAnswer,
+  }) {
     if (_polling) return;
     _polling = true;
     _onDecision = onDecision;
+    _onAnswer = onAnswer;
     _poll();
     LoggerService.info('TelegramChannel: Long-polling started');
   }
@@ -123,11 +157,11 @@ class TelegramChannel {
 
   void _handleCallbackQuery(Map<String, dynamic> callbackQuery) {
     final callbackData = callbackQuery['data'] as String? ?? '';
+    // 格式: action:requestId 或 answer:requestId:index
     final parts = callbackData.split(':');
-    if (parts.length != 2) return;
+    if (parts.length < 2) return;
 
-    final action = parts[0]; // allow | deny
-    final requestId = parts[1];
+    final action = parts[0]; // allow | allowSession | deny | answer
 
     // 校验 chat_id
     final message = callbackQuery['message'] as Map<String, dynamic>?;
@@ -138,17 +172,55 @@ class TelegramChannel {
       return;
     }
 
-    final decision =
-        action == 'allow' ? PermissionDecision.allow : PermissionDecision.deny;
-    _onDecision?.call(requestId, decision);
-
-    // 应答 callback query（消除 Telegram loading 动画）
     final callbackQueryId = callbackQuery['id'] as String? ?? '';
-    _answerCallbackQuery(callbackQueryId, decision);
+
+    // 格式: answer:requestId:qi:optIndex（多问题）或 answer:requestId:optIndex（单问题兼容）
+    if (action == 'answer' && parts.length >= 3) {
+      final requestId = parts[1];
+      final allOptions = _optionsCache[requestId] ?? [];
+
+      int qi = 0;
+      int optIndex = -1;
+
+      if (parts.length == 4) {
+        // 多问题格式: answer:requestId:qi:optIndex
+        qi = int.tryParse(parts[2]) ?? 0;
+        optIndex = int.tryParse(parts[3]) ?? -1;
+      } else {
+        // 单问题兼容格式: answer:requestId:optIndex
+        qi = 0;
+        optIndex = int.tryParse(parts[2]) ?? -1;
+      }
+
+      final qOptions = qi < allOptions.length ? allOptions[qi] : <String>[];
+      if (optIndex >= 0 && optIndex < qOptions.length) {
+        final selectedAnswer = qOptions[optIndex];
+        _ackCallbackQuery(callbackQueryId, '✅ Q${qi + 1}: $selectedAnswer');
+        // 通知 service 层记录该 question 的答案
+        _onAnswer?.call(requestId, '$qi:$selectedAnswer');
+        // 若所有 question 都已缓存且最后一个已选，清除缓存
+        if (qi == allOptions.length - 1) {
+          _optionsCache.remove(requestId);
+        }
+      }
+      return;
+    }
+
+    final requestId = parts[1];
+    final decision = switch (action) {
+      'allow' => PermissionDecision.allow,
+      'allowSession' => PermissionDecision.allowSession,
+      _ => PermissionDecision.deny,
+    };
+    _onDecision?.call(requestId, decision);
+    _ackCallbackQuery(callbackQueryId, switch (decision) {
+      PermissionDecision.allow => '✅ 已同意',
+      PermissionDecision.allowSession => '🔁 本次全部同意',
+      _ => '❌ 已拒绝',
+    });
   }
 
-  void _answerCallbackQuery(String callbackQueryId, PermissionDecision decision) {
-    final text = decision == PermissionDecision.allow ? '✅ 已同意' : '❌ 已拒绝';
+  void _ackCallbackQuery(String callbackQueryId, String text) {
     _callApi('answerCallbackQuery', {
       'callback_query_id': callbackQueryId,
       'text': text,

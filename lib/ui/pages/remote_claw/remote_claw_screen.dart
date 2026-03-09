@@ -409,42 +409,42 @@ class _ServerStatusCardState extends State<_ServerStatusCard> {
             ),
             const SizedBox(height: 8),
             // 本机走 localhost 开关
-            Row(
-              children: [
-                Icon(
-                  Icons.computer,
-                  size: 13,
-                  color: isDark ? Colors.grey[400] : Colors.grey[600],
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  S.get('remote_claw_use_local_callback'),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? Colors.grey[400] : Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Transform.scale(
-                  scale: 0.75,
-                  alignment: Alignment.centerLeft,
-                  child: Switch(
-                    value: widget.service.useLocalCallback,
-                    activeTrackColor: Colors.orange,
-                    onChanged: (v) async {
-                      widget.service.setUseLocalCallback(v);
-                      await context
-                          .read<ConfigService>()
-                          .saveRemoteClawServerConfig(
-                            port: widget.service.port,
-                            callbackHost: widget.service.callbackHost,
-                            useLocalCallback: v,
-                          );
-                    },
-                  ),
-                ),
-              ],
-            ),
+            // Row(
+            //   children: [
+            //     Icon(
+            //       Icons.computer,
+            //       size: 13,
+            //       color: isDark ? Colors.grey[400] : Colors.grey[600],
+            //     ),
+            //     const SizedBox(width: 4),
+            //     Text(
+            //       S.get('remote_claw_use_local_callback'),
+            //       style: TextStyle(
+            //         fontSize: 12,
+            //         color: isDark ? Colors.grey[400] : Colors.grey[600],
+            //       ),
+            //     ),
+            //     const SizedBox(width: 6),
+            //     Transform.scale(
+            //       scale: 0.75,
+            //       alignment: Alignment.centerLeft,
+            //       child: Switch(
+            //         value: widget.service.useLocalCallback,
+            //         activeTrackColor: Colors.orange,
+            //         onChanged: (v) async {
+            //           widget.service.setUseLocalCallback(v);
+            //           await context
+            //               .read<ConfigService>()
+            //               .saveRemoteClawServerConfig(
+            //                 port: widget.service.port,
+            //                 callbackHost: widget.service.callbackHost,
+            //                 useLocalCallback: v,
+            //               );
+            //         },
+            //       ),
+            //     ),
+            //   ],
+            // ),
             if (widget.service.lastError != null) ...[
               const SizedBox(height: 8),
               Text(

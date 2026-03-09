@@ -140,7 +140,7 @@ class ConfigService extends ChangeNotifier {
     _remoteClawAutoStart = prefs.getBool('rc_auto_start') ?? false;
     _remoteClawCallbackHost = prefs.getString('rc_callback_host') ?? '';
     _remoteClawUseLocalCallback =
-        prefs.getBool('rc_use_local_callback') ?? false;
+        prefs.getBool('rc_use_local_callback') ?? true;
   }
 
   String _getDefaultPath(EditorType type) {
@@ -710,7 +710,7 @@ class ConfigService extends ChangeNotifier {
   int _remoteClawPort = 8099;
   bool _remoteClawAutoStart = false;
   String _remoteClawCallbackHost = '';
-  bool _remoteClawUseLocalCallback = false;
+  bool _remoteClawUseLocalCallback = true;
 
   bool get remoteClawTelegramEnabled => _remoteClawTelegramEnabled;
   String get remoteClawTelegramBotToken => _remoteClawTelegramBotToken;

@@ -1,3 +1,29 @@
+## v1.6.0
+
+### ✨ 新增特性
+
+- **SQLite 全量配置存储**：Provider 配置从配置文件迁移至 SQLite，新增 `configContent` 列存储完整配置文件内容（JSON/TOML/ENV），解决非选中供应商编辑数据错误问题
+- **配置冲突解决 UI**：编辑已激活供应商时自动检测 SQLite 与本地配置文件是否一致，不一致时显示双栏对比界面，支持"使用本地文件"或"使用已保存数据"
+- **项目级 MCP 失败诊断**：新增项目级 MCP 失败诊断弹窗，检测到失败时提供一键导入 Clash 代理规则
+- **Claude 配置编辑器**：新增可视化 Claude settings.json 编辑器组件，支持结构化+源码双模式
+- **Remote Claw 通知模式**：AskUserQuestion 改为仅通知模式，不再阻塞等待用户确认
+
+### 🚀 优化改进
+
+- **供应商预设 YAML 化**：供应商预设配置迁移至 YAML 格式管理
+- **Remote Claw 外部处理检测**：新增外部处理检测机制
+- **Codex 环境检测增强**：检测到 Codex 从 fnm 安装时，额外显示当前 Node 版本号
+- **端口复用优化**：RemoteClawService 支持 Hot Restart 跨重启的优雅端口复用
+
+### 🐛 问题修复
+
+- 修复 Flutter run 在交互式 shell 中的 tty 输入挂起问题
+- 修复 Codex reconcile 硬编码 `model_provider != 'custom'` 导致非 custom 供应商重载后被重置
+- 修复配置文件二次合并导致预览与文件不一致
+- 修复 Gemini 配置预览不显示已有 .env 内容
+- 修复 Codex auth.json 异步加载导致滚动跳动
+
+
 ## v1.5.0
 
 ### ✨ 新增特性

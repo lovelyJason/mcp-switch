@@ -12,6 +12,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'logger_service.dart';
 import 'cursor_workspace_service.dart';
+import 'claude_plugin_integration_service.dart';
 import '../utils/platform_utils.dart';
 
 /// 配置服务类 (ConfigService)
@@ -41,6 +42,12 @@ class ConfigService extends ChangeNotifier {
   bool _launchAtStartup = false;
   bool get launchAtStartup => _launchAtStartup;
 
+  bool _enableClaudePluginIntegration = false;
+  bool get enableClaudePluginIntegration => _enableClaudePluginIntegration;
+
+  bool _skipClaudeCodeOnboarding = false;
+  bool get skipClaudeCodeOnboarding => _skipClaudeCodeOnboarding;
+
   // Custom paths for editors (configurable by user)
   final Map<EditorType, String> _editorConfigPaths = {};
 
@@ -57,7 +64,7 @@ class ConfigService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _loadSettings() async {
+  Future<void> _loadSettings({bool forceSyncFromConfigFiles = false}) async {
     final prefs = await SharedPreferences.getInstance();
     // Load custom paths
     for (var type in EditorType.values) {
@@ -84,6 +91,41 @@ class ConfigService extends ChangeNotifier {
     _launchAtStartup =
         prefs.getBool('launch_at_startup') ??
         false; // Actual check via package done in _initStartup
+    if (forceSyncFromConfigFiles) {
+      _enableClaudePluginIntegration =
+          await _detectClaudePluginIntegrationFromConfig();
+      await prefs.setBool(
+        'enable_claude_plugin_integration',
+        _enableClaudePluginIntegration,
+      );
+    } else if (prefs.containsKey('enable_claude_plugin_integration')) {
+      _enableClaudePluginIntegration =
+          prefs.getBool('enable_claude_plugin_integration') ?? false;
+    } else {
+      _enableClaudePluginIntegration =
+          await _detectClaudePluginIntegrationFromConfig();
+      await prefs.setBool(
+        'enable_claude_plugin_integration',
+        _enableClaudePluginIntegration,
+      );
+    }
+
+    if (forceSyncFromConfigFiles) {
+      _skipClaudeCodeOnboarding = await _detectClaudeOnboardingFromConfig();
+      await prefs.setBool(
+        'skip_claude_code_onboarding',
+        _skipClaudeCodeOnboarding,
+      );
+    } else if (prefs.containsKey('skip_claude_code_onboarding')) {
+      _skipClaudeCodeOnboarding =
+          prefs.getBool('skip_claude_code_onboarding') ?? false;
+    } else {
+      _skipClaudeCodeOnboarding = await _detectClaudeOnboardingFromConfig();
+      await prefs.setBool(
+        'skip_claude_code_onboarding',
+        _skipClaudeCodeOnboarding,
+      );
+    }
 
     // Load Log Level
     final logLevel = prefs.getInt('log_level') ?? 0; // Default Error
@@ -141,6 +183,81 @@ class ConfigService extends ChangeNotifier {
     _remoteClawCallbackHost = prefs.getString('rc_callback_host') ?? '';
     _remoteClawUseLocalCallback =
         prefs.getBool('rc_use_local_callback') ?? true;
+  }
+
+  /// 进入设置页时调用：从 prefs + 配置文件重新同步当前设置状态。
+  Future<void> refreshSettingsForSettingsScreen() async {
+    await _loadSettings(forceSyncFromConfigFiles: true);
+    notifyListeners();
+  }
+
+  Future<bool> _detectClaudePluginIntegrationFromConfig() async {
+    final home = PlatformUtils.userHome;
+    final path = PlatformUtils.joinPath(home, '.claude', 'config.json');
+    final file = File(path);
+    if (!await file.exists()) return false;
+
+    try {
+      final raw = (await file.readAsString()).trim();
+      if (raw.isEmpty) return false;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return false;
+      final key = decoded['primaryApiKey'];
+      if (key == null) return false;
+      final value = key.toString().trim();
+      return value.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _detectClaudeOnboardingFromConfig() async {
+    final home = PlatformUtils.userHome;
+    final path = PlatformUtils.joinPath(home, '.claude.json');
+    final file = File(path);
+    if (!await file.exists()) return false;
+
+    try {
+      final raw = (await file.readAsString()).trim();
+      if (raw.isEmpty) return false;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return false;
+      final value = decoded['hasCompletedOnboarding'];
+      if (value is bool) {
+        return value;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _setClaudeOnboardingInConfig(bool value) async {
+    final home = PlatformUtils.userHome;
+    final path = PlatformUtils.joinPath(home, '.claude.json');
+    final file = File(path);
+    if (!await file.parent.exists()) {
+      await file.parent.create(recursive: true);
+    }
+
+    Map<String, dynamic> obj = <String, dynamic>{};
+    if (await file.exists()) {
+      try {
+        final raw = (await file.readAsString()).trim();
+        if (raw.isNotEmpty) {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map<String, dynamic>) {
+            obj = decoded;
+          }
+        }
+      } catch (_) {
+        obj = <String, dynamic>{};
+      }
+    }
+
+    obj['hasCompletedOnboarding'] = value;
+    const encoder = JsonEncoder.withIndent('  ');
+    await file.writeAsString('${encoder.convert(obj)}\n');
   }
 
   String _getDefaultPath(EditorType type) {
@@ -815,6 +932,38 @@ class ConfigService extends ChangeNotifier {
       // 开发模式下原生插件可能未加载，忽略错误
       LoggerService.error('Failed to set launch at startup: $e');
     }
+    notifyListeners();
+  }
+
+  Future<void> setEnableClaudePluginIntegration(bool value) async {
+    _enableClaudePluginIntegration = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('enable_claude_plugin_integration', value);
+
+    try {
+      if (value) {
+        await ClaudePluginIntegrationService.writeManagedConfig();
+      } else {
+        await ClaudePluginIntegrationService.clearPrimaryApiKey();
+      }
+    } catch (e) {
+      LoggerService.error('Failed to sync Claude plugin integration', e);
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> setSkipClaudeCodeOnboarding(bool value) async {
+    _skipClaudeCodeOnboarding = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('skip_claude_code_onboarding', value);
+
+    try {
+      await _setClaudeOnboardingInConfig(value);
+    } catch (e) {
+      LoggerService.error('Failed to set Claude onboarding config', e);
+    }
+
     notifyListeners();
   }
 

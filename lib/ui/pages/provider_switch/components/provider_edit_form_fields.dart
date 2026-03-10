@@ -14,6 +14,8 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
   set _obscureToken(bool v);
   String? get _selectedModel;
   set _selectedModel(String? v);
+  String? get _selectedVscodeModel;
+  set _selectedVscodeModel(String? v);
   String? get _selectedReasoningEffort;
   set _selectedReasoningEffort(String? v);
   String? get _selectedPersonality;
@@ -25,6 +27,10 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
   bool get _isRefreshingCodexModels;
   List<String> get _codexModelOptions;
   Future<void> _refreshCodexModelOptions();
+  void _syncFormToClaudePreview();
+  void _syncFormToCodexPreview();
+  TextEditingController? get _cliModelController;
+  set _cliModelController(TextEditingController? v);
 
   // ── Label + 红色必填星号 ─────────────────────────────────────────
   Widget _buildLabeledField({
@@ -116,19 +122,20 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
         ),
         obscureText: _obscureToken,
         enabled: !_isOfficial,
-        decoration: _disabledDecoration(
-          S.get('provider_api_token_hint'),
-          disabled: _isOfficial,
-        ).copyWith(
-          suffixIcon: IconButton(
-            icon: Icon(
-              _obscureToken ? Icons.visibility_off : Icons.visibility,
-              size: 18,
-              color: isDark ? Colors.grey.shade500 : Colors.grey.shade400,
+        decoration:
+            _disabledDecoration(
+              S.get('provider_api_token_hint'),
+              disabled: _isOfficial,
+            ).copyWith(
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscureToken ? Icons.visibility_off : Icons.visibility,
+                  size: 18,
+                  color: isDark ? Colors.grey.shade500 : Colors.grey.shade400,
+                ),
+                onPressed: () => setState(() => _obscureToken = !_obscureToken),
+              ),
             ),
-            onPressed: () => setState(() => _obscureToken = !_obscureToken),
-          ),
-        ),
         validator: _isOfficial
             ? null
             : (v) {
@@ -194,7 +201,9 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
                   Icon(
                     Icons.lightbulb_outline,
                     size: 14,
-                    color: isDark ? Colors.amber.shade300 : Colors.amber.shade700,
+                    color: isDark
+                        ? Colors.amber.shade300
+                        : Colors.amber.shade700,
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -202,7 +211,9 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
                       S.get('provider_base_url_tip'),
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDark ? Colors.amber.shade300 : Colors.amber.shade800,
+                        color: isDark
+                            ? Colors.amber.shade300
+                            : Colors.amber.shade800,
                       ),
                     ),
                   ),
@@ -220,8 +231,8 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
       final url = _isClaude
           ? 'https://www.anthropic.com/claude-code'
           : _isGemini
-              ? 'https://gemini.google.com'
-              : 'https://chatgpt.com/codex';
+          ? 'https://gemini.google.com'
+          : 'https://chatgpt.com/codex';
       return _buildLabeledField(
         label: S.get('provider_website'),
         child: GestureDetector(
@@ -272,11 +283,46 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
 
   // ── Model ────────────────────────────────────────────────────────
   Widget _buildModelField(bool isDark) {
+    // Claude 用精简版模型列表 + Autocomplete，Gemini/Codex 用原来的
     final models = _isClaude
-        ? ProviderSwitchService.claudeModels
+        ? ProviderSwitchService.claudeModelsSimple
         : _isGemini
-            ? ProviderSwitchService.geminiModels
-            : _codexModelOptions;
+        ? ProviderSwitchService.geminiModels
+        : _codexModelOptions;
+
+    // Claude/Gemini 场景不需要右侧刷新按钮，直接占满当前列宽
+    if (_isClaude || _isGemini) {
+      final dropdownModels = List<String>.from(models);
+      final currentModel = _selectedModel?.trim();
+      if (currentModel != null &&
+          currentModel.isNotEmpty &&
+          !dropdownModels.contains(currentModel)) {
+        dropdownModels.insert(0, currentModel);
+      }
+
+      return _buildLabeledField(
+        label: S.get('provider_model'),
+        isRequired: true,
+        child: _isClaude
+            ? _buildAutocompleteModelField(
+                value: _selectedModel,
+                models: dropdownModels,
+                hint: S.get('provider_model_hint'),
+                onChanged: (val) {
+                  setState(() => _selectedModel = val);
+                  _syncFormToClaudePreview();
+                },
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return S.get('provider_model_required');
+                  }
+                  return null;
+                },
+                onControllerReady: (c) => _cliModelController = c,
+              )
+            : _buildGeminiModelField(models),
+      );
+    }
 
     return Row(
       children: [
@@ -284,76 +330,102 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
           child: _buildLabeledField(
             label: S.get('provider_model'),
             isRequired: true,
-            child: _isGemini
-                ? _buildGeminiModelField(models)
-                : FormField<String>(
-                    initialValue: models.contains(_selectedModel) ? _selectedModel : null,
-                    validator: (_) {
-                      if (_selectedModel == null || _selectedModel!.trim().isEmpty) {
-                        return S.get('provider_model_required');
-                      }
-                      return null;
-                    },
-                    builder: (state) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildCustomDropdown<String>(
-                            value: models.contains(_selectedModel) ? _selectedModel : null,
-                            items: models,
-                            labelBuilder: (m) => m,
-                            onChanged: (val) {
-                              setState(() => _selectedModel = val);
-                              state.didChange(val);
-                            },
-                            hint: S.get('provider_model_hint'),
-                            hasError: state.hasError,
+            child: FormField<String>(
+              initialValue: models.contains(_selectedModel)
+                  ? _selectedModel
+                  : null,
+              validator: (_) {
+                if (_selectedModel == null || _selectedModel!.trim().isEmpty) {
+                  return S.get('provider_model_required');
+                }
+                return null;
+              },
+              builder: (state) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildCustomDropdown<String>(
+                      value: models.contains(_selectedModel)
+                          ? _selectedModel
+                          : null,
+                      items: models,
+                      labelBuilder: (m) => m,
+                      onChanged: (val) {
+                        setState(() => _selectedModel = val);
+                        state.didChange(val);
+                        _syncFormToCodexPreview();
+                      },
+                      hint: S.get('provider_model_hint'),
+                      hasError: state.hasError,
+                    ),
+                    if (state.hasError)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6, left: 4),
+                        child: Text(
+                          state.errorText!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.red,
                           ),
-                          if (state.hasError)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 6, left: 4),
-                              child: Text(
-                                state.errorText!,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.red,
-                                ),
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-          ),
-        ),
-        if (!_isClaude && !_isGemini) ...[
-          const SizedBox(width: 12),
-          Padding(
-            padding: const EdgeInsets.only(top: 30),
-            child: Tooltip(
-              message: S.get('provider_refresh_models'),
-              child: IconButton(
-                onPressed: _isRefreshingCodexModels ? null : _refreshCodexModelOptions,
-                icon: _isRefreshingCodexModels
-                    ? SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: isDark ? Colors.white70 : Colors.black54,
                         ),
-                      )
-                    : Icon(
-                        Icons.refresh,
-                        size: 18,
-                        color: isDark ? Colors.white70 : Colors.black54,
                       ),
-              ),
+                  ],
+                );
+              },
             ),
           ),
-        ],
+        ),
+        const SizedBox(width: 12),
+        Padding(
+          padding: const EdgeInsets.only(top: 30),
+          child: Tooltip(
+            message: S.get('provider_refresh_models'),
+            child: IconButton(
+              onPressed: _isRefreshingCodexModels
+                  ? null
+                  : _refreshCodexModelOptions,
+              icon: _isRefreshingCodexModels
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: isDark ? Colors.white70 : Colors.black54,
+                      ),
+                    )
+                  : Icon(
+                      Icons.refresh,
+                      size: 18,
+                      color: isDark ? Colors.white70 : Colors.black54,
+                    ),
+            ),
+          ),
+        ),
         const Spacer(),
       ],
+    );
+  }
+
+  // ── VSCode Plugin Model ─────────────────────────────────────────
+  Widget _buildVscodeModelField(bool isDark) {
+    if (!_isClaude) return const SizedBox.shrink();
+
+    final models = List<String>.from(ProviderSwitchService.claudeModelsSimple);
+    final currentModel = _selectedVscodeModel?.trim();
+    if (currentModel != null &&
+        currentModel.isNotEmpty &&
+        !models.contains(currentModel)) {
+      models.insert(0, currentModel);
+    }
+
+    return _buildLabeledField(
+      label: S.get('provider_vscode_model'),
+      child: _buildAutocompleteModelField(
+        value: _selectedVscodeModel,
+        models: models,
+        hint: S.get('provider_vscode_model_hint'),
+        onChanged: (val) => setState(() => _selectedVscodeModel = val),
+      ),
     );
   }
 
@@ -410,12 +482,18 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
           child: _buildLabeledField(
             label: S.get('provider_reasoning_effort'),
             child: _buildCustomDropdown<String>(
-              value: ProviderSwitchService.reasoningEfforts.contains(_selectedReasoningEffort)
+              value:
+                  ProviderSwitchService.reasoningEfforts.contains(
+                    _selectedReasoningEffort,
+                  )
                   ? _selectedReasoningEffort
                   : null,
               items: ProviderSwitchService.reasoningEfforts,
               labelBuilder: (e) => '$e（${S.get(_reasoningLabels[e] ?? e)}）',
-              onChanged: (val) => setState(() => _selectedReasoningEffort = val),
+              onChanged: (val) {
+                setState(() => _selectedReasoningEffort = val);
+                _syncFormToCodexPreview();
+              },
               hint: 'high',
             ),
           ),
@@ -425,12 +503,18 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
           child: _buildLabeledField(
             label: S.get('provider_personality'),
             child: _buildCustomDropdown<String>(
-              value: ProviderSwitchService.personalities.contains(_selectedPersonality)
+              value:
+                  ProviderSwitchService.personalities.contains(
+                    _selectedPersonality,
+                  )
                   ? _selectedPersonality
                   : null,
               items: ProviderSwitchService.personalities,
               labelBuilder: (e) => '$e（${S.get(_personalityLabels[e] ?? e)}）',
-              onChanged: (val) => setState(() => _selectedPersonality = val),
+              onChanged: (val) {
+                setState(() => _selectedPersonality = val);
+                _syncFormToCodexPreview();
+              },
               hint: 'pragmatic',
             ),
           ),
@@ -452,6 +536,185 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
     );
   }
 
+  // ── Autocomplete Model Field（可手动输入 + 可下拉选择）──────────
+  Widget _buildAutocompleteModelField({
+    required String? value,
+    required List<String> models,
+    required String hint,
+    required ValueChanged<String?> onChanged,
+    FormFieldValidator<String>? validator,
+    ValueChanged<TextEditingController>? onControllerReady,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark ? Colors.white12 : Colors.grey.shade300;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final hintColor = isDark ? Colors.grey.shade600 : Colors.grey.shade400;
+    final bgColor = isDark ? const Color(0xFF1C1C1E) : Colors.white;
+
+    return Autocomplete<String>(
+      initialValue: TextEditingValue(text: value ?? ''),
+      optionsBuilder: (textEditingValue) {
+        final input = textEditingValue.text.trim().toLowerCase();
+        final current = value?.trim().toLowerCase();
+        if (input.isEmpty || (current != null && input == current)) {
+          return models;
+        }
+        return models.where((m) => m.toLowerCase().contains(input));
+      },
+      onSelected: onChanged,
+      fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+        onControllerReady?.call(controller);
+        return TextFormField(
+          controller: controller,
+          focusNode: focusNode,
+          style: TextStyle(fontSize: 14, color: textColor),
+          onChanged: (val) => onChanged(val.trim().isEmpty ? null : val.trim()),
+          validator: validator,
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(fontSize: 14, color: hintColor),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+            filled: true,
+            fillColor: bgColor,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: borderColor),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.orange.shade300),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.red),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.red),
+            ),
+            suffixIcon: IconButton(
+              icon: Icon(
+                Icons.keyboard_arrow_down,
+                size: 20,
+                color: isDark ? Colors.white38 : Colors.grey.shade500,
+              ),
+              onPressed: () async {
+                final anchorContext = focusNode.context ?? context;
+                final selected = await _showAutocompleteMenu(
+                  anchorContext: anchorContext,
+                  items: models,
+                );
+                if (selected == null) return;
+                controller.value = TextEditingValue(
+                  text: selected,
+                  selection: TextSelection.collapsed(offset: selected.length),
+                );
+                onChanged(selected);
+              },
+            ),
+          ),
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 8,
+            shadowColor: Colors.black45,
+            borderRadius: BorderRadius.circular(10),
+            color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 260, maxWidth: 400),
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  final option = options.elementAt(index);
+                  final isSelected = option == value;
+                  return InkWell(
+                    onTap: () => onSelected(option),
+                    child: Container(
+                      height: 40,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              option,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                color: textColor,
+                              ),
+                            ),
+                          ),
+                          if (isSelected)
+                            const Icon(
+                              Icons.check,
+                              size: 16,
+                              color: Color(0xFFd97757),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<String?> _showAutocompleteMenu({
+    required BuildContext anchorContext,
+    required List<String> items,
+  }) async {
+    final renderObject = anchorContext.findRenderObject();
+    if (renderObject is! RenderBox) return null;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final boxSize = renderObject.size;
+    final boxOffset = renderObject.localToGlobal(Offset.zero);
+
+    final position = RelativeRect.fromLTRB(
+      boxOffset.dx,
+      boxOffset.dy + boxSize.height + 4,
+      MediaQuery.of(context).size.width - boxOffset.dx - boxSize.width,
+      0,
+    );
+
+    return showMenu<String>(
+      context: context,
+      position: position,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
+      elevation: 8,
+      shadowColor: Colors.black45,
+      constraints: BoxConstraints(
+        maxHeight: 300,
+        minWidth: boxSize.width,
+        maxWidth: boxSize.width,
+      ),
+      items: items
+          .map(
+            (item) => PopupMenuItem<String>(
+              value: item,
+              height: 40,
+              child: Text(item, style: const TextStyle(fontSize: 13)),
+            ),
+          )
+          .toList(),
+    );
+  }
+
   // ── Gemini Autocomplete Model Field ─────────────────────────────
   Widget _buildGeminiModelField(List<String> models) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -464,7 +727,11 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
       initialValue: TextEditingValue(text: _selectedModel ?? ''),
       optionsBuilder: (textEditingValue) {
         final input = textEditingValue.text.trim().toLowerCase();
-        if (input.isEmpty) return models;
+        final current = _selectedModel?.trim().toLowerCase();
+        // 回填值时点击下拉，优先展示全量选项
+        if (input.isEmpty || (current != null && input == current)) {
+          return models;
+        }
         return models.where((m) => m.toLowerCase().contains(input));
       },
       onSelected: (val) => setState(() => _selectedModel = val),
@@ -479,7 +746,10 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
           decoration: InputDecoration(
             hintText: S.get('provider_model_hint'),
             hintStyle: TextStyle(fontSize: 14, color: hintColor),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
             filled: true,
             fillColor: bgColor,
             enabledBorder: OutlineInputBorder(
@@ -541,13 +811,19 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
                               option,
                               style: TextStyle(
                                 fontSize: 13,
-                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
                                 color: textColor,
                               ),
                             ),
                           ),
                           if (isSelected)
-                            const Icon(Icons.check, size: 16, color: Color(0xFFd97757)),
+                            const Icon(
+                              Icons.check,
+                              size: 16,
+                              color: Color(0xFFd97757),
+                            ),
                         ],
                       ),
                     ),
@@ -620,18 +896,15 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
                       labelBuilder(item),
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight:
-                            isSelected ? FontWeight.w600 : FontWeight.normal,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                         color: textColor,
                       ),
                     ),
                   ),
                   if (isSelected)
-                    const Icon(
-                      Icons.check,
-                      size: 16,
-                      color: Color(0xFFd97757),
-                    ),
+                    const Icon(Icons.check, size: 16, color: Color(0xFFd97757)),
                 ],
               ),
             );

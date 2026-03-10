@@ -33,6 +33,8 @@ class _SettingsScreenState extends State<SettingsScreen>
   int _selectedThemeIndex = 2; // 2: System
   bool _launchAtStartup = false;
   bool _minimizeToTray = true;
+  bool _enableClaudePluginIntegration = false;
+  bool _skipClaudeCodeOnboarding = false;
   int _logLevel = 2; // Info by default
 
   @override
@@ -60,6 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   Future<void> _loadPaths() async {
     final configService = Provider.of<ConfigService>(context, listen: false);
+    await configService.refreshSettingsForSettingsScreen();
 
     // Theme mapping
     int themeIndex = 2; // System default
@@ -74,6 +77,9 @@ class _SettingsScreenState extends State<SettingsScreen>
       _selectedThemeIndex = themeIndex;
       _launchAtStartup = configService.launchAtStartup;
       _minimizeToTray = configService.minimizeToTray;
+      _enableClaudePluginIntegration =
+          configService.enableClaudePluginIntegration;
+      _skipClaudeCodeOnboarding = configService.skipClaudeCodeOnboarding;
       _logLevel = configService.logLevelNotifier.value;
       for (var type in EditorType.values) {
         _pathControllers[type] = TextEditingController(
@@ -98,7 +104,9 @@ class _SettingsScreenState extends State<SettingsScreen>
   ) async {
     try {
       final home = PlatformUtils.userHome;
-      final settingsFile = File(PlatformUtils.joinPath(home, '.claude', 'settings.json'));
+      final settingsFile = File(
+        PlatformUtils.joinPath(home, '.claude', 'settings.json'),
+      );
 
       if (!await settingsFile.exists()) {
         if (mounted) {
@@ -211,13 +219,17 @@ class _SettingsScreenState extends State<SettingsScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(
-          S.get('new_version_available').replaceAll('{version}', update.version),
+          S
+              .get('new_version_available')
+              .replaceAll('{version}', update.version),
         ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [Text(update.notes, style: const TextStyle(fontSize: 12))],
+            children: [
+              Text(update.notes, style: const TextStyle(fontSize: 12)),
+            ],
           ),
         ),
         actions: [
@@ -225,7 +237,10 @@ class _SettingsScreenState extends State<SettingsScreen>
             onPressed: () {
               Navigator.pop(ctx);
               // 跳过此版本
-              final updateService = Provider.of<UpdateService>(context, listen: false);
+              final updateService = Provider.of<UpdateService>(
+                context,
+                listen: false,
+              );
               updateService.skipVersion(update.version);
             },
             child: Text(S.get('skip_version')),
@@ -243,7 +258,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                 launchUrl(Uri.parse(update.releaseUrl));
               }
             },
-            child: Text(update.supportsAutoUpdate ? S.get('install_restart') : 'Download'),
+            child: Text(
+              update.supportsAutoUpdate ? S.get('install_restart') : 'Download',
+            ),
           ),
         ],
       ),
@@ -480,13 +497,38 @@ class _SettingsScreenState extends State<SettingsScreen>
             ).setMinimizeToTray(v);
           },
         ),
-        
+        const SizedBox(height: 16),
+        _buildSwitchTile(
+          S.get('enable_claude_plugin_integration'),
+          S.get('enable_claude_plugin_integration_desc'),
+          _enableClaudePluginIntegration,
+          (v) async {
+            setState(() => _enableClaudePluginIntegration = v);
+            await Provider.of<ConfigService>(
+              context,
+              listen: false,
+            ).setEnableClaudePluginIntegration(v);
+          },
+        ),
+        const SizedBox(height: 16),
+        _buildSwitchTile(
+          S.get('skip_claude_code_onboarding'),
+          S.get('skip_claude_code_onboarding_desc'),
+          _skipClaudeCodeOnboarding,
+          (v) async {
+            setState(() => _skipClaudeCodeOnboarding = v);
+            await Provider.of<ConfigService>(
+              context,
+              listen: false,
+            ).setSkipClaudeCodeOnboarding(v);
+          },
+        ),
+        const SizedBox(height: 16),
+
         _buildDropdownTile(
           S.get('log_level'),
           S.get('log_level_desc'),
-          _logLevel > 2
-              ? 0
-              : _logLevel,
+          _logLevel > 2 ? 0 : _logLevel,
           {
             0: S.get('log_error'),
             1: S.get('log_warning'),
@@ -508,8 +550,12 @@ class _SettingsScreenState extends State<SettingsScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final configService = Provider.of<ConfigService>(context, listen: false);
     final aiService = Provider.of<AiChatService>(context, listen: false);
-    final apiKeyController = TextEditingController(text: configService.claudeApiKey ?? '');
-    final baseUrlController = TextEditingController(text: configService.claudeApiBaseUrl ?? '');
+    final apiKeyController = TextEditingController(
+      text: configService.claudeApiKey ?? '',
+    );
+    final baseUrlController = TextEditingController(
+      text: configService.claudeApiBaseUrl ?? '',
+    );
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -537,7 +583,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                   // 失去焦点时保存
                   if (!hasFocus) {
                     final value = apiKeyController.text;
-                    await configService.setClaudeApiKey(value.isEmpty ? null : value);
+                    await configService.setClaudeApiKey(
+                      value.isEmpty ? null : value,
+                    );
                     await aiService.updateApiConfig(
                       value.isEmpty ? null : value,
                       baseUrl: configService.claudeApiBaseUrl,
@@ -550,17 +598,28 @@ class _SettingsScreenState extends State<SettingsScreen>
                   decoration: InputDecoration(
                     hintText: S.get('claude_api_key_hint'),
                     hintStyle: TextStyle(
-                      color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+                      color: isDark
+                          ? Colors.grey.shade600
+                          : Colors.grey.shade400,
                       fontSize: 13,
                     ),
                     filled: true,
-                    fillColor: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    fillColor: isDark
+                        ? Colors.grey.shade900
+                        : Colors.grey.shade100,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                       borderSide: BorderSide.none,
                     ),
-                    prefixIcon: const Icon(Icons.key, size: 18, color: Colors.orange),
+                    prefixIcon: const Icon(
+                      Icons.key,
+                      size: 18,
+                      color: Colors.orange,
+                    ),
                   ),
                   style: const TextStyle(fontSize: 13),
                 ),
@@ -571,7 +630,11 @@ class _SettingsScreenState extends State<SettingsScreen>
               onPressed: () {
                 launchUrl(Uri.parse('https://console.anthropic.com/'));
               },
-              icon: const Icon(Icons.open_in_new, size: 14, color: Colors.orange),
+              icon: const Icon(
+                Icons.open_in_new,
+                size: 14,
+                color: Colors.orange,
+              ),
               label: Text(S.get('get_api_key')),
               style: TextButton.styleFrom(
                 foregroundColor: Colors.orange,
@@ -613,7 +676,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                   // 失去焦点时保存
                   if (!hasFocus) {
                     final value = baseUrlController.text;
-                    await configService.setClaudeApiBaseUrl(value.isEmpty ? null : value);
+                    await configService.setClaudeApiBaseUrl(
+                      value.isEmpty ? null : value,
+                    );
                     await aiService.updateApiConfig(
                       configService.claudeApiKey,
                       baseUrl: value.isEmpty ? null : value,
@@ -625,17 +690,28 @@ class _SettingsScreenState extends State<SettingsScreen>
                   decoration: InputDecoration(
                     hintText: S.get('claude_api_base_url_hint'),
                     hintStyle: TextStyle(
-                      color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+                      color: isDark
+                          ? Colors.grey.shade600
+                          : Colors.grey.shade400,
                       fontSize: 13,
                     ),
                     filled: true,
-                    fillColor: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    fillColor: isDark
+                        ? Colors.grey.shade900
+                        : Colors.grey.shade100,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                       borderSide: BorderSide.none,
                     ),
-                    prefixIcon: const Icon(Icons.link, size: 18, color: Colors.orange),
+                    prefixIcon: const Icon(
+                      Icons.link,
+                      size: 18,
+                      color: Colors.orange,
+                    ),
                   ),
                   style: const TextStyle(fontSize: 13),
                 ),
@@ -646,7 +722,9 @@ class _SettingsScreenState extends State<SettingsScreen>
               onTest: () async {
                 // 先保存当前输入
                 final value = baseUrlController.text;
-                await configService.setClaudeApiBaseUrl(value.isEmpty ? null : value);
+                await configService.setClaudeApiBaseUrl(
+                  value.isEmpty ? null : value,
+                );
                 await aiService.updateApiConfig(
                   configService.claudeApiKey,
                   baseUrl: value.isEmpty ? null : value,
@@ -673,10 +751,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             value: configService.claudeModel,
             dense: true,
             items: ConfigService.availableModels.map((model) {
-              return StyledDropdownItem<String>(
-                value: model,
-                label: model,
-              );
+              return StyledDropdownItem<String>(value: model, label: model);
             }).toList(),
             onChanged: (v) async {
               await configService.setClaudeModel(v);
@@ -784,9 +859,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               },
               icon: const Icon(Icons.delete_outline, size: 16),
               label: Text(S.get('clear_history')),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red,
-              ),
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
             ),
           ],
         ),
@@ -1064,7 +1137,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                 if (isRecommended) ...[
                   const SizedBox(width: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.green.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(4),
@@ -1093,7 +1169,9 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   Widget _buildDeepLApiKeyField() {
     final configService = Provider.of<ConfigService>(context, listen: false);
-    final controller = TextEditingController(text: configService.deeplApiKey ?? '');
+    final controller = TextEditingController(
+      text: configService.deeplApiKey ?? '',
+    );
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Row(
@@ -1110,7 +1188,10 @@ class _SettingsScreenState extends State<SettingsScreen>
               ),
               filled: true,
               fillColor: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide.none,
@@ -1162,10 +1243,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          const Text(
-            appVersion,
-            style: TextStyle(color: Colors.grey),
-          ),
+          const Text(appVersion, style: TextStyle(color: Colors.grey)),
           const SizedBox(height: 32),
           const Text(
             'Designed by jasonhuang',
@@ -1186,7 +1264,11 @@ class _SettingsScreenState extends State<SettingsScreen>
               const SizedBox(width: 12),
               OutlinedButton.icon(
                 onPressed: () {
-                  launchUrl(Uri.parse('https://github.com/lovelyJason/mcp-switch/releases'));
+                  launchUrl(
+                    Uri.parse(
+                      'https://github.com/lovelyJason/mcp-switch/releases',
+                    ),
+                  );
                 },
                 icon: const Icon(Icons.open_in_new, size: 16),
                 label: const Text('Releases'),
@@ -1588,6 +1670,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       ),
     );
   }
+
   Widget _buildFinderButton(String path) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? const Color(0xFF2C2C2E) : Colors.white;
@@ -1642,13 +1725,17 @@ class _TestConnectionButtonState extends State<_TestConnectionButton> {
     if (result.latency != null) {
       Toast.show(
         context,
-        message: S.get('connection_success').replaceAll('{ms}', result.latency.toString()),
+        message: S
+            .get('connection_success')
+            .replaceAll('{ms}', result.latency.toString()),
         type: ToastType.success,
       );
     } else {
       Toast.show(
         context,
-        message: S.get('connection_failed').replaceAll('{error}', result.error ?? 'Unknown'),
+        message: S
+            .get('connection_failed')
+            .replaceAll('{error}', result.error ?? 'Unknown'),
         type: ToastType.error,
       );
     }

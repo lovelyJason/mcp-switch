@@ -24,11 +24,23 @@ class ProviderListScreen extends StatefulWidget {
 
 class _ProviderListScreenState extends State<ProviderListScreen> {
   late String _selectedEditor;
+  bool? _isConfigSynced;
 
   @override
   void initState() {
     super.initState();
     _selectedEditor = widget.initialEditorType;
+    _checkConfigSync();
+  }
+
+  void _checkConfigSync() {
+    final service = Provider.of<ProviderSwitchService>(
+      context,
+      listen: false,
+    );
+    service.checkConfigSync(_selectedEditor).then((synced) {
+      if (mounted) setState(() => _isConfigSynced = synced);
+    });
   }
 
   @override
@@ -99,6 +111,7 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
                 );
                 await service.refreshFromConfig();
                 if (mounted) {
+                  _checkConfigSync();
                   Toast.show(
                     context,
                     message: S.get('config_refreshed'),
@@ -119,13 +132,16 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
               icon: const Icon(Icons.add, size: 20, color: Colors.white),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ProviderEditScreen(
-                    editorType: _selectedEditor,
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ProviderEditScreen(
+                      editorType: _selectedEditor,
+                    ),
                   ),
-                ),
-              ),
+                );
+                if (mounted) _checkConfigSync();
+              },
               tooltip: S.get('provider_add'),
             ),
           ),
@@ -158,7 +174,13 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
       elevation: 8,
       shadowColor: Colors.black45,
       tooltip: S.get('provider_switch_tooltip'),
-      onSelected: (type) => setState(() => _selectedEditor = type),
+      onSelected: (type) {
+        setState(() {
+          _selectedEditor = type;
+          _isConfigSynced = null;
+        });
+        _checkConfigSync();
+      },
       itemBuilder: (context) => editors.map((e) {
         final (type, label, icon, fixedColor, useOriginal) = e;
         final isSelected = _selectedEditor == type;
@@ -318,10 +340,15 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
                 itemCount: profiles.length,
                 separatorBuilder: (_, _) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
+                  final profile = profiles[index];
                   return _ProviderListItem(
-                    profile: profiles[index],
+                    profile: profile,
                     editorType: _selectedEditor,
                     isDark: isDark,
+                    isConfigSynced: profile.isActive
+                        ? _isConfigSynced
+                        : null,
+                    onReturnFromEdit: _checkConfigSync,
                   );
                 },
               ),
@@ -337,11 +364,15 @@ class _ProviderListItem extends StatefulWidget {
   final ProviderProfile profile;
   final String editorType;
   final bool isDark;
+  final bool? isConfigSynced;
+  final VoidCallback? onReturnFromEdit;
 
   const _ProviderListItem({
     required this.profile,
     required this.editorType,
     required this.isDark,
+    this.isConfigSynced,
+    this.onReturnFromEdit,
   });
 
   @override
@@ -361,99 +392,87 @@ class _ProviderListItemState extends State<_ProviderListItem> {
     final isActive = widget.profile.isActive;
 
     return MouseRegion(
+      cursor: SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _isHovering = true),
       onExit: (_) => setState(() => _isHovering = false),
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isActive ? const Color(0xFFd97757) : borderColor,
+            color: _isHovering
+                ? const Color(0xFFd97757)
+                : isActive
+                    ? const Color(0xFFd97757).withValues(alpha: 0.5)
+                    : borderColor,
           ),
-          boxShadow: [
-            if (!widget.isDark)
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.02),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ProviderEditScreen(
-                    editorType: widget.editorType,
-                    profile: widget.profile,
+            boxShadow: [
+              if (!widget.isDark)
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+            ],
+          ),
+        child: IntrinsicHeight(
+          child: Row(
+            children: [
+              if (isActive)
+                Container(
+                  width: 4,
+                  color: const Color(0xFFd97757),
+                ),
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: isActive ? 12 : 16,
+                    top: 16,
+                    bottom: 16,
+                    right: 16,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(child: _buildTextContent()),
+                      if (_isHovering) ...[
+                        const SizedBox(width: 12),
+                        if (isActive)
+                          Container(
+                            height: 32,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFd97757).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              S.get('provider_in_use'),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFFd97757),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        if (!isActive) _buildActivateButton(),
+                        const SizedBox(width: 8),
+                        _buildEditButton(),
+                        const SizedBox(width: 8),
+                        _buildDeleteButton(),
+                      ],
+                    ],
                   ),
                 ),
-              );
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: IntrinsicHeight(
-              child: Row(
-                children: [
-                  // 左侧激活指示条
-                  if (isActive)
-                    Container(
-                      width: 4,
-                      color: const Color(0xFFd97757),
-                    ),
-                  Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                        left: isActive ? 12 : 16,
-                        top: 16,
-                        bottom: 16,
-                        right: 16,
-                      ),
-                      child: Row(
-                        children: [
-                          // 文本内容
-                          Expanded(child: _buildTextContent()),
-                          // 悬停操作
-                          if (_isHovering) ...[
-                            const SizedBox(width: 12),
-                            if (isActive)
-                              Container(
-                                height: 32,
-                                padding: const EdgeInsets.symmetric(horizontal: 10),
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFd97757).withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  S.get('provider_in_use'),
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFFd97757),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            if (!isActive) _buildActivateButton(),
-                            const SizedBox(width: 8),
-                            _buildEditButton(),
-                            const SizedBox(width: 8),
-                            _buildDeleteButton(),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
               ),
-            ),
+            ],
           ),
         ),
       ),
     );
   }
+
 
   Widget _buildTextContent() {
     return Column(
@@ -522,20 +541,73 @@ class _ProviderListItemState extends State<_ProviderListItem> {
         if (widget.profile.isActive)
           Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFFd97757).withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                S.get('provider_in_use'),
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFFd97757),
-                  fontWeight: FontWeight.w600,
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFd97757).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    S.get('provider_in_use'),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFFd97757),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
-              ),
+                if (widget.isConfigSynced == false)
+                  Tooltip(
+                    message: S.get('provider_config_sync_hint'),
+                    child: GestureDetector(
+                      onTap: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ProviderEditScreen(
+                              editorType: widget.editorType,
+                              profile: widget.profile,
+                            ),
+                          ),
+                        );
+                        widget.onReturnFromEdit?.call();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              size: 12,
+                              color: Colors.amber,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              S.get('provider_config_out_of_sync'),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.amber,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
       ],
@@ -603,8 +675,8 @@ class _ProviderListItemState extends State<_ProviderListItem> {
         icon: const Icon(Icons.edit, size: 18),
         color: widget.isDark ? Colors.white70 : Colors.grey.shade700,
         padding: EdgeInsets.zero,
-        onPressed: () {
-          Navigator.of(context).push(
+        onPressed: () async {
+          await Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => ProviderEditScreen(
                 editorType: widget.editorType,
@@ -612,6 +684,7 @@ class _ProviderListItemState extends State<_ProviderListItem> {
               ),
             ),
           );
+          widget.onReturnFromEdit?.call();
         },
         tooltip: S.get('provider_edit'),
       ),

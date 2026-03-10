@@ -30,6 +30,8 @@ class _GlobalTerminalPanelState extends State<GlobalTerminalPanel>
   late Animation<Offset> _slideAnimation;
   final FocusNode _terminalFocusNode = FocusNode();
   bool _showAIInput = false;
+  bool _showProxyOverlay = false;
+  final TextEditingController _proxyPortController = TextEditingController(text: '7897');
 
   @override
   void initState() {
@@ -79,6 +81,7 @@ class _GlobalTerminalPanelState extends State<GlobalTerminalPanel>
     HardwareKeyboard.instance.removeHandler(_handleGlobalKeyEvent);
     _animationController.dispose();
     _terminalFocusNode.dispose();
+    _proxyPortController.dispose();
     super.dispose();
   }
 
@@ -127,6 +130,116 @@ class _GlobalTerminalPanelState extends State<GlobalTerminalPanel>
 
   void _runCommand(String command) {
     context.read<TerminalService>().sendCommand(command);
+  }
+
+  void _submitProxy() {
+    final port = _proxyPortController.text.trim();
+    if (port.isNotEmpty) {
+      _runCommand('export all_proxy=http://127.0.0.1:$port');
+    }
+    setState(() => _showProxyOverlay = false);
+    _terminalFocusNode.requestFocus();
+  }
+
+  Widget _buildProxyOverlay() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2D2D2D),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.wifi_tethering, size: 14, color: Colors.orange.shade300),
+              const SizedBox(width: 6),
+              const Text(
+                '设置代理端口',
+                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () {
+                  setState(() => _showProxyOverlay = false);
+                  _terminalFocusNode.requestFocus();
+                },
+                child: const Icon(Icons.close, size: 16, color: Colors.white54),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '将在终端执行：export all_proxy=http://127.0.0.1:<端口>',
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey[400],
+              fontFamily: 'Menlo',
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Text(
+                'http://127.0.0.1:',
+                style: TextStyle(fontSize: 12, color: Colors.grey[400], fontFamily: 'Menlo'),
+              ),
+              const SizedBox(width: 4),
+              SizedBox(
+                width: 80,
+                child: TextField(
+                  controller: _proxyPortController,
+                  keyboardType: TextInputType.number,
+                  autofocus: true,
+                  style: const TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'Menlo'),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    hintText: '7897',
+                    hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.orange.withValues(alpha: 0.5)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: const BorderSide(color: Colors.orange),
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFF1E1E1E),
+                  ),
+                  onSubmitted: (_) => _submitProxy(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: _submitProxy,
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.orange,
+                  backgroundColor: Colors.orange.withValues(alpha: 0.15),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                ),
+                child: const Text('执行', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -194,6 +307,16 @@ class _GlobalTerminalPanelState extends State<GlobalTerminalPanel>
                                   ),
                                 ),
                                 const Spacer(),
+                                // 代理设置按钮
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.wifi_tethering,
+                                    size: 18,
+                                    color: _showProxyOverlay ? Colors.orange : Colors.white70,
+                                  ),
+                                  tooltip: '设置代理（export all_proxy）',
+                                  onPressed: () => setState(() => _showProxyOverlay = !_showProxyOverlay),
+                                ),
                                 // AI 输入按钮
                                 IconButton(
                                   icon: Icon(
@@ -304,6 +427,15 @@ class _GlobalTerminalPanelState extends State<GlobalTerminalPanel>
                           ),
                         ],
                       ),
+
+                      // 代理设置弹窗 - 覆盖在终端上方
+                      if (_showProxyOverlay)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 60,
+                          child: _buildProxyOverlay(),
+                        ),
 
                       // AI 输入弹窗 - 覆盖在终端上方
                       if (_showAIInput)

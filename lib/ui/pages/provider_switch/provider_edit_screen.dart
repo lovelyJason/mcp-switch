@@ -10,7 +10,11 @@ import '../../../config/provider_presets_config.dart';
 import '../../../l10n/s.dart';
 import '../../../data/database.dart';
 import '../../../services/provider_switch_service.dart';
+import '../../components/custom_dialog.dart';
 import '../../components/custom_toast.dart';
+import 'components/claude_config_editor.dart';
+import 'components/codex_config_editor.dart';
+import 'components/config_conflict_banner.dart';
 
 part 'components/provider_edit_form_fields.dart';
 part 'components/provider_config_preview.dart';
@@ -61,6 +65,8 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   @override
   String? _selectedModel;
   @override
+  String? _selectedVscodeModel;
+  @override
   String? _selectedReasoningEffort;
   @override
   String? _selectedPersonality;
@@ -71,6 +77,39 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   List<String> _codexModelOptions = List.of(ProviderSwitchService.codexModels);
   @override
   bool _isRefreshingCodexModels = false;
+  @override
+  bool _isPreviewEditing = false;
+  @override
+  Map<String, dynamic>? _editedConfigData;
+  @override
+  Map<String, dynamic> _claudeBaseConfig = {};
+  @override
+  TextEditingController? _cliModelController;
+  @override
+  String _editedCodexText = '';
+  @override
+  bool _codexConfigLoaded = false;
+  @override
+  String _codexAuthContent = '';
+  @override
+  bool get _codexAuthLoaded => _codexAuthContentLoaded;
+  bool _codexAuthContentLoaded = false;
+
+  @override
+  String _geminiExistingEnvContent = '';
+  @override
+  bool _geminiEnvLoaded = false;
+
+  @override
+  bool _hasConfigConflict = false;
+  @override
+  String _localFileContent = '';
+
+  @override
+  final ScrollController _pageScrollController = ScrollController();
+
+  /// 初始快照，用于检测是否有未保存的更改
+  late Map<String, String?> _initialSnapshot;
 
   bool get _isEditMode => widget.profile != null;
   @override
@@ -87,8 +126,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       return false;
     }
     final presets = ProviderPresetsConfig.presetsFor(widget.editorType);
-    return presets
-        .any((p) => p.id == _selectedPresetName && p.isOfficial);
+    return presets.any((p) => p.id == _selectedPresetName && p.isOfficial);
   }
 
   @override
@@ -103,16 +141,22 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
     _apiTokenController = TextEditingController(text: p?.apiToken ?? '');
     _baseUrlController = TextEditingController(text: p?.baseUrl ?? '');
     _websiteController = TextEditingController(text: p?.website ?? '');
-    _maxOutputTokensController =
-        TextEditingController(text: p?.maxOutputTokens ?? '');
-    _maxThinkingTokensController =
-        TextEditingController(text: p?.maxThinkingTokens ?? '');
-    _selectedModel = p?.model ??
+    _maxOutputTokensController = TextEditingController(
+      text: p?.maxOutputTokens ?? '',
+    );
+    _maxThinkingTokensController = TextEditingController(
+      text: p?.maxThinkingTokens ?? '',
+    );
+    _selectedModel =
+        p?.model ??
         (_isClaude
             ? ProviderSwitchService.claudeModels.first
             : _isGemini
-                ? null
-                : ProviderSwitchService.codexModels.first);
+            ? null
+            : ProviderSwitchService.codexModels.first);
+    _selectedVscodeModel = _isClaude
+        ? ProviderSwitchService.claudeModels.first
+        : null;
     _selectedReasoningEffort = p?.modelReasoningEffort ?? 'high';
     _selectedPersonality = p?.personality ?? 'pragmatic';
     _selectedPresetName = '_custom_';
@@ -130,14 +174,8 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       c.addListener(_onFieldChanged);
     }
 
-    _configPreviewFuture = _isClaude
-        ? ProviderSwitchService.readClaudeConfigFile()
-        : _isGemini
-            ? ProviderSwitchService.readGeminiEnvFile()
-            : ProviderSwitchService.readCodexConfigFile().then((text) {
-                _codexExistingConfigContent = text;
-                return text;
-              });
+    _initConfigFromSqlite();
+    _checkConfigConflict();
 
     if (!_isClaude && !_isGemini) {
       final selected = _selectedModel;
@@ -147,7 +185,161 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
         _codexModelOptions = [selected, ..._codexModelOptions];
       }
       unawaited(_loadCodexModelOptions(silent: true));
+      ProviderSwitchService.readCodexAuthFile().then((text) {
+        if (mounted) {
+          setState(() {
+            _codexAuthContent = text;
+            _codexAuthContentLoaded = true;
+          });
+        }
+      });
     }
+
+    _initialSnapshot = _takeSnapshot();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _initialSnapshot = _takeSnapshot();
+    });
+  }
+
+  /// 从 SQLite configContent 初始化配置预览数据（同步，无需读文件）
+  void _initConfigFromSqlite() {
+    final stored = widget.profile?.configContent;
+
+    if (_isClaude) {
+      if (stored != null && stored.trim().isNotEmpty) {
+        try {
+          _claudeBaseConfig = jsonDecode(stored) as Map<String, dynamic>;
+        } catch (_) {
+          _claudeBaseConfig = {};
+        }
+      }
+      _configPreviewFuture = Future.value(
+        _claudeBaseConfig.isEmpty
+            ? '{}'
+            : const JsonEncoder.withIndent('  ').convert(_claudeBaseConfig),
+      );
+    } else if (_isGemini) {
+      _geminiExistingEnvContent = stored ?? '';
+      _geminiEnvLoaded = true;
+      _configPreviewFuture = Future.value(_geminiExistingEnvContent);
+    } else {
+      _codexExistingConfigContent = stored ?? '';
+      _codexConfigLoaded = true;
+      _configPreviewFuture = Future.value(_codexExistingConfigContent);
+    }
+  }
+
+  Future<void> _checkConfigConflict() async {
+    final p = widget.profile;
+    if (p == null || !p.isActive || p.configContent == null) return;
+
+    try {
+      String fileContent;
+      bool isSynced;
+      if (_isClaude) {
+        fileContent = await ProviderSwitchService.readClaudeConfigFile();
+        isSynced = ProviderSwitchService.jsonEquals(p.configContent!, fileContent);
+      } else if (_isGemini) {
+        fileContent = await ProviderSwitchService.readGeminiEnvFile();
+        isSynced = ProviderSwitchService.envEquals(p.configContent!, fileContent);
+      } else {
+        fileContent = await ProviderSwitchService.readCodexConfigFile();
+        isSynced = ProviderSwitchService.normalizedEquals(
+          p.configContent!, fileContent,
+        );
+      }
+      if (!isSynced && mounted) {
+        setState(() {
+          _hasConfigConflict = true;
+          _localFileContent = fileContent;
+        });
+      }
+    } catch (_) {}
+  }
+
+  @override
+  void _resolveConflict({required bool useLocal}) {
+    if (useLocal) {
+      if (_isClaude) {
+        try {
+          _claudeBaseConfig =
+              jsonDecode(_localFileContent) as Map<String, dynamic>;
+        } catch (_) {
+          _claudeBaseConfig = {};
+        }
+        _configPreviewFuture = Future.value(
+          _claudeBaseConfig.isEmpty
+              ? '{}'
+              : const JsonEncoder.withIndent('  ').convert(_claudeBaseConfig),
+        );
+        _syncFromConfig(_claudeBaseConfig);
+      } else if (_isGemini) {
+        _geminiExistingEnvContent = _localFileContent;
+        _configPreviewFuture = Future.value(_localFileContent);
+        _syncFormFromGeminiEnv(_localFileContent);
+      } else {
+        _codexExistingConfigContent = _localFileContent;
+        _editedCodexText = _localFileContent;
+        _configPreviewFuture = Future.value(_localFileContent);
+        _syncFromCodexToml(_localFileContent);
+      }
+    }
+    setState(() {
+      _hasConfigConflict = false;
+      _localFileContent = '';
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _initialSnapshot = _takeSnapshot();
+    });
+  }
+
+  Map<String, String?> _takeSnapshot() {
+    return {
+      'name': _nameController.text.trim(),
+      'description': _descriptionController.text.trim(),
+      'apiToken': _apiTokenController.text.trim(),
+      'baseUrl': _baseUrlController.text.trim(),
+      'website': _websiteController.text.trim(),
+      'maxOutputTokens': _maxOutputTokensController.text.trim(),
+      'maxThinkingTokens': _maxThinkingTokensController.text.trim(),
+      'model': _selectedModel?.trim(),
+      'reasoningEffort': _selectedReasoningEffort,
+      'personality': _selectedPersonality,
+      'editedConfig': _isClaude && _claudeBaseConfig.isNotEmpty
+          ? (_isPreviewEditing && _editedConfigData != null
+                ? const JsonEncoder.withIndent('  ').convert(_editedConfigData)
+                : _generateClaudePreviewText())
+          : null,
+      'editedCodexText': !_isClaude && !_isGemini && _codexConfigLoaded
+          ? (_isPreviewEditing && _editedCodexText.isNotEmpty
+                ? _editedCodexText
+                : _generateCodexPreviewText())
+          : null,
+      'editedGeminiEnv': _isGemini && _geminiEnvLoaded
+          ? _generateGeminiPreviewText()
+          : null,
+    };
+  }
+
+  bool _hasUnsavedChanges() {
+    final current = _takeSnapshot();
+    for (final key in current.keys) {
+      if (current[key] != _initialSnapshot[key]) return true;
+    }
+    return false;
+  }
+
+  Future<bool> _confirmDiscardIfNeeded() async {
+    if (!_hasUnsavedChanges()) return true;
+    final confirmed = await CustomConfirmDialog.show(
+      context,
+      title: S.get('unsaved_changes_title'),
+      content: S.get('unsaved_changes_content'),
+      confirmText: S.get('discard'),
+      cancelText: S.get('keep_editing'),
+      confirmColor: Colors.red,
+    );
+    return confirmed == true;
   }
 
   @override
@@ -159,71 +351,99 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
     _websiteController.dispose();
     _maxOutputTokensController.dispose();
     _maxThinkingTokensController.dispose();
+    _pageScrollController.dispose();
     super.dispose();
   }
 
   void _onFieldChanged() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      _syncFormToClaudePreview();
+      _syncFormToCodexPreview();
+      setState(() {});
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(isDark),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Form(
-                  key: _formKey,
-                  autovalidateMode: _autovalidateMode,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (!_isEditMode) ...[
-                        const SizedBox(height: 16),
-                        _buildPresetChips(isDark),
-                      ],
-                      const SizedBox(height: 24),
-                      _buildNameAndDescription(isDark),
-                      if (!_isOfficialPreset) ...[
-                        const SizedBox(height: 20),
-                        _buildApiTokenField(isDark),
-                        const SizedBox(height: 16),
-                        _buildBaseUrlField(isDark),
-                      ],
-                      const SizedBox(height: 16),
-                      _buildWebsiteField(isDark),
-                      const SizedBox(height: 16),
-                      _buildModelField(isDark),
-                      if (_isClaude) ...[
-                        const SizedBox(height: 16),
-                        _buildTokenFields(isDark),
-                      ],
-                      if (!_isClaude && !_isGemini) ...[
-                        const SizedBox(height: 16),
-                        _buildCodexFields(isDark),
+    final nav = Navigator.of(context);
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (await _confirmDiscardIfNeeded()) {
+          if (mounted) nav.pop();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(isDark),
+              if (_hasConfigConflict)
+                ConfigConflictBanner(
+                  onDismiss: () => _resolveConflict(useLocal: false),
+                ),
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: _pageScrollController,
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Form(
+                    key: _formKey,
+                    autovalidateMode: _autovalidateMode,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (!_isEditMode) ...[
+                          const SizedBox(height: 16),
+                          _buildPresetChips(isDark),
+                        ],
                         const SizedBox(height: 24),
-                        _buildCodexAuthPreview(isDark),
-                      ],
-                      const SizedBox(height: 24),
-                      _buildConfigPreview(isDark),
-                      if (_isGemini) ...[
+                        _buildNameAndDescription(isDark),
+                        if (!_isOfficialPreset) ...[
+                          const SizedBox(height: 20),
+                          _buildApiTokenField(isDark),
+                          const SizedBox(height: 16),
+                          _buildBaseUrlField(isDark),
+                        ],
+                        const SizedBox(height: 16),
+                        _buildWebsiteField(isDark),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(child: _buildModelField(isDark)),
+                            if (_isClaude) ...[
+                              const SizedBox(width: 16),
+                              Expanded(child: _buildVscodeModelField(isDark)),
+                            ],
+                          ],
+                        ),
+                        if (_isClaude) ...[
+                          const SizedBox(height: 16),
+                          _buildTokenFields(isDark),
+                        ],
+                        if (!_isClaude && !_isGemini) ...[
+                          const SizedBox(height: 16),
+                          _buildCodexFields(isDark),
+                          const SizedBox(height: 24),
+                          _buildCodexAuthPreview(isDark),
+                        ],
                         const SizedBox(height: 24),
-                        _buildGeminiSettingsPreview(isDark),
+                        _buildConfigPreview(isDark),
+                        if (_isGemini) ...[
+                          const SizedBox(height: 24),
+                          _buildGeminiSettingsPreview(isDark),
+                        ],
+                        const SizedBox(height: 24),
                       ],
-                      const SizedBox(height: 24),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            _buildBottomBar(isDark),
-          ],
+              _buildBottomBar(isDark),
+            ],
+          ),
         ),
       ),
     );
@@ -248,7 +468,11 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
               icon: Icon(Icons.arrow_back, size: 20, color: textColor),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () async {
+                if (await _confirmDiscardIfNeeded()) {
+                  if (mounted) Navigator.of(context).pop();
+                }
+              },
               tooltip: S.get('cancel'),
             ),
           ),
@@ -257,15 +481,15 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
             _isClaude
                 ? 'assets/icons/claude.svg'
                 : _isGemini
-                    ? 'assets/icons/gemini.svg'
-                    : 'assets/icons/chatgpt.svg',
+                ? 'assets/icons/gemini.svg'
+                : 'assets/icons/chatgpt.svg',
             width: 24,
             height: 24,
             colorFilter: _isClaude
                 ? const ColorFilter.mode(Color(0xFFd97757), BlendMode.srcIn)
                 : _isGemini
-                    ? null
-                    : ColorFilter.mode(textColor, BlendMode.srcIn),
+                ? null
+                : ColorFilter.mode(textColor, BlendMode.srcIn),
           ),
           const SizedBox(width: 8),
           Text(
@@ -316,12 +540,14 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
                           : (isDark ? Colors.white70 : Colors.black54),
                     ),
               label: Text(
-                  isCustom ? S.get('provider_preset_custom') : preset.name),
+                isCustom ? S.get('provider_preset_custom') : preset.name,
+              ),
               selected: isSelected,
               onSelected: (_) => _applyPreset(preset),
               selectedColor: const Color(0xFFd97757).withValues(alpha: 0.2),
-              backgroundColor:
-                  isDark ? const Color(0xFF2C2C2E) : Colors.grey.shade100,
+              backgroundColor: isDark
+                  ? const Color(0xFF2C2C2E)
+                  : Colors.grey.shade100,
               side: BorderSide(
                 color: isSelected
                     ? const Color(0xFFd97757)
@@ -370,7 +596,11 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () async {
+              if (await _confirmDiscardIfNeeded()) {
+                if (mounted) Navigator.of(context).pop();
+              }
+            },
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               foregroundColor: isDark ? Colors.white70 : Colors.black54,
@@ -398,6 +628,13 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   }
 
   Future<void> _save() async {
+    if (!_isClaude && !_isGemini) {
+      final codexTomlForSave = _buildCodexTomlForSave();
+      if (codexTomlForSave != null && codexTomlForSave.isNotEmpty) {
+        _syncFromCodexToml(codexTomlForSave, clearMissing: true);
+      }
+    }
+
     if (!_formKey.currentState!.validate()) {
       setState(() => _autovalidateMode = AutovalidateMode.onUserInteraction);
       return;
@@ -424,6 +661,8 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
         ? null
         : _websiteController.text.trim();
 
+    final configContent = _buildConfigContentForSave();
+
     if (_isEditMode) {
       await service.updateProfile(
         id: widget.profile!.id,
@@ -438,6 +677,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
         modelReasoningEffort: _selectedReasoningEffort,
         personality: _selectedPersonality,
         website: website,
+        configContent: configContent,
       );
     } else {
       await service.addProfile(
@@ -452,14 +692,33 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
         modelReasoningEffort: _selectedReasoningEffort,
         personality: _selectedPersonality,
         website: website,
+        configContent: configContent,
       );
     }
 
     if (mounted) {
-      Toast.show(context,
-          message: S.get('provider_save_success'), type: ToastType.success);
+      Toast.show(
+        context,
+        message: S.get('provider_save_success'),
+        type: ToastType.success,
+      );
       Navigator.of(context).pop();
     }
+  }
+
+  /// 构建完整配置内容字符串，存入 SQLite configContent
+  String? _buildConfigContentForSave() {
+    if (_isClaude) {
+      final data = _buildClaudeConfigForSave();
+      if (data != null) {
+        return const JsonEncoder.withIndent('  ').convert(data);
+      }
+      return null;
+    }
+    if (_isGemini) {
+      return _buildGeminiEnvForSave();
+    }
+    return _buildCodexTomlForSave();
   }
 
   @override
@@ -472,10 +731,10 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
           ? null
           : _descriptionController.text,
       isActive: widget.profile?.isActive ?? false,
-      apiToken:
-          _apiTokenController.text.isEmpty ? null : _apiTokenController.text,
-      baseUrl:
-          _baseUrlController.text.isEmpty ? null : _baseUrlController.text,
+      apiToken: _apiTokenController.text.isEmpty
+          ? null
+          : _apiTokenController.text,
+      baseUrl: _baseUrlController.text.isEmpty ? null : _baseUrlController.text,
       model: _selectedModel,
       maxOutputTokens: _maxOutputTokensController.text.isEmpty
           ? null
@@ -485,8 +744,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
           : _maxThinkingTokensController.text,
       modelReasoningEffort: _selectedReasoningEffort,
       personality: _selectedPersonality,
-      website:
-          _websiteController.text.isEmpty ? null : _websiteController.text,
+      website: _websiteController.text.isEmpty ? null : _websiteController.text,
       createdAt: widget.profile?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -497,8 +755,10 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
     bool silent = false,
   }) async {
     try {
-      final service =
-          Provider.of<ProviderSwitchService>(context, listen: false);
+      final service = Provider.of<ProviderSwitchService>(
+        context,
+        listen: false,
+      );
       final models = await service.getCodexModels(forceRefresh: forceRefresh);
       if (!mounted || models.isEmpty) return;
 
@@ -522,14 +782,18 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
     try {
       await _loadCodexModelOptions(forceRefresh: true, silent: false);
       if (!mounted) return;
-      Toast.show(context,
-          message: S.get('provider_refresh_models_success'),
-          type: ToastType.success);
+      Toast.show(
+        context,
+        message: S.get('provider_refresh_models_success'),
+        type: ToastType.success,
+      );
     } catch (_) {
       if (!mounted) return;
-      Toast.show(context,
-          message: S.get('provider_refresh_models_failed'),
-          type: ToastType.error);
+      Toast.show(
+        context,
+        message: S.get('provider_refresh_models_failed'),
+        type: ToastType.error,
+      );
     } finally {
       if (mounted) setState(() => _isRefreshingCodexModels = false);
     }

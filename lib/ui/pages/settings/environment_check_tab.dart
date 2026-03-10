@@ -13,6 +13,7 @@ class _ToolCheckResult {
   final bool isInstalled;
   final String? version;
   final String? path;
+  final String? runtimeInfo;
   final String? error;
 
   const _ToolCheckResult({
@@ -21,6 +22,7 @@ class _ToolCheckResult {
     required this.isInstalled,
     this.version,
     this.path,
+    this.runtimeInfo,
     this.error,
   });
 }
@@ -60,9 +62,24 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
       _checkCliTool('Claude Code', 'assets/icons/claude.svg', 'claude'),
       _checkCliTool('Codex', 'assets/icons/chatgpt.svg', 'codex'),
       _checkCliTool('Gemini CLI', 'assets/icons/gemini.svg', 'gemini'),
-      _checkAppInstalled('Antigravity', 'assets/icons/antigravity.svg', '/Applications/Antigravity.app', 'antigravity'),
-      _checkAppInstalled('Cursor', 'assets/icons/cursor.svg', '/Applications/Cursor.app', 'cursor'),
-      _checkAppInstalled('Windsurf', 'assets/icons/windsurf.svg', '/Applications/Windsurf.app', 'windsurf'),
+      _checkAppInstalled(
+        'Antigravity',
+        'assets/icons/antigravity.svg',
+        '/Applications/Antigravity.app',
+        'antigravity',
+      ),
+      _checkAppInstalled(
+        'Cursor',
+        'assets/icons/cursor.svg',
+        '/Applications/Cursor.app',
+        'cursor',
+      ),
+      _checkAppInstalled(
+        'Windsurf',
+        'assets/icons/windsurf.svg',
+        '/Applications/Windsurf.app',
+        'windsurf',
+      ),
     ]);
 
     tools.addAll(futures);
@@ -83,7 +100,12 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
 
     final appInfo = _appCheckInfo(old.name);
     if (appInfo != null) {
-      updated = await _checkAppInstalled(old.name, old.icon, appInfo.$1, appInfo.$2);
+      updated = await _checkAppInstalled(
+        old.name,
+        old.icon,
+        appInfo.$1,
+        appInfo.$2,
+      );
     } else {
       final cmd = _nameToCommand(old.name);
       updated = await _checkCliTool(old.name, old.icon, cmd);
@@ -101,20 +123,29 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
   /// 返回 (appPath, cliCommand?) 或 null 表示非 App 类型
   (String, String?)? _appCheckInfo(String name) {
     switch (name) {
-      case 'Cursor': return ('/Applications/Cursor.app', 'cursor');
-      case 'Windsurf': return ('/Applications/Windsurf.app', 'windsurf');
-      case 'Antigravity': return ('/Applications/Antigravity.app', 'antigravity');
-      default: return null;
+      case 'Cursor':
+        return ('/Applications/Cursor.app', 'cursor');
+      case 'Windsurf':
+        return ('/Applications/Windsurf.app', 'windsurf');
+      case 'Antigravity':
+        return ('/Applications/Antigravity.app', 'antigravity');
+      default:
+        return null;
     }
   }
 
   String _nameToCommand(String name) {
     switch (name) {
-      case 'Claude Code': return 'claude';
-      case 'Codex': return 'codex';
-      case 'Gemini CLI': return 'gemini';
-      case 'Antigravity': return 'antigravity';
-      default: return name.toLowerCase();
+      case 'Claude Code':
+        return 'claude';
+      case 'Codex':
+        return 'codex';
+      case 'Gemini CLI':
+        return 'gemini';
+      case 'Antigravity':
+        return 'antigravity';
+      default:
+        return name.toLowerCase();
     }
   }
 
@@ -152,14 +183,75 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
     } catch (_) {}
 
     final isInstalled = version != null || path != null;
+    final runtimeInfo = name == 'Codex' && path != null
+        ? await _detectCodexRuntimeInfo(path)
+        : null;
     return _ToolCheckResult(
       name: name,
       icon: icon,
       isInstalled: isInstalled,
       version: version,
       path: path,
+      runtimeInfo: runtimeInfo,
       error: isInstalled && version == null ? error : null,
     );
+  }
+
+  Future<String?> _detectCodexRuntimeInfo(String executablePath) async {
+    final resolvedPath = _resolveExecutablePath(executablePath);
+    final manager = _detectNodeManager(executablePath, resolvedPath);
+    if (manager == null) return null;
+
+    final nodeVersion =
+        _extractNodeVersion(executablePath) ??
+        (resolvedPath != null ? _extractNodeVersion(resolvedPath) : null) ??
+        await _getCurrentNodeVersion();
+    if (nodeVersion == null) return null;
+
+    return 'Node $nodeVersion · $manager';
+  }
+
+  String? _resolveExecutablePath(String executablePath) {
+    try {
+      return File(executablePath).resolveSymbolicLinksSync();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _detectNodeManager(String path, [String? resolvedPath]) {
+    final candidates = [path, if (resolvedPath != null) resolvedPath];
+
+    for (final candidate in candidates) {
+      final normalized = candidate.replaceAll('\\', '/');
+      if (normalized.contains('/.local/state/fnm_multishells/') ||
+          normalized.contains('/.local/share/fnm/aliases/') ||
+          normalized.contains('/.local/share/fnm/node-versions/')) {
+        return 'fnm';
+      }
+    }
+
+    return null;
+  }
+
+  String? _extractNodeVersion(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    final fnmMatch = RegExp(
+      r'/\.local/share/fnm/node-versions/(v[^/]+)/installation/',
+    ).firstMatch(normalized);
+    return fnmMatch?.group(1);
+  }
+
+  Future<String?> _getCurrentNodeVersion() async {
+    try {
+      final result = await PlatformUtils.runCommand('node -v');
+      if (result.exitCode != 0) return null;
+
+      final version = (result.stdout as String).trim().split('\n').first;
+      return version.isEmpty ? null : version;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<_ToolCheckResult> _checkAppInstalled(
@@ -219,10 +311,7 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
                   const SizedBox(height: 4),
                   Text(
                     S.get('env_check_desc'),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade500,
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                   ),
                 ],
               ),
@@ -250,7 +339,9 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
         if (_isChecking && _results.isEmpty)
           _buildLoadingState(isDark)
         else
-          ..._results.asMap().entries.map((e) => _buildToolCard(e.value, isDark, e.key)),
+          ..._results.asMap().entries.map(
+            (e) => _buildToolCard(e.value, isDark, e.key),
+          ),
       ],
     );
   }
@@ -271,12 +362,19 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
                 child: Row(
                   children: [
-                    Icon(Icons.warning_amber_rounded, color: Colors.amber.shade600, size: 22),
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.amber.shade600,
+                      size: 22,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         '$toolName --version failed',
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
@@ -291,7 +389,9 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
                     style: TextStyle(
                       fontSize: 12,
                       fontFamily: 'Menlo',
-                      color: isDark ? Colors.grey.shade300 : Colors.grey.shade800,
+                      color: isDark
+                          ? Colors.grey.shade300
+                          : Colors.grey.shade800,
                       height: 1.5,
                     ),
                   ),
@@ -326,10 +426,7 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
           const SizedBox(height: 16),
           Text(
             S.get('env_checking'),
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey.shade500,
-            ),
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
           ),
         ],
       ),
@@ -359,12 +456,10 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
               width: 28,
               height: 28,
               colorFilter: result.icon.contains('claude')
-                  ? const ColorFilter.mode(
-                      Color(0xFFd97757), BlendMode.srcIn)
+                  ? const ColorFilter.mode(Color(0xFFd97757), BlendMode.srcIn)
                   : (isDark
-                      ? ColorFilter.mode(
-                          Colors.white70, BlendMode.srcIn)
-                      : null),
+                        ? ColorFilter.mode(Colors.white70, BlendMode.srcIn)
+                        : null),
             ),
           ),
           const SizedBox(width: 14),
@@ -386,6 +481,19 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
                   const SizedBox(height: 2),
                   Text(
                     result.path!,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade500,
+                      fontFamily: 'Menlo',
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if (result.runtimeInfo != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    result.runtimeInfo!,
                     style: TextStyle(
                       fontSize: 11,
                       color: Colors.grey.shade500,
@@ -467,7 +575,9 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
                 : IconButton(
                     icon: const Icon(Icons.refresh, size: 16),
                     padding: EdgeInsets.zero,
-                    color: _isChecking ? Colors.grey.shade300 : Colors.grey.shade500,
+                    color: _isChecking
+                        ? Colors.grey.shade300
+                        : Colors.grey.shade500,
                     tooltip: _isChecking ? null : '刷新',
                     onPressed: _isChecking ? null : () => _refreshSingle(index),
                   ),

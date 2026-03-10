@@ -162,6 +162,17 @@ class $ProviderProfilesTable extends ProviderProfiles
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _configContentMeta = const VerificationMeta(
+    'configContent',
+  );
+  @override
+  late final GeneratedColumn<String> configContent = GeneratedColumn<String>(
+    'config_content',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -200,6 +211,7 @@ class $ProviderProfilesTable extends ProviderProfiles
     modelReasoningEffort,
     personality,
     oauthData,
+    configContent,
     createdAt,
     updatedAt,
   ];
@@ -317,6 +329,15 @@ class $ProviderProfilesTable extends ProviderProfiles
         oauthData.isAcceptableOrUnknown(data['oauth_data']!, _oauthDataMeta),
       );
     }
+    if (data.containsKey('config_content')) {
+      context.handle(
+        _configContentMeta,
+        configContent.isAcceptableOrUnknown(
+          data['config_content']!,
+          _configContentMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -398,6 +419,10 @@ class $ProviderProfilesTable extends ProviderProfiles
         DriftSqlType.string,
         data['${effectivePrefix}oauth_data'],
       ),
+      configContent: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}config_content'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -430,6 +455,7 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
   final String? modelReasoningEffort;
   final String? personality;
   final String? oauthData;
+  final String? configContent;
   final DateTime createdAt;
   final DateTime updatedAt;
   const ProviderProfile({
@@ -447,6 +473,7 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     this.modelReasoningEffort,
     this.personality,
     this.oauthData,
+    this.configContent,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -486,6 +513,9 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     }
     if (!nullToAbsent || oauthData != null) {
       map['oauth_data'] = Variable<String>(oauthData);
+    }
+    if (!nullToAbsent || configContent != null) {
+      map['config_content'] = Variable<String>(configContent);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -528,6 +558,9 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
       oauthData: oauthData == null && nullToAbsent
           ? const Value.absent()
           : Value(oauthData),
+      configContent: configContent == null && nullToAbsent
+          ? const Value.absent()
+          : Value(configContent),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -557,6 +590,7 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
       ),
       personality: serializer.fromJson<String?>(json['personality']),
       oauthData: serializer.fromJson<String?>(json['oauthData']),
+      configContent: serializer.fromJson<String?>(json['configContent']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -579,6 +613,7 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
       'modelReasoningEffort': serializer.toJson<String?>(modelReasoningEffort),
       'personality': serializer.toJson<String?>(personality),
       'oauthData': serializer.toJson<String?>(oauthData),
+      'configContent': serializer.toJson<String?>(configContent),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -599,6 +634,7 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     Value<String?> modelReasoningEffort = const Value.absent(),
     Value<String?> personality = const Value.absent(),
     Value<String?> oauthData = const Value.absent(),
+    Value<String?> configContent = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => ProviderProfile(
@@ -622,6 +658,9 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
         : this.modelReasoningEffort,
     personality: personality.present ? personality.value : this.personality,
     oauthData: oauthData.present ? oauthData.value : this.oauthData,
+    configContent: configContent.present
+        ? configContent.value
+        : this.configContent,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -653,6 +692,9 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
           ? data.personality.value
           : this.personality,
       oauthData: data.oauthData.present ? data.oauthData.value : this.oauthData,
+      configContent: data.configContent.present
+          ? data.configContent.value
+          : this.configContent,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -675,6 +717,7 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
           ..write('modelReasoningEffort: $modelReasoningEffort, ')
           ..write('personality: $personality, ')
           ..write('oauthData: $oauthData, ')
+          ..write('configContent: $configContent, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -697,6 +740,7 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     modelReasoningEffort,
     personality,
     oauthData,
+    configContent,
     createdAt,
     updatedAt,
   );
@@ -718,6 +762,7 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
           other.modelReasoningEffort == this.modelReasoningEffort &&
           other.personality == this.personality &&
           other.oauthData == this.oauthData &&
+          other.configContent == this.configContent &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -737,6 +782,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
   final Value<String?> modelReasoningEffort;
   final Value<String?> personality;
   final Value<String?> oauthData;
+  final Value<String?> configContent;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -755,6 +801,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     this.modelReasoningEffort = const Value.absent(),
     this.personality = const Value.absent(),
     this.oauthData = const Value.absent(),
+    this.configContent = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -774,6 +821,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     this.modelReasoningEffort = const Value.absent(),
     this.personality = const Value.absent(),
     this.oauthData = const Value.absent(),
+    this.configContent = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -797,6 +845,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     Expression<String>? modelReasoningEffort,
     Expression<String>? personality,
     Expression<String>? oauthData,
+    Expression<String>? configContent,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -817,6 +866,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
         'model_reasoning_effort': modelReasoningEffort,
       if (personality != null) 'personality': personality,
       if (oauthData != null) 'oauth_data': oauthData,
+      if (configContent != null) 'config_content': configContent,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -838,6 +888,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     Value<String?>? modelReasoningEffort,
     Value<String?>? personality,
     Value<String?>? oauthData,
+    Value<String?>? configContent,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -857,6 +908,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
       modelReasoningEffort: modelReasoningEffort ?? this.modelReasoningEffort,
       personality: personality ?? this.personality,
       oauthData: oauthData ?? this.oauthData,
+      configContent: configContent ?? this.configContent,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -910,6 +962,9 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     if (oauthData.present) {
       map['oauth_data'] = Variable<String>(oauthData.value);
     }
+    if (configContent.present) {
+      map['config_content'] = Variable<String>(configContent.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -939,6 +994,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
           ..write('modelReasoningEffort: $modelReasoningEffort, ')
           ..write('personality: $personality, ')
           ..write('oauthData: $oauthData, ')
+          ..write('configContent: $configContent, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -976,6 +1032,7 @@ typedef $$ProviderProfilesTableCreateCompanionBuilder =
       Value<String?> modelReasoningEffort,
       Value<String?> personality,
       Value<String?> oauthData,
+      Value<String?> configContent,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -996,6 +1053,7 @@ typedef $$ProviderProfilesTableUpdateCompanionBuilder =
       Value<String?> modelReasoningEffort,
       Value<String?> personality,
       Value<String?> oauthData,
+      Value<String?> configContent,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -1077,6 +1135,11 @@ class $$ProviderProfilesTableFilterComposer
 
   ColumnFilters<String> get oauthData => $composableBuilder(
     column: $table.oauthData,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get configContent => $composableBuilder(
+    column: $table.configContent,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1170,6 +1233,11 @@ class $$ProviderProfilesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get configContent => $composableBuilder(
+    column: $table.configContent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -1244,6 +1312,11 @@ class $$ProviderProfilesTableAnnotationComposer
   GeneratedColumn<String> get oauthData =>
       $composableBuilder(column: $table.oauthData, builder: (column) => column);
 
+  GeneratedColumn<String> get configContent => $composableBuilder(
+    column: $table.configContent,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -1302,6 +1375,7 @@ class $$ProviderProfilesTableTableManager
                 Value<String?> modelReasoningEffort = const Value.absent(),
                 Value<String?> personality = const Value.absent(),
                 Value<String?> oauthData = const Value.absent(),
+                Value<String?> configContent = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -1320,6 +1394,7 @@ class $$ProviderProfilesTableTableManager
                 modelReasoningEffort: modelReasoningEffort,
                 personality: personality,
                 oauthData: oauthData,
+                configContent: configContent,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -1340,6 +1415,7 @@ class $$ProviderProfilesTableTableManager
                 Value<String?> modelReasoningEffort = const Value.absent(),
                 Value<String?> personality = const Value.absent(),
                 Value<String?> oauthData = const Value.absent(),
+                Value<String?> configContent = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -1358,6 +1434,7 @@ class $$ProviderProfilesTableTableManager
                 modelReasoningEffort: modelReasoningEffort,
                 personality: personality,
                 oauthData: oauthData,
+                configContent: configContent,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,

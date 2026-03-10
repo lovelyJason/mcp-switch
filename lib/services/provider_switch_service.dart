@@ -4,9 +4,11 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../data/database.dart';
+import 'claude_plugin_integration_service.dart';
 import '../utils/platform_utils.dart';
 
 /// 供应商配置切换服务
@@ -45,6 +47,8 @@ class ProviderSwitchService extends ChangeNotifier {
     if (_isInitialized) return;
     await _loadProfiles();
     await _seedOfficialProfiles();
+    await _migrateConfigContent();
+    await _loadProfiles();
     _isInitialized = true;
     notifyListeners();
   }
@@ -99,7 +103,9 @@ class ProviderSwitchService extends ChangeNotifier {
             if (trimmed.startsWith('GEMINI_API_KEY=')) {
               fileApiToken = trimmed.substring('GEMINI_API_KEY='.length).trim();
             } else if (trimmed.startsWith('GOOGLE_GEMINI_BASE_URL=')) {
-              fileBaseUrl = trimmed.substring('GOOGLE_GEMINI_BASE_URL='.length).trim();
+              fileBaseUrl = trimmed
+                  .substring('GOOGLE_GEMINI_BASE_URL='.length)
+                  .trim();
             }
           }
           if (fileApiToken?.isEmpty == true) fileApiToken = null;
@@ -122,9 +128,10 @@ class ProviderSwitchService extends ChangeNotifier {
               break;
             }
           }
-          // 如果是 custom，提取 [model_providers.custom] 中的 base_url
-          if (fileModelProvider == 'custom') {
-            final range = _findSectionRange(lines, 'model_providers.custom');
+          // 从 [model_providers.{provider}] 中提取 base_url
+          if (fileModelProvider != null && fileModelProvider.isNotEmpty) {
+            final section = 'model_providers.$fileModelProvider';
+            final range = _findSectionRange(lines, section);
             if (range != null) {
               for (var i = range.start + 1; i < range.endExclusive; i++) {
                 final trimmed = lines[i].trim();
@@ -138,8 +145,7 @@ class ProviderSwitchService extends ChangeNotifier {
         }
 
         // 读取 auth.json 中的 OPENAI_API_KEY
-        final authPath =
-            PlatformUtils.joinPath(home, '.codex', 'auth.json');
+        final authPath = PlatformUtils.joinPath(home, '.codex', 'auth.json');
         final authFile = File(authPath);
         if (await authFile.exists()) {
           try {
@@ -151,10 +157,10 @@ class ProviderSwitchService extends ChangeNotifier {
           } catch (_) {}
         }
 
-        // 非 custom provider → 官方配置，清空 baseUrl
-        if (fileModelProvider != 'custom') {
-          fileBaseUrl = null;
-        }
+        // 如果没有找到 base_url（无 section 或 section 内无 base_url），
+        // fileBaseUrl 自然为 null，无需额外清空。
+        // 不再硬编码 model_provider == 'custom' 判断，
+        // 因为用户可能用 "OpenAI" 等 provider name 搭配自定义 base_url。
       }
     } catch (_) {
       return;
@@ -402,6 +408,7 @@ class ProviderSwitchService extends ChangeNotifier {
     String? modelReasoningEffort,
     String? personality,
     String? website,
+    String? configContent,
   }) async {
     final now = DateTime.now();
     final entry = ProviderProfilesCompanion.insert(
@@ -417,6 +424,7 @@ class ProviderSwitchService extends ChangeNotifier {
       modelReasoningEffort: Value(modelReasoningEffort),
       personality: Value(personality),
       website: Value(website),
+      configContent: Value(configContent),
       createdAt: now,
       updatedAt: now,
     );
@@ -439,7 +447,11 @@ class ProviderSwitchService extends ChangeNotifier {
     String? modelReasoningEffort,
     String? personality,
     String? website,
+    String? configContent,
   }) async {
+    final existingProfile = await _db.getProfileById(id);
+    final wasActive = existingProfile?.isActive ?? false;
+
     final entry = ProviderProfilesCompanion(
       id: Value(id),
       editorType: Value(editorType),
@@ -453,15 +465,15 @@ class ProviderSwitchService extends ChangeNotifier {
       modelReasoningEffort: Value(modelReasoningEffort),
       personality: Value(personality),
       website: Value(website),
+      configContent: Value(configContent),
       updatedAt: Value(DateTime.now()),
     );
     await _db.updateProfile(entry);
     await _loadProfiles();
 
-    // 如果当前 profile 处于激活状态，同步写入配置文件
-    final updated = getProfiles(editorType).where((p) => p.id == id);
-    if (updated.isNotEmpty && updated.first.isActive) {
-      await _writeConfigFile(editorType, updated.first);
+    final updatedProfile = await _db.getProfileById(id);
+    if (updatedProfile != null && (wasActive || updatedProfile.isActive)) {
+      await _writeConfigFile(editorType, updatedProfile);
     }
 
     notifyListeners();
@@ -499,6 +511,7 @@ class ProviderSwitchService extends ChangeNotifier {
     try {
       if (editorType == 'claude') {
         await _writeClaudeSettings(profile);
+        await _syncClaudePluginIntegration(profile);
       } else if (editorType == 'codex') {
         await _writeCodexConfig(profile);
       } else if (editorType == 'gemini') {
@@ -518,6 +531,7 @@ class ProviderSwitchService extends ChangeNotifier {
     try {
       if (editorType == 'claude') {
         await _clearClaudeSettings();
+        await _syncClaudePluginWhenDisabledOrOfficial();
       } else if (editorType == 'codex') {
         await _clearCodexConfig();
       } else if (editorType == 'gemini') {
@@ -525,6 +539,36 @@ class ProviderSwitchService extends ChangeNotifier {
       }
     } catch (e) {
       print('Error clearing config file: $e');
+    }
+  }
+
+  Future<void> _syncClaudePluginIntegration(ProviderProfile profile) async {
+    final prefs = await SharedPreferences.getInstance();
+    final enabled = prefs.getBool('enable_claude_plugin_integration') ?? false;
+    if (!enabled) return;
+
+    try {
+      if (isOfficialProfile(profile)) {
+        await ClaudePluginIntegrationService.clearPrimaryApiKey();
+      } else {
+        await ClaudePluginIntegrationService.writeManagedConfig();
+      }
+    } catch (e) {
+      // 插件联动失败不应影响主供应商切换流程
+      debugPrint('Claude plugin integration sync failed: $e');
+    }
+  }
+
+  Future<void> _syncClaudePluginWhenDisabledOrOfficial() async {
+    final prefs = await SharedPreferences.getInstance();
+    final enabled = prefs.getBool('enable_claude_plugin_integration') ?? false;
+    if (!enabled) return;
+
+    try {
+      await ClaudePluginIntegrationService.clearPrimaryApiKey();
+    } catch (e) {
+      // 插件联动失败不应影响主供应商切换流程
+      debugPrint('Claude plugin integration clear failed: $e');
     }
   }
 
@@ -588,7 +632,8 @@ class ProviderSwitchService extends ChangeNotifier {
 
   /// 写入 Gemini 配置 (~/.gemini/.env)
   ///
-  /// dotenv 格式，读取现有内容后修改目标 key，保留其他 key 不变。
+  /// 优先使用 profile.configContent 直接写入；
+  /// configContent 为空时回退到字段合并逻辑（迁移兼容）。
   Future<void> _writeGeminiEnv(ProviderProfile profile) async {
     final home = PlatformUtils.userHome;
     final geminiDir = PlatformUtils.joinPath(home, '.gemini');
@@ -600,7 +645,12 @@ class ProviderSwitchService extends ChangeNotifier {
     final envPath = PlatformUtils.joinPath(geminiDir, '.env');
     final envFile = File(envPath);
 
-    // 读取现有内容，按行解析成 Map
+    final content = profile.configContent;
+    if (content != null && content.trim().isNotEmpty) {
+      await envFile.writeAsString('${content.trim()}\n');
+      return;
+    }
+
     final Map<String, String> envMap = {};
     final List<String> keyOrder = [];
     if (await envFile.exists()) {
@@ -617,7 +667,6 @@ class ProviderSwitchService extends ChangeNotifier {
       }
     }
 
-    // 写入 / 移除目标字段
     void setOrRemove(String key, String? value) {
       if (value != null && value.isNotEmpty) {
         if (!keyOrder.contains(key)) keyOrder.add(key);
@@ -632,7 +681,6 @@ class ProviderSwitchService extends ChangeNotifier {
     setOrRemove('GOOGLE_GEMINI_BASE_URL', profile.baseUrl);
     setOrRemove('GEMINI_MODEL', profile.model);
 
-    // 重新序列化
     final output = keyOrder.map((k) => '$k=${envMap[k]}').join('\n');
     await envFile.writeAsString(output.isEmpty ? '' : '$output\n');
   }
@@ -646,7 +694,11 @@ class ProviderSwitchService extends ChangeNotifier {
 
     try {
       final lines = await envFile.readAsLines();
-      final keysToRemove = {'GEMINI_API_KEY', 'GOOGLE_GEMINI_BASE_URL', 'GEMINI_MODEL'};
+      final keysToRemove = {
+        'GEMINI_API_KEY',
+        'GOOGLE_GEMINI_BASE_URL',
+        'GEMINI_MODEL',
+      };
       final remaining = lines.where((line) {
         final trimmed = line.trim();
         if (trimmed.isEmpty || trimmed.startsWith('#')) return true;
@@ -659,10 +711,31 @@ class ProviderSwitchService extends ChangeNotifier {
   }
 
   /// 写入 Claude Code 配置 (~/.claude/settings.json)
+  ///
+  /// 优先使用 profile.configContent 直接写入；
+  /// configContent 为空时回退到字段合并逻辑（迁移兼容）。
   Future<void> _writeClaudeSettings(ProviderProfile profile) async {
     final home = PlatformUtils.userHome;
     final path = PlatformUtils.joinPath(home, '.claude', 'settings.json');
     final file = File(path);
+
+    final dir = file.parent;
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+
+    const encoder = JsonEncoder.withIndent('  ');
+
+    final content = profile.configContent;
+    if (content != null && content.trim().isNotEmpty) {
+      try {
+        final parsed = jsonDecode(content);
+        await file.writeAsString(encoder.convert(parsed));
+      } catch (_) {
+        await file.writeAsString(content);
+      }
+      return;
+    }
 
     Map<String, dynamic> config = {};
     if (await file.exists()) {
@@ -671,59 +744,37 @@ class ProviderSwitchService extends ChangeNotifier {
       } catch (_) {}
     }
 
-    // 确保 env 对象存在
     if (config['env'] is! Map) {
       config['env'] = <String, dynamic>{};
     }
     final env = config['env'] as Map<String, dynamic>;
 
-    // 更新供应商相关字段
-    if (profile.apiToken != null && profile.apiToken!.isNotEmpty) {
-      env['ANTHROPIC_AUTH_TOKEN'] = profile.apiToken;
-    } else {
-      env.remove('ANTHROPIC_AUTH_TOKEN');
-    }
+    setOrRemove(env, 'ANTHROPIC_AUTH_TOKEN', profile.apiToken);
+    setOrRemove(env, 'ANTHROPIC_BASE_URL', profile.baseUrl);
+    setOrRemove(env, 'CLAUDE_CODE_MAX__OUTPUT_TOKENS', profile.maxOutputTokens);
+    setOrRemove(env, 'MAX_THINKING_TOKENS', profile.maxThinkingTokens);
 
-    if (profile.baseUrl != null && profile.baseUrl!.isNotEmpty) {
-      env['ANTHROPIC_BASE_URL'] = profile.baseUrl;
-    } else {
-      env.remove('ANTHROPIC_BASE_URL');
-    }
-
-    if (profile.maxOutputTokens != null &&
-        profile.maxOutputTokens!.isNotEmpty) {
-      env['CLAUDE_CODE_MAX__OUTPUT_TOKENS'] = profile.maxOutputTokens;
-    } else {
-      env.remove('CLAUDE_CODE_MAX__OUTPUT_TOKENS');
-    }
-
-    if (profile.maxThinkingTokens != null &&
-        profile.maxThinkingTokens!.isNotEmpty) {
-      env['MAX_THINKING_TOKENS'] = profile.maxThinkingTokens;
-    } else {
-      env.remove('MAX_THINKING_TOKENS');
-    }
-
-    // model 放在顶层
     if (profile.model != null && profile.model!.isNotEmpty) {
       config['model'] = profile.model;
     } else {
       config.remove('model');
     }
 
-    final dir = file.parent;
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-
-    const encoder = JsonEncoder.withIndent('  ');
     await file.writeAsString(encoder.convert(config));
+  }
+
+  static void setOrRemove(Map<String, dynamic> map, String key, String? value) {
+    if (value != null && value.isNotEmpty) {
+      map[key] = value;
+    } else {
+      map.remove(key);
+    }
   }
 
   /// 写入 Codex 配置 (~/.codex/config.toml + ~/.codex/auth.json)
   ///
-  /// TOML 规则：顶级键值对必须在所有 [section] 之前，
-  /// 否则会被解析为 section 的子属性。
+  /// 优先使用 profile.configContent 直接写入；
+  /// configContent 为空时回退到字段合并逻辑（迁移兼容）。
   Future<void> _writeCodexConfig(ProviderProfile profile) async {
     final home = PlatformUtils.userHome;
     final codexDir = PlatformUtils.joinPath(home, '.codex');
@@ -732,22 +783,26 @@ class ProviderSwitchService extends ChangeNotifier {
       await dir.create(recursive: true);
     }
 
-    // 写入 config.toml
     final tomlPath = PlatformUtils.joinPath(codexDir, 'config.toml');
     final tomlFile = File(tomlPath);
-    String existingContent = '';
-    if (await tomlFile.exists()) {
-      try {
-        existingContent = await tomlFile.readAsString();
-      } catch (_) {}
-    }
-    final generated = generateCodexPreview(
-      profile,
-      existingConfigContent: existingContent,
-    );
-    await tomlFile.writeAsString(generated.isEmpty ? '' : '$generated\n');
 
-    // 写入 auth.json
+    final content = profile.configContent;
+    if (content != null && content.trim().isNotEmpty) {
+      await tomlFile.writeAsString('${content.trim()}\n');
+    } else {
+      String existingContent = '';
+      if (await tomlFile.exists()) {
+        try {
+          existingContent = await tomlFile.readAsString();
+        } catch (_) {}
+      }
+      final generated = generateCodexPreview(
+        profile,
+        existingConfigContent: existingContent,
+      );
+      await tomlFile.writeAsString(generated.isEmpty ? '' : '$generated\n');
+    }
+
     await _writeCodexAuth(profile.apiToken);
   }
 
@@ -769,9 +824,7 @@ class ProviderSwitchService extends ChangeNotifier {
 
     if (hasKey) {
       // 第三方：只写 OPENAI_API_KEY，清除 OAuth 字段
-      await authFile.writeAsString(
-        encoder.convert({'OPENAI_API_KEY': apiKey}),
-      );
+      await authFile.writeAsString(encoder.convert({'OPENAI_API_KEY': apiKey}));
     } else {
       // 官方：从 DB 恢复 OAuth tokens + OPENAI_API_KEY 设为 null
       final officialId = '${officialIdPrefix}codex';
@@ -789,6 +842,110 @@ class ProviderSwitchService extends ChangeNotifier {
     }
   }
 
+  /// 检查已选中供应商的 configContent 与配置文件是否一致
+  Future<bool> checkConfigSync(String editorType) async {
+    final active = getActiveProfile(editorType);
+    if (active == null) return true;
+
+    final dbContent = active.configContent;
+    if (dbContent == null) return false;
+
+    try {
+      if (editorType == 'claude') {
+        final fileContent = await readClaudeConfigFile();
+        return jsonEquals(dbContent, fileContent);
+      } else if (editorType == 'codex') {
+        final fileContent = await readCodexConfigFile();
+        return normalizedEquals(dbContent, fileContent);
+      } else if (editorType == 'gemini') {
+        final fileContent = await readGeminiEnvFile();
+        return envEquals(dbContent, fileContent);
+      }
+    } catch (_) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool jsonEquals(String a, String b) {
+    try {
+      final objA = jsonDecode(a.trim());
+      final objB = jsonDecode(b.trim());
+      return deepEquals(objA, objB);
+    } catch (_) {
+      return normalizedEquals(a, b);
+    }
+  }
+
+  static bool deepEquals(dynamic a, dynamic b) {
+    if (a is Map && b is Map) {
+      if (a.length != b.length) return false;
+      for (final key in a.keys) {
+        if (!b.containsKey(key) || !deepEquals(a[key], b[key])) return false;
+      }
+      return true;
+    }
+    if (a is List && b is List) {
+      if (a.length != b.length) return false;
+      for (var i = 0; i < a.length; i++) {
+        if (!deepEquals(a[i], b[i])) return false;
+      }
+      return true;
+    }
+    return a == b;
+  }
+
+  static bool normalizedEquals(String a, String b) {
+    return a.trim().replaceAll('\r\n', '\n') ==
+        b.trim().replaceAll('\r\n', '\n');
+  }
+
+  static bool envEquals(String a, String b) {
+    Map<String, String> parse(String content) {
+      final map = <String, String>{};
+      for (final line in const LineSplitter().convert(content)) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+        final eqIdx = trimmed.indexOf('=');
+        if (eqIdx < 0) continue;
+        map[trimmed.substring(0, eqIdx).trim()] =
+            trimmed.substring(eqIdx + 1).trim();
+      }
+      return map;
+    }
+    return deepEquals(parse(a), parse(b));
+  }
+
+  /// 启动时对已激活且 configContent 为空的 profile，从配置文件补充
+  Future<void> _migrateConfigContent() async {
+    for (final editorType in ['claude', 'codex', 'gemini']) {
+      final active = await _db.getActiveProfile(editorType);
+      if (active == null || active.configContent != null) continue;
+
+      String fileContent;
+      try {
+        if (editorType == 'claude') {
+          fileContent = await readClaudeConfigFile();
+        } else if (editorType == 'codex') {
+          fileContent = await readCodexConfigFile();
+        } else {
+          fileContent = await readGeminiEnvFile();
+        }
+      } catch (_) {
+        continue;
+      }
+
+      if (fileContent.trim().isNotEmpty) {
+        await _db.updateProfile(
+          ProviderProfilesCompanion(
+            id: Value(active.id),
+            configContent: Value(fileContent),
+          ),
+        );
+      }
+    }
+  }
+
   /// 获取 Claude 可用模型列表
   static const List<String> claudeModels = [
     'opus',
@@ -802,6 +959,9 @@ class ProviderSwitchService extends ChangeNotifier {
     'claude-3-5-haiku-20241022',
     'claude-3-opus-20240229',
   ];
+
+  /// CLI 模型精简版（仅 opus/sonnet/haiku）
+  static const List<String> claudeModelsSimple = ['opus', 'sonnet', 'haiku'];
 
   /// 获取 Codex 可用模型列表
   static const List<String> codexModels = [
@@ -1162,18 +1322,38 @@ class ProviderSwitchService extends ChangeNotifier {
   }
 
   /// 生成 Gemini 配置预览 dotenv（与实际写入逻辑保持一致）
-  String generateGeminiPreview(ProviderProfile profile) {
-    final lines = <String>[];
-    if (profile.apiToken != null && profile.apiToken!.isNotEmpty) {
-      lines.add('GEMINI_API_KEY=${profile.apiToken}');
+  String generateGeminiPreview(
+    ProviderProfile profile, {
+    String? existingEnvContent,
+  }) {
+    final Map<String, String> envMap = {};
+    final List<String> keyOrder = [];
+    if (existingEnvContent != null && existingEnvContent.isNotEmpty) {
+      for (final line in const LineSplitter().convert(existingEnvContent)) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+        final eqIdx = trimmed.indexOf('=');
+        if (eqIdx < 0) continue;
+        final key = trimmed.substring(0, eqIdx).trim();
+        final value = trimmed.substring(eqIdx + 1).trim();
+        if (!keyOrder.contains(key)) keyOrder.add(key);
+        envMap[key] = value;
+      }
     }
-    if (profile.baseUrl != null && profile.baseUrl!.isNotEmpty) {
-      lines.add('GOOGLE_GEMINI_BASE_URL=${profile.baseUrl}');
+    void setOrRemove(String key, String? value) {
+      if (value != null && value.isNotEmpty) {
+        if (!keyOrder.contains(key)) keyOrder.add(key);
+        envMap[key] = value;
+      } else {
+        keyOrder.remove(key);
+        envMap.remove(key);
+      }
     }
-    if (profile.model != null && profile.model!.isNotEmpty) {
-      lines.add('GEMINI_MODEL=${profile.model}');
-    }
-    return lines.isEmpty ? '# (empty)' : lines.join('\n');
+    setOrRemove('GEMINI_API_KEY', profile.apiToken);
+    setOrRemove('GOOGLE_GEMINI_BASE_URL', profile.baseUrl);
+    setOrRemove('GEMINI_MODEL', profile.model);
+    if (keyOrder.isEmpty) return '# (empty)';
+    return keyOrder.map((k) => '$k=${envMap[k]}').join('\n');
   }
 
   /// 生成 Codex 配置预览 TOML（与实际写入逻辑保持一致）
@@ -1197,15 +1377,15 @@ class ProviderSwitchService extends ChangeNotifier {
     final customBaseUrl = profile?.baseUrl?.trim() ?? '';
     final useCustomProvider = profile != null && customBaseUrl.isNotEmpty;
 
-    // 清理历史残留的非法字段
-    _removeTopLevelKey(lines, 'disable_response_storage');
+    // 检测已有的 model_provider 值（如 "OpenAI"、"custom" 等）
+    final existingProvider = _extractTopLevelValue(lines, 'model_provider');
 
     if (profile == null) {
       _removeTopLevelKey(lines, 'model');
       _removeTopLevelKey(lines, 'model_reasoning_effort');
       _removeTopLevelKey(lines, 'personality');
       _removeTopLevelKey(lines, 'model_provider');
-      _removeCustomProviderSection(lines);
+      _removeProviderSection(lines, existingProvider ?? 'custom');
       while (lines.isNotEmpty && lines.last.trim().isEmpty) {
         lines.removeLast();
       }
@@ -1228,17 +1408,30 @@ class ProviderSwitchService extends ChangeNotifier {
     }
 
     if (useCustomProvider) {
-      _upsertTopLevelKey(lines, 'model_provider', '"custom"');
-      _upsertCustomProviderSection(lines, customBaseUrl);
+      // 尊重已有的 model_provider 值，没有时默认 "custom"
+      final providerName = existingProvider ?? 'custom';
+      _upsertTopLevelKey(lines, 'model_provider', '"$providerName"');
+      _upsertProviderSection(lines, providerName, customBaseUrl);
     } else {
       _removeTopLevelKey(lines, 'model_provider');
-      _removeCustomProviderSection(lines);
+      _removeProviderSection(lines, existingProvider ?? 'custom');
     }
 
     while (lines.isNotEmpty && lines.last.trim().isEmpty) {
       lines.removeLast();
     }
     return lines.join('\n');
+  }
+
+  /// 从 lines 中提取顶级 key 的值（去引号）
+  String? _extractTopLevelValue(List<String> lines, String key) {
+    final regex = RegExp(r'^\s*' + RegExp.escape(key) + r'\s*=\s*"?([^"]*)"?');
+    final firstSection = _firstSectionIndex(lines);
+    for (var i = 0; i < firstSection; i++) {
+      final m = regex.firstMatch(lines[i]);
+      if (m != null) return m.group(1)?.trim();
+    }
+    return null;
   }
 
   void _upsertTopLevelKey(List<String> lines, String key, String value) {
@@ -1282,17 +1475,19 @@ class ProviderSwitchService extends ChangeNotifier {
     return lines.length;
   }
 
-  void _upsertCustomProviderSection(List<String> lines, String baseUrl) {
-    final range = _findSectionRange(lines, 'model_providers.custom');
+  void _upsertProviderSection(
+      List<String> lines, String providerName, String baseUrl) {
+    final sectionName = 'model_providers.$providerName';
+    final range = _findSectionRange(lines, sectionName);
     final body = range == null
         ? <String>[]
         : lines.sublist(range.start + 1, range.endExclusive).toList();
-    _upsertSectionKey(body, 'name', '"custom"');
+    _upsertSectionKey(body, 'name', '"$providerName"');
     _upsertSectionKey(body, 'wire_api', '"responses"');
     _upsertSectionKey(body, 'requires_openai_auth', 'true');
     _upsertSectionKey(body, 'base_url', '"$baseUrl"');
 
-    final sectionLines = <String>['[model_providers.custom]', ...body];
+    final sectionLines = <String>['[$sectionName]', ...body];
     if (range != null) {
       lines.removeRange(range.start, range.endExclusive);
       lines.insertAll(range.start, sectionLines);
@@ -1330,8 +1525,8 @@ class ProviderSwitchService extends ChangeNotifier {
     }
   }
 
-  void _removeCustomProviderSection(List<String> lines) {
-    final range = _findSectionRange(lines, 'model_providers.custom');
+  void _removeProviderSection(List<String> lines, String providerName) {
+    final range = _findSectionRange(lines, 'model_providers.$providerName');
     if (range == null) return;
 
     var start = range.start;

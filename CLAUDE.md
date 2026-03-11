@@ -293,6 +293,28 @@ await PlatformUtils.runCommand("codex --version");
 
 **新增工具的 PATH 要求**：如果新增支持的 CLI 工具有自定义安装路径，必须同步更新 `assets/config/platform_commands.yaml` 中所有平台的 `environment.PATH`。
 
+## 数据库迁移规范（Drift / SQLite）
+
+**文件**：`lib/data/database.dart`
+
+**核心规则**：所有 `onUpgrade` 中的 `addColumn` 必须使用 `_safeAddColumn` 包装，禁止直接调用 `m.addColumn`。
+
+**原因**：Release 包和 Debug 包共享同一个 SQLite 数据库文件（`~/Library/Application Support/com.example.mcpSwitch/mcp_switch.db`），一方已执行迁移后，另一方再运行会触发 `duplicate column name` 错误。
+
+```dart
+// ❌ 禁止：直接 addColumn 在列已存在时会崩溃
+await m.addColumn(providerProfiles, providerProfiles.newColumn);
+
+// ✅ 正确：使用 _safeAddColumn，列已存在时静默忽略
+await _safeAddColumn(m, providerProfiles, providerProfiles.newColumn);
+```
+
+**新增迁移步骤**：
+1. 在 `ProviderProfiles` 表中添加新字段
+2. `schemaVersion` 递增 +1
+3. 在 `onUpgrade` 中用 `_safeAddColumn` 添加新列
+4. 运行 `dart run build_runner build` 重新生成 `database.g.dart`
+
 ## 版本号规范
 
 **格式**：`MAJOR.MINOR.PATCH+BUILD`（例如 `1.5.1+14`）

@@ -58,17 +58,27 @@ class AppDatabase extends _$AppDatabase {
       },
       onUpgrade: (Migrator m, int from, int to) async {
         if (from < 2) {
-          await m.addColumn(providerProfiles, providerProfiles.website);
+          await _safeAddColumn(m, providerProfiles, providerProfiles.website);
         }
         if (from < 3) {
-          await m.addColumn(providerProfiles, providerProfiles.oauthData);
+          await _safeAddColumn(m, providerProfiles, providerProfiles.oauthData);
         }
         if (from < 4) {
-          await m.addColumn(
-              providerProfiles, providerProfiles.configContent);
+          await _safeAddColumn(
+              m, providerProfiles, providerProfiles.configContent);
         }
       },
     );
+  }
+
+  /// 安全添加列：如果列已存在则忽略错误
+  Future<void> _safeAddColumn(
+      Migrator m, TableInfo table, GeneratedColumn column) async {
+    try {
+      await m.addColumn(table, column);
+    } on Exception catch (_) {
+      // 列已存在，忽略 duplicate column 错误
+    }
   }
 
   // --- CRUD Operations ---

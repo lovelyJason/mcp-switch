@@ -219,14 +219,6 @@ class HomeHeader extends StatelessWidget {
 
   /// 处理添加操作
   void _handleAdd(BuildContext context) {
-    if (selectedEditor == EditorType.cursor) {
-      Toast.show(
-        context,
-        message: 'Cursor 请前往客户端界面进行编辑',
-        type: ToastType.info,
-      );
-      return;
-    }
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => McpServerEditScreen(editorType: selectedEditor),

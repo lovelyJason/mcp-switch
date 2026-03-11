@@ -16,7 +16,7 @@ class McpEditorInfo {
   /// 支持 MCP 配置的编辑器
   static final List<McpEditorInfo> all = [
     const McpEditorInfo(type: EditorType.claude, canEdit: true),
-    const McpEditorInfo(type: EditorType.cursor, canEdit: false), // Cursor 需要在客户端配置
+    const McpEditorInfo(type: EditorType.cursor, canEdit: true),
     const McpEditorInfo(type: EditorType.windsurf, canEdit: true),
     const McpEditorInfo(type: EditorType.codex, canEdit: true),
     const McpEditorInfo(type: EditorType.antigravity, canEdit: true),

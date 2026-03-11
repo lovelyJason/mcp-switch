@@ -35,6 +35,15 @@ class _CursorWorkspaceCardState extends State<CursorWorkspaceCard> {
     _detectProjectType();
   }
 
+  @override
+  void didUpdateWidget(covariant CursorWorkspaceCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.workspace.folderPath != widget.workspace.folderPath) {
+      _iconInfo = null;
+      _detectProjectType();
+    }
+  }
+
   Future<void> _detectProjectType() async {
     final dir = widget.workspace.folderPath;
     if (dir.isEmpty) return;

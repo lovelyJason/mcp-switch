@@ -13,7 +13,6 @@ import '../../components/project_card.dart';
 import '../../components/plugin_mcp_card.dart';
 import '../../components/gemini_extension_mcp_card.dart';
 import '../../components/custom_dialog.dart';
-import '../../components/custom_toast.dart';
 import '../../../l10n/s.dart';
 import 'mcp_server_edit_screen.dart';
 
@@ -341,10 +340,13 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                         configService.toggleServerStatus(widget.editorType, profile.id),
                     onDelete: () => _confirmDelete(context, configService, profile),
                     onEdit: () {
-                      Toast.show(
-                        context,
-                        message: S.get('cursor_edit_in_client'),
-                        type: ToastType.info,
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => McpServerEditScreen(
+                            editorType: widget.editorType,
+                            profile: profile,
+                          ),
+                        ),
                       );
                     },
                   );
@@ -359,6 +361,7 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                     tooltip: S.get('cursor_workspace_tooltip'),
                   ),
                   ..._cursorWorkspaces!.map((ws) => CursorWorkspaceCard(
+                    key: ValueKey(ws.folderPath),
                     workspace: ws,
                     globalServerNames: serverNames,
                   )),

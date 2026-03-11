@@ -27,6 +27,7 @@ class ConfigService extends ChangeNotifier {
   final Map<EditorType, List<McpProfile>> _profiles = {};
   final Map<EditorType, String?> _activeProfileIds = {};
 
+
   // Selected Editor (Redundant Global State)
   EditorType _selectedEditor = EditorType.cursor;
   EditorType get selectedEditor => _selectedEditor;
@@ -300,6 +301,14 @@ class ConfigService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 手动刷新 Codex MCP 的 auth 状态（用于终端登录完成后等场景）
+  Future<void> refreshCodexAuthStatus() async {
+    final profiles = _profiles[EditorType.codex];
+    if (profiles != null && profiles.isNotEmpty) {
+      await _enrichCodexAuthStatus(profiles);
+    }
+  }
+
   Future<void> _loadProfiles() async {
     // 1. Load cached profiles first to preserve IDs and metadata (like descriptions)
     final prefs = await SharedPreferences.getInstance();
@@ -500,6 +509,10 @@ class ConfigService extends ChangeNotifier {
     await _persistProfiles();
     await _syncCombinedConfig(editor);
     notifyListeners();
+
+    if (editor == EditorType.codex) {
+      _enrichCodexAuthStatus(_profiles[editor]!);
+    }
   }
 
   Future<void> deleteProfile(EditorType editor, String profileId) async {
@@ -1078,13 +1091,18 @@ class ConfigService extends ChangeNotifier {
   /// 异步执行 `codex mcp list`，从输出中提取 auth 状态并合并到已有 profiles
   Future<void> _enrichCodexAuthStatus(List<McpProfile> profiles) async {
     try {
+      LoggerService.debug('[CodexAuth] enriching ${profiles.length} profiles...');
       final result = await PlatformUtils.runCommand('codex mcp list')
           .timeout(const Duration(seconds: 15));
-      if (result.exitCode != 0) return;
+      if (result.exitCode != 0) {
+        LoggerService.warning('[CodexAuth] codex mcp list failed: exit=${result.exitCode}');
+        return;
+      }
       final output = (result.stdout as String).trim();
       if (output.isEmpty) return;
 
       final authMap = _parseCodexMcpListAuth(output);
+      LoggerService.debug('[CodexAuth] parsed authMap: $authMap');
       if (authMap.isEmpty) return;
 
       bool changed = false;
@@ -1100,9 +1118,12 @@ class ConfigService extends ChangeNotifier {
           }
         }
       }
-      if (changed) notifyListeners();
-    } catch (_) {
-      // CLI 不可用时静默忽略
+      if (changed) {
+        LoggerService.info('[CodexAuth] auth status updated, notifying UI');
+        notifyListeners();
+      }
+    } catch (e) {
+      LoggerService.warning('[CodexAuth] enrichment failed: $e');
     }
   }
 

@@ -598,5 +598,19 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
     Future.delayed(const Duration(milliseconds: 500), () {
       terminalService.sendCommand('codex mcp login $mcpName');
     });
+
+    // 监听终端面板关闭，刷新列表以更新 auth 状态
+    void listener() {
+      if (!terminalService.isTerminalPanelOpen) {
+        terminalService.removeListener(listener);
+        if (mounted) {
+          final configService = Provider.of<ConfigService>(context, listen: false);
+          configService.reloadProfiles().then((_) {
+            configService.refreshCodexAuthStatus();
+          });
+        }
+      }
+    }
+    terminalService.addListener(listener);
   }
 }

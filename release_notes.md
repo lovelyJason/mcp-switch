@@ -1,3 +1,26 @@
+## v1.7.2
+
+### ✨ 新增特性
+
+- **Codex MCP Auth 状态检测** — Codex MCP 列表现在通过 `codex mcp list` 命令异步获取每个 MCP 服务器的授权状态
+  - 需要登录的 MCP 显示橙色 "Need Auth" 标签
+  - 已授权的 MCP 显示绿色状态标签
+  - 不支持授权的 MCP（stdio 类型）不显示标签
+- **Codex MCP 终端登录** — 需要授权的 MCP 卡片上新增登录图标，点击自动打开侧边终端执行 `codex mcp login <name>`
+- **MCP 名称去重校验** — 新增/编辑 Claude Code 和 Codex 的 MCP 配置时，自动检查名称是否与已有配置冲突，重复时阻止保存并提示
+
+### 🚀 优化改进
+
+- **新增供应商智能合并** — 新增 Claude/Codex/Gemini 供应商时，自动合并本地已有配置文件中的非表单字段，避免切换供应商时丢失自定义配置
+- **MCP 编辑器名称字段** — Claude MCP 编辑界面的名称输入框不再置灰，支持重命名
+- **Debug 模式跳过更新检查** — Debug 包启动时不再自动检查 GitHub 版本更新，避免开发时频繁请求 API
+
+### 🐛 问题修复
+
+- **Codex MCP 开关生效** — 修复 Codex MCP 服务器 toggle 开关无法正确写入 `enabled = false` 到 config.toml 的问题
+- **Codex 切换提示** — 切换 Codex MCP 启用状态时 Toast 提示"请重启 Codex 以使配置生效"
+
+
 ## v1.7.1
 
 ### 🐛 问题修复

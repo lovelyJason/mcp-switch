@@ -1,3 +1,11 @@
+## v1.7.1
+
+### 🐛 问题修复
+
+- **Cursor MCP 编辑限制解除**：移除 Cursor 添加/编辑 MCP 服务器时的拦截提示，现在可以直接在应用内配置 Cursor 的 MCP，无需跳转到 Cursor 客户端
+- **Workspace 项目图标错位修复**：修复新增 MCP 配置后返回首页时，Cursor Workspace 列表中项目图标显示错乱的问题
+
+
 ## v1.7.0
 
 ### ✨ 新增特性

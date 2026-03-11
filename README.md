@@ -258,7 +258,7 @@ MCP Switch 是一个跨平台（macOS / Windows）的 Flutter 应用，旨在帮
 - GitHub: [@lovelyJason](https://github.com/lovelyJason)
 - 微信群: 扫码加入交流群
 
-![cfc15a393d5b2592ffabfafe1650b9e0](https://github.com/user-attachments/assets/01484632-b0e9-42ef-9047-c6445523d093)
+![37c58ccdf27014eeddb4d98916a6700c](https://github.com/user-attachments/assets/9753ff91-b14e-4380-a570-fcd77ed89f5f)
 
 ---
 

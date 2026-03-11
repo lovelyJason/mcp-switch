@@ -36,20 +36,40 @@ List<String> extractDomainsFromConfig(Map<String, dynamic> config) {
   return domains.toList()..sort();
 }
 
-/// 生成 Clash YAML 规则文本
-/// 对每个域名同时生成子域名规则和根域名规则（去重）
-String buildClashRules(List<String> domains) {
+/// 生成要插入到 main 函数体内的脚本片段（不含函数签名和大括号）
+String buildClashScriptBody(List<String> domains) {
   final ruleSet = <String>{};
   for (final domain in domains) {
-    ruleSet.add(domain); // 原始域名（如 mcp.figma.com）
-    ruleSet.add(_rootDomain(domain)); // 根域名（如 figma.com）
+    ruleSet.add(domain);
+    ruleSet.add(_rootDomain(domain));
   }
   final sorted = ruleSet.toList()..sort();
-  final lines = <String>['rules:'];
-  for (final d in sorted) {
-    lines.add('  - DOMAIN-SUFFIX,$d,DIRECT');
-  }
-  return lines.join('\n');
+
+  final allRules = <String>[
+    ...sorted.map((d) => 'DOMAIN-SUFFIX,$d,DIRECT'),
+    'GEOIP,PRIVATE,DIRECT',
+    'GEOIP,CN,DIRECT',
+    'DOMAIN-SUFFIX,cn,DIRECT',
+  ];
+  final rulesStr = allRules.map((r) => '    "$r"').join(',\n');
+
+  return '''  // imported by MCP Switch
+  const customRules = [
+$rulesStr,
+  ];
+  if (Array.isArray(config.rules)) {
+    config.rules = [...customRules, ...config.rules];
+  } else {
+    config.rules = customRules;
+  }''';
+}
+
+/// 生成完整的预览脚本（用于 UI 显示）
+String buildClashScriptPreview(List<String> domains) {
+  final body = buildClashScriptBody(domains)
+      .replaceFirst('  // imported by MCP Switch\n', '');
+  return '// Define main function (script entry)\n\n'
+      'function main(config, profileName) {\n$body\n  return config;\n}';
 }
 
 /// 取根域名（最后两段）
@@ -101,24 +121,27 @@ class _McpFailedDialogState extends State<McpFailedDialog> {
   bool _importSuccess = false;
 
   late final List<String> _domains;
-  late final String _clashRules;
+  late final String _clashScript;
 
-  /// Clash Verge 的 Merge.yaml 路径
-  static String get _mergeYamlPath =>
+  static String get _scriptJsPath =>
       '${PlatformUtils.userHome}/Library/Application Support'
-      '/io.github.clash-verge-rev.clash-verge-rev/profiles/Merge.yaml';
+      '/io.github.clash-verge-rev.clash-verge-rev/profiles/Script.js';
+
+  static final _mainFuncRegex = RegExp(
+    r'(function\s+main\s*\([^)]*\)\s*\{)([\s\S]*?)(\n\})',
+  );
 
   @override
   void initState() {
     super.initState();
     _domains = extractDomainsFromConfig(widget.config);
-    _clashRules = _domains.isEmpty ? '' : buildClashRules(_domains);
+    _clashScript = _domains.isEmpty ? '' : buildClashScriptPreview(_domains);
   }
 
   Future<void> _importToClashVerge() async {
     setState(() => _isImporting = true);
     try {
-      final file = File(_mergeYamlPath);
+      final file = File(_scriptJsPath);
       if (!await file.parent.exists()) {
         throw Exception(S.get('clash_verge_not_found'));
       }
@@ -128,82 +151,78 @@ class _McpFailedDialogState extends State<McpFailedDialog> {
         existing = await file.readAsString();
       }
 
-      // 检查是否已经有 rules 块
-      final newRules = _buildRuleLines();
-      if (existing.contains(newRules.first)) {
-        // 规则已存在
+      if (existing.contains('// imported by MCP Switch')) {
         if (mounted) {
-          Toast.show(
-            context,
-            message: S.get('clash_rules_already_exist'),
-            type: ToastType.info,
-          );
+          Toast.show(context,
+              message: S.get('clash_script_already_exist'),
+              type: ToastType.info);
         }
         return;
       }
 
-      // 判断是否已有 rules: 块
-      final hasRulesBlock = existing.contains('\nrules:') ||
-          existing.trimLeft().startsWith('rules:');
-
-      String newContent;
-      if (hasRulesBlock) {
-        // 已有 rules: 块：在文件末尾（rules 块内）追加规则行
-        // Clash Verge Merge.yaml 的 rules 列表项格式为 "  - DOMAIN-SUFFIX,..."
-        final rulesLines = newRules.map((r) => '  $r').join('\n');
-        final base = existing.trimRight();
-        newContent = '$base\n$rulesLines\n  # imported by MCP Switch\n';
-      } else {
-        // 没有 rules: 块，整体追加新 rules 段
-        final rulesLines = newRules.map((r) => '  $r').join('\n');
-        final base = existing.trimRight();
-        newContent = '$base\n\n# imported by MCP Switch\nrules:\n$rulesLines\n';
+      if (_hasNonEmptyMainBody(existing)) {
+        if (mounted) {
+          Toast.show(context,
+              message: S.get('clash_script_conflict'),
+              type: ToastType.error,
+              duration: const Duration(seconds: 5));
+        }
+        return;
       }
 
-      await file.writeAsString(newContent);
+      final newBody = buildClashScriptBody(_domains);
+      String output;
+      final match = _mainFuncRegex.firstMatch(existing);
+      if (match != null) {
+        output = existing.replaceFirst(
+          _mainFuncRegex,
+          '${match.group(1)}\n$newBody\n  return config;\n}',
+        );
+      } else {
+        output = '// Define main function (script entry)\n\n'
+            'function main(config, profileName) {\n$newBody\n  return config;\n}\n';
+      }
+
+      await file.writeAsString(output);
 
       setState(() => _importSuccess = true);
       if (mounted) {
-        Toast.show(
-          context,
-          message: S.get('clash_rules_imported'),
-          type: ToastType.success,
-          duration: const Duration(seconds: 5),
-        );
-        // 稍延迟再弹重启提示，让用户先看到成功消息
+        Toast.show(context,
+            message: S.get('clash_script_imported'),
+            type: ToastType.success,
+            duration: const Duration(seconds: 5));
         Future.delayed(const Duration(milliseconds: 800), () {
           if (mounted) {
-            Toast.show(
-              context,
-              message: S.get('clash_restart_required'),
-              type: ToastType.warning,
-              duration: const Duration(seconds: 6),
-            );
+            Toast.show(context,
+                message: S.get('clash_restart_required'),
+                type: ToastType.warning,
+                duration: const Duration(seconds: 6));
           }
         });
       }
     } catch (e) {
       if (mounted) {
-        Toast.show(
-          context,
-          message: '${S.get('clash_import_failed')}: $e',
-          type: ToastType.error,
-        );
+        Toast.show(context,
+            message: '${S.get('clash_import_failed')}: $e',
+            type: ToastType.error);
       }
     } finally {
       if (mounted) setState(() => _isImporting = false);
     }
   }
 
-  /// 构建规则行列表（与 buildClashRules 保持一致，不含 rules: 头）
-  List<String> _buildRuleLines() {
-    final ruleSet = <String>{};
-    for (final d in _domains) {
-      ruleSet.add(d);
-      ruleSet.add(_rootDomain(d));
-    }
-    final sorted = ruleSet.toList()..sort();
-    return sorted.map((d) => '- DOMAIN-SUFFIX,$d,DIRECT').toList();
+  /// 检测 main 函数体是否有实际逻辑（排除注释、空行、`return config;`）
+  bool _hasNonEmptyMainBody(String content) {
+    final match = _mainFuncRegex.firstMatch(content);
+    if (match == null) return false;
+    final body = match.group(2) ?? '';
+    final lines = body.split('\n').where((line) {
+      final trimmed = line.trim();
+      return trimmed.isNotEmpty &&
+          !trimmed.startsWith('//') &&
+          trimmed != 'return config;';
+    });
+    return lines.isNotEmpty;
   }
 
   @override
@@ -219,7 +238,7 @@ class _McpFailedDialogState extends State<McpFailedDialog> {
         color: Colors.transparent,
         child: Container(
           width: 440,
-          constraints: const BoxConstraints(maxHeight: 600),
+          constraints: const BoxConstraints(maxHeight: 460),
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: bgColor,
@@ -315,13 +334,12 @@ class _McpFailedDialogState extends State<McpFailedDialog> {
                   Divider(color: isDark ? Colors.white12 : Colors.grey.shade200),
                   const SizedBox(height: 12),
 
-                  // Clash 规则区域
                   Row(
                     children: [
-                      Icon(Icons.shield_outlined, size: 16, color: Colors.orange.shade400),
+                      Icon(Icons.code, size: 16, color: Colors.orange.shade400),
                       const SizedBox(width: 6),
                       Text(
-                        S.get('mcp_clash_rules_title'),
+                        S.get('mcp_clash_script_title'),
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -332,14 +350,14 @@ class _McpFailedDialogState extends State<McpFailedDialog> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    S.get('mcp_clash_rules_desc'),
+                    S.get('mcp_clash_script_desc'),
                     style: TextStyle(fontSize: 12, color: subColor),
                   ),
                   const SizedBox(height: 8),
 
-                  // 规则代码块
                   Container(
                     width: double.infinity,
+                    constraints: const BoxConstraints(maxHeight: 180),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: codeColor,
@@ -348,33 +366,31 @@ class _McpFailedDialogState extends State<McpFailedDialog> {
                         color: isDark ? Colors.white10 : Colors.grey.shade200,
                       ),
                     ),
-                    child: Text(
-                      _clashRules,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontFamily: 'Menlo',
-                        color: isDark ? Colors.grey.shade300 : Colors.grey.shade800,
-                        height: 1.6,
+                    child: SingleChildScrollView(
+                      child: Text(
+                        _clashScript,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontFamily: 'Menlo',
+                          color: isDark ? Colors.grey.shade300 : Colors.grey.shade800,
+                          height: 1.5,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 10),
 
-                  // 按钮行
                   Row(
                     children: [
-                      // 复制按钮
                       OutlinedButton.icon(
                         onPressed: () {
-                          Clipboard.setData(ClipboardData(text: _clashRules));
-                          Toast.show(
-                            context,
-                            message: S.get('copied'),
-                            type: ToastType.success,
-                          );
+                          Clipboard.setData(ClipboardData(text: _clashScript));
+                          Toast.show(context,
+                              message: S.get('copied'),
+                              type: ToastType.success);
                         },
                         icon: const Icon(Icons.copy, size: 14),
-                        label: Text(S.get('copy_rules')),
+                        label: Text(S.get('copy_script')),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: isDark ? Colors.white70 : Colors.black87,
                           side: BorderSide(
@@ -385,17 +401,13 @@ class _McpFailedDialogState extends State<McpFailedDialog> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // 一键导入按钮
                       FilledButton.icon(
                         onPressed: _isImporting ? null : _importToClashVerge,
                         icon: _isImporting
                             ? const SizedBox(
-                                width: 12,
-                                height: 12,
+                                width: 12, height: 12,
                                 child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
+                                    strokeWidth: 2, color: Colors.white),
                               )
                             : Icon(
                                 _importSuccess
@@ -405,8 +417,8 @@ class _McpFailedDialogState extends State<McpFailedDialog> {
                               ),
                         label: Text(
                           _importSuccess
-                              ? S.get('clash_rules_imported_btn')
-                              : S.get('import_to_clash_verge'),
+                              ? S.get('clash_script_imported_btn')
+                              : S.get('import_script_to_clash'),
                         ),
                         style: FilledButton.styleFrom(
                           backgroundColor:
@@ -421,7 +433,7 @@ class _McpFailedDialogState extends State<McpFailedDialog> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    S.get('clash_import_hint'),
+                    S.get('clash_script_import_hint'),
                     style: TextStyle(
                       fontSize: 11,
                       color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,

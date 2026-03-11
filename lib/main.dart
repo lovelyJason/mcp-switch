@@ -91,14 +91,14 @@ void main() async {
           : '~/.local/share/mcpSwitch/shared_preferences.json';
   LoggerService.info('''
   ════════════════════════════════════════════
-     🚀 MCP Switch Initialized Successfully 🚀
-     ----------------------------------------
-     📁 Home:              ${PlatformUtils.userHome}
-     🌏 Locale:            ${S.localeNotifier.value}
-     🔧 Mode:              ${kReleaseMode ? 'Release' : 'Debug'}
-     💾 DB:                $dbPath
-     📄 Config:            $configPath
-     📦 SharedPreferences: $prefsPath
+      🚀 MCP Switch Initialized Successfully 🚀
+      ----------------------------------------
+      📁 Home:              ${PlatformUtils.userHome}
+      🌏 Locale:            ${S.localeNotifier.value}
+      🔧 Mode:              ${kReleaseMode ? 'Release' : 'Debug'}
+      💾 DB:                $dbPath
+      📄 Config:            $configPath
+      📦 SharedPreferences: $prefsPath
   ════════════════════════════════════════════
   ''');
 
@@ -127,7 +127,7 @@ void main() async {
   await providerSwitchService.init();
 
   // Initialize Update Service（自动检测更新）
-  final updateService = UpdateService();
+  final updateService = UpdateService(configService: configService);
   updateService.init();
 
   // Initialize Remote Claw Service（远程审批服务）

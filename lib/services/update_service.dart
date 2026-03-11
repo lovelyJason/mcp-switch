@@ -6,13 +6,15 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
+import 'config_service.dart';
+import 'proxy_service.dart';
 
 /// 更新信息模型
 class UpdateInfo {
   final String version;
   final String notes;
-  final String? downloadUrl; // macOS ZIP 下载地址
-  final String releaseUrl; // GitHub Release 页面地址
+  final String? downloadUrl;
+  final String releaseUrl;
 
   UpdateInfo({
     required this.version,
@@ -21,32 +23,47 @@ class UpdateInfo {
     required this.releaseUrl,
   });
 
-  /// 是否支持自动更新（有 ZIP 下载地址）
   bool get supportsAutoUpdate => downloadUrl != null;
 }
 
+/// 下载进度回调: (receivedBytes, totalBytes) — totalBytes 为 -1 表示未知
+typedef DownloadProgressCallback = void Function(int received, int total);
+
+/// 更新阶段
+enum UpdatePhase { idle, checking, downloading, extracting, restarting, error }
+
 /// 更新检测服务
 class UpdateService extends ChangeNotifier {
-  static const String _lastCheckKey = 'update_last_check_time';
   static const String _autoCheckKey = 'update_auto_check_enabled';
   static const String _skippedVersionKey = 'update_skipped_version';
-  static const Duration _checkInterval = Duration(hours: 24);
-  static const String _repoUrl = 'https://api.github.com/repos/lovelyJason/mcp-switch/releases/latest';
+  static const String _repoUrl =
+      'https://api.github.com/repos/lovelyJason/mcp-switch/releases/latest';
 
-  Timer? _periodicTimer;
+  final ConfigService? _configService;
+
   UpdateInfo? _availableUpdate;
   bool _isChecking = false;
 
-  /// 可用更新（null 表示无更新或未检测）
+  UpdatePhase _phase = UpdatePhase.idle;
+  double _progress = 0;
+
+  UpdateService({ConfigService? configService})
+      : _configService = configService;
+
   UpdateInfo? get availableUpdate => _availableUpdate;
-
-  /// 是否正在检测
   bool get isChecking => _isChecking;
-
-  /// 是否有可用更新
   bool get hasUpdate => _availableUpdate != null;
+  UpdatePhase get phase => _phase;
+  double get progress => _progress;
 
-  /// 初始化服务：启动时检测 + 定时检测
+  http.Client _createClient() {
+    if (_configService != null && _configService.hasProxy) {
+      return ProxyService(_configService).createProxiedClient();
+    }
+    return http.Client();
+  }
+
+  /// 初始化服务：每次启动都检测一次
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     final autoCheck = prefs.getBool(_autoCheckKey) ?? true;
@@ -55,36 +72,8 @@ class UpdateService extends ChangeNotifier {
 
     // 延迟 3 秒后检测，避免阻塞应用启动
     Future.delayed(const Duration(seconds: 3), () {
-      _checkIfNeeded();
-    });
-
-    // 启动定时检测
-    startPeriodicCheck();
-  }
-
-  /// 检查是否需要检测（距离上次检测超过 24 小时）
-  Future<void> _checkIfNeeded() async {
-    final prefs = await SharedPreferences.getInstance();
-    final lastCheck = prefs.getInt(_lastCheckKey) ?? 0;
-    final now = DateTime.now().millisecondsSinceEpoch;
-
-    if (now - lastCheck > _checkInterval.inMilliseconds) {
-      await checkForUpdates(silent: true);
-    }
-  }
-
-  /// 启动定时检测（每 24 小时）
-  void startPeriodicCheck() {
-    _periodicTimer?.cancel();
-    _periodicTimer = Timer.periodic(_checkInterval, (_) {
       checkForUpdates(silent: true);
     });
-  }
-
-  /// 停止定时检测
-  void stopPeriodicCheck() {
-    _periodicTimer?.cancel();
-    _periodicTimer = null;
   }
 
   /// 检查更新
@@ -93,12 +82,15 @@ class UpdateService extends ChangeNotifier {
     if (_isChecking) return null;
 
     _isChecking = true;
+    _phase = UpdatePhase.checking;
     notifyListeners();
 
+    http.Client? client;
     try {
-      final response = await http.get(Uri.parse(_repoUrl)).timeout(
-        const Duration(seconds: 10),
-      );
+      client = _createClient();
+      final response = await client
+          .get(Uri.parse(_repoUrl))
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) {
         throw Exception('Failed to fetch releases: ${response.statusCode}');
@@ -125,11 +117,8 @@ class UpdateService extends ChangeNotifier {
       final current = _normalizeVersion(packageInfo.version);
       final latest = _normalizeVersion(latestVersion);
 
-      // 记录检测时间
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_lastCheckKey, DateTime.now().millisecondsSinceEpoch);
-
       // 检查是否为跳过的版本
+      final prefs = await SharedPreferences.getInstance();
       final skippedVersion = prefs.getString(_skippedVersionKey);
       if (skippedVersion == latest) {
         _availableUpdate = null;
@@ -151,14 +140,18 @@ class UpdateService extends ChangeNotifier {
       }
 
       _isChecking = false;
+      _phase = UpdatePhase.idle;
       notifyListeners();
       return _availableUpdate;
     } catch (e) {
       _isChecking = false;
+      _phase = UpdatePhase.idle;
       notifyListeners();
       if (!silent) rethrow;
       debugPrint('[UpdateService] Check failed: $e');
       return null;
+    } finally {
+      client?.close();
     }
   }
 
@@ -180,11 +173,6 @@ class UpdateService extends ChangeNotifier {
   Future<void> setAutoCheck(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_autoCheckKey, enabled);
-    if (enabled) {
-      startPeriodicCheck();
-    } else {
-      stopPeriodicCheck();
-    }
   }
 
   /// 获取自动检测开关状态
@@ -193,54 +181,85 @@ class UpdateService extends ChangeNotifier {
     return prefs.getBool(_autoCheckKey) ?? true;
   }
 
-  /// 执行自动更新（macOS）
+  /// 执行自动更新（macOS），带下载进度
   Future<void> performAutoUpdate(String zipUrl) async {
     if (!Platform.isMacOS) {
       throw UnsupportedError('Auto update only supported on macOS');
     }
 
-    // 1. 下载 ZIP
-    final response = await http.get(Uri.parse(zipUrl));
-    if (response.statusCode != 200) {
-      throw Exception('Download failed: ${response.statusCode}');
-    }
+    _phase = UpdatePhase.downloading;
+    _progress = 0;
+    notifyListeners();
 
-    final tempDir = await getTemporaryDirectory();
-    final zipFile = File('${tempDir.path}/update.zip');
-    await zipFile.writeAsBytes(response.bodyBytes);
+    http.Client? client;
+    try {
+      client = _createClient();
+      final request = http.Request('GET', Uri.parse(zipUrl));
+      final streamedResponse = await client.send(request).timeout(
+        const Duration(seconds: 120),
+      );
 
-    // 2. 解压
-    final extractDir = Directory('${tempDir.path}/update_extract');
-    if (await extractDir.exists()) await extractDir.delete(recursive: true);
-    await extractDir.create();
+      if (streamedResponse.statusCode != 200) {
+        throw Exception('Download failed: ${streamedResponse.statusCode}');
+      }
 
-    final result = await Process.run('unzip', [
-      '-o',
-      zipFile.path,
-      '-d',
-      extractDir.path,
-    ]);
-    if (result.exitCode != 0) throw Exception('Unzip failed');
+      final totalBytes = streamedResponse.contentLength ?? -1;
+      int receivedBytes = 0;
+      final chunks = <List<int>>[];
 
-    // 3. 查找 .app
-    const appName = 'MCP Switch.app';
-    final newAppPath = '${extractDir.path}/$appName';
-    if (!await Directory(newAppPath).exists()) {
-      throw Exception('App bundle not found in update');
-    }
+      await for (final chunk in streamedResponse.stream) {
+        chunks.add(chunk);
+        receivedBytes += chunk.length;
+        if (totalBytes > 0) {
+          _progress = receivedBytes / totalBytes;
+          notifyListeners();
+        }
+      }
 
-    // 4. 获取当前应用路径
-    String currentAppPath = Platform.resolvedExecutable;
-    while (currentAppPath.isNotEmpty && !currentAppPath.endsWith('.app')) {
-      currentAppPath = Directory(currentAppPath).parent.path;
-    }
-    if (currentAppPath.isEmpty || !currentAppPath.endsWith('.app')) {
-      throw Exception('Could not determine current app path');
-    }
+      final bytes =
+          chunks.expand((c) => c).toList();
 
-    // 5. 创建替换脚本
-    final scriptFile = File('${tempDir.path}/update_script.sh');
-    await scriptFile.writeAsString('''
+      _phase = UpdatePhase.extracting;
+      _progress = 1.0;
+      notifyListeners();
+
+      final tempDir = await getTemporaryDirectory();
+      final zipFile = File('${tempDir.path}/update.zip');
+      await zipFile.writeAsBytes(bytes);
+
+      final extractDir = Directory('${tempDir.path}/update_extract');
+      if (await extractDir.exists()) {
+        await extractDir.delete(recursive: true);
+      }
+      await extractDir.create();
+
+      final result = await Process.run('unzip', [
+        '-o',
+        zipFile.path,
+        '-d',
+        extractDir.path,
+      ]);
+      if (result.exitCode != 0) throw Exception('Unzip failed');
+
+      const appName = 'MCP Switch.app';
+      final newAppPath = '${extractDir.path}/$appName';
+      if (!await Directory(newAppPath).exists()) {
+        throw Exception('App bundle not found in update');
+      }
+
+      String currentAppPath = Platform.resolvedExecutable;
+      while (currentAppPath.isNotEmpty && !currentAppPath.endsWith('.app')) {
+        currentAppPath = Directory(currentAppPath).parent.path;
+      }
+      if (currentAppPath.isEmpty || !currentAppPath.endsWith('.app')) {
+        throw Exception('Could not determine current app path');
+      }
+
+      _phase = UpdatePhase.restarting;
+      notifyListeners();
+
+      final scriptFile = File('${tempDir.path}/update_script.sh');
+      await scriptFile.writeAsString('''
 #!/bin/bash
 sleep 2
 rm -rf "$currentAppPath"
@@ -248,10 +267,39 @@ mv "$newAppPath" "$currentAppPath"
 open "$currentAppPath"
 ''');
 
-    // 6. 执行脚本并退出
-    await Process.run('chmod', ['+x', scriptFile.path]);
-    await Process.start('sh', [scriptFile.path], mode: ProcessStartMode.detached);
-    exit(0);
+      await Process.run('chmod', ['+x', scriptFile.path]);
+      await Process.start(
+          'sh', [scriptFile.path], mode: ProcessStartMode.detached);
+      exit(0);
+    } catch (e) {
+      _phase = UpdatePhase.error;
+      notifyListeners();
+      rethrow;
+    } finally {
+      client?.close();
+    }
+  }
+
+  void resetPhase() {
+    _phase = UpdatePhase.idle;
+    _progress = 0;
+    notifyListeners();
+  }
+
+  /// Debug: 伪造一个新版本用于测试横幅显示
+  void debugFakeUpdate() {
+    _availableUpdate = UpdateInfo(
+      version: 'v99.0.0',
+      notes: 'This is a fake update for debug testing.',
+      releaseUrl: 'https://github.com/lovelyJason/mcp-switch/releases',
+    );
+    notifyListeners();
+  }
+
+  /// Debug: 清除伪造的更新
+  void debugClearFakeUpdate() {
+    _availableUpdate = null;
+    notifyListeners();
   }
 
   /// 标准化版本号（去除 v 前缀和 build number）
@@ -275,7 +323,6 @@ open "$currentAppPath"
 
   @override
   void dispose() {
-    _periodicTimer?.cancel();
     super.dispose();
   }
 }

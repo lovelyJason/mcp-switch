@@ -66,6 +66,7 @@ dependencies:
   shelf: ^1.4.2  # Embedded HTTP server for Remote Claw
   shelf_router: ^1.1.4  # HTTP routing for Remote Claw
   crypto: ^3.0.6  # HMAC-SHA256 for DingTalk signature
+  socks5_proxy: ^2.1.1  # SOCKS5 proxy support for outbound requests
 
 dev_dependencies:
   flutter_test:

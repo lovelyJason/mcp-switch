@@ -7,6 +7,11 @@ import '../../config/platform_commands_config.dart';
 import '../../services/logger_service.dart';
 import '../../utils/platform_utils.dart';
 import '../../utils/global_keys.dart';
+import 'package:provider/provider.dart';
+import '../../services/update_service.dart';
+import 'custom_toast.dart';
+import 'mcp_failed_dialog.dart';
+import 'update_progress_overlay.dart';
 
 /// 悬浮 Debug 按钮（仅在 Debug 模式下显示）
 /// 用于开发调试功能
@@ -101,121 +106,162 @@ class _DebugDialogState extends State<_DebugDialog> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return AlertDialog(
+    return Dialog(
       backgroundColor: isDark ? const Color(0xFF2D2D2D) : Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Row(
-        children: [
-          Icon(Icons.bug_report, color: Colors.orange.shade700),
-          const SizedBox(width: 8),
-          const Text('Debug Tools'),
-        ],
-      ),
-      content: SizedBox(
-        width: 350,
-        child: SingleChildScrollView(
+      child: SizedBox(
+        width: 480,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            // Claude CLI 检测（仅 Windows）
-            if (Platform.isWindows) ...[
-              _buildSection(
-                title: 'Claude CLI Detection',
+              Row(
                 children: [
-                  _buildDebugButton(
-                    icon: Icons.search,
-                    label: 'Find Claude.exe',
-                    description: '递归搜索 .claude 目录查找 claude.exe',
-                    onTap: _findClaudeExe,
-                    isLoading: _isLoading,
-                  ),
-                  const SizedBox(height: 8),
-                  _buildDebugButton(
-                    icon: Icons.check_circle,
-                    label: 'Check Claude Installed',
-                    description: '执行完整的安装检测逻辑',
-                    onTap: _checkClaudeInstalled,
-                    isLoading: _isLoading,
-                  ),
+                  Icon(Icons.bug_report, color: Colors.orange.shade700),
+                  const SizedBox(width: 8),
+                  const Text('Debug Tools',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500)),
                 ],
               ),
               const SizedBox(height: 16),
-            ],
-            // 配置文件操作
-            _buildSection(
-              title: 'Platform Commands Config',
-              children: [
-                _buildDebugButton(
-                  icon: Icons.refresh,
-                  label: 'Force Reload from Assets',
-                  description: '删除用户配置，从 assets 重新复制',
-                  onTap: _forceReloadConfig,
-                  isLoading: _isLoading,
-                ),
-                const SizedBox(height: 8),
-                _buildDebugButton(
-                  icon: Icons.folder_open,
-                  label: 'Open Config Folder',
-                  description: '打开配置文件所在目录',
-                  onTap: _openConfigFolder,
-                ),
-                const SizedBox(height: 8),
-                _buildDebugButton(
-                  icon: Icons.sync,
-                  label: 'Reload Config',
-                  description: '重新加载用户配置（不删除）',
-                  onTap: _reloadConfig,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            // SharedPreferences 查看器
-            _buildSection(
-              title: 'App Storage',
-              children: [
-                _buildDebugButton(
-                  icon: Icons.storage,
-                  label: 'SharedPreferences Editor',
-                  description: '查看和编辑本地存储的键值对',
-                  onTap: _openSharedPrefsEditor,
-                ),
-              ],
-            ),
-
-            // 消息提示
-            // 消息提示
-            if (_message != null) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _message!.contains('成功') || _message!.contains('完成')
-                      ? Colors.green.withValues(alpha: 0.1)
-                      : Colors.orange.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  _message!,
-                  style: TextStyle(
-                    color: _message!.contains('成功') || _message!.contains('完成')
-                        ? Colors.green.shade700
-                        : Colors.orange.shade700,
-                    fontSize: 13,
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 260),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (Platform.isWindows) ...[
+                        _buildSection(
+                          title: 'Claude CLI Detection',
+                          children: [
+                            _buildDebugButton(
+                              icon: Icons.search,
+                              label: 'Find Claude.exe',
+                              description: '递归搜索 .claude 目录查找 claude.exe',
+                              onTap: _findClaudeExe,
+                              isLoading: _isLoading,
+                            ),
+                            const SizedBox(height: 8),
+                            _buildDebugButton(
+                              icon: Icons.check_circle,
+                              label: 'Check Claude Installed',
+                              description: '执行完整的安装检测逻辑',
+                              onTap: _checkClaudeInstalled,
+                              isLoading: _isLoading,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      _buildSection(
+                        title: 'Platform Commands Config',
+                        children: [
+                          _buildDebugButton(
+                            icon: Icons.refresh,
+                            label: 'Force Reload from Assets',
+                            description: '删除用户配置，从 assets 重新复制',
+                            onTap: _forceReloadConfig,
+                            isLoading: _isLoading,
+                          ),
+                          const SizedBox(height: 8),
+                          _buildDebugButton(
+                            icon: Icons.folder_open,
+                            label: 'Open Config Folder',
+                            description: '打开配置文件所在目录',
+                            onTap: _openConfigFolder,
+                          ),
+                          const SizedBox(height: 8),
+                          _buildDebugButton(
+                            icon: Icons.sync,
+                            label: 'Reload Config',
+                            description: '重新加载用户配置（不删除）',
+                            onTap: _reloadConfig,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _buildSection(
+                        title: 'App Storage',
+                        children: [
+                          _buildDebugButton(
+                            icon: Icons.storage,
+                            label: 'SharedPreferences Editor',
+                            description: '查看和编辑本地存储的键值对',
+                            onTap: _openSharedPrefsEditor,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _buildSection(
+                        title: 'MCP Diagnostic',
+                        children: [
+                          _buildDebugButton(
+                            icon: Icons.link_off,
+                            label: 'MCP Connection Diagnostic',
+                            description: '选择 MCP 服务器查看连接失败诊断',
+                            onTap: _openMcpDiagnostic,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _buildSection(
+                        title: 'Update',
+                        children: [
+                          _buildDebugButton(
+                            icon: Icons.system_update_alt,
+                            label: 'Update Progress UI Demo',
+                            description: '预览更新下载进度遮罩弹窗效果',
+                            onTap: _showUpdateDemo,
+                          ),
+                          const SizedBox(height: 8),
+                          _buildDebugButton(
+                            icon: Icons.new_releases_outlined,
+                            label: 'Fake New Version Banner',
+                            description: '伪造新版本，首页显示更新横幅',
+                            onTap: _fakeUpdateBanner,
+                          ),
+                        ],
+                      ),
+                      if (_message != null) ...[
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: _message!.contains('成功') || _message!.contains('完成')
+                                ? Colors.green.withValues(alpha: 0.1)
+                                : Colors.orange.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _message!,
+                            style: TextStyle(
+                              color: _message!.contains('成功') || _message!.contains('完成')
+                                  ? Colors.green.shade700
+                                  : Colors.orange.shade700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Close'),
+                ),
+              ),
             ],
-          ],
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
-        ),
-      ],
     );
   }
 
@@ -417,11 +463,98 @@ class _DebugDialogState extends State<_DebugDialog> {
   }
 
   void _openSharedPrefsEditor() {
-    Navigator.of(context).pop(); // 关闭当前弹窗
+    Navigator.of(context).pop();
     showDialog(
       context: globalNavigatorKey.currentContext!,
       builder: (context) => const _SharedPrefsEditorDialog(),
     );
+  }
+
+  void _openMcpDiagnostic() {
+    Navigator.of(context).pop();
+    _showMcpServerPicker();
+  }
+
+  void _showUpdateDemo() {
+    Navigator.of(context).pop();
+    UpdateProgressOverlay.showDemo(globalNavigatorKey.currentContext!);
+  }
+
+  void _fakeUpdateBanner() {
+    final ctx = globalNavigatorKey.currentContext!;
+    final service = Provider.of<UpdateService>(ctx, listen: false);
+    if (service.hasUpdate) {
+      service.debugClearFakeUpdate();
+      setState(() => _message = '已清除伪造更新');
+    } else {
+      service.debugFakeUpdate();
+      Navigator.of(context).pop();
+      Toast.show(ctx, message: '已伪造 v99.0.0 新版本，返回首页查看横幅', type: ToastType.info);
+    }
+  }
+
+  Future<void> _showMcpServerPicker() async {
+    final ctx = globalNavigatorKey.currentContext!;
+    final servers = await _loadAllMcpServers();
+    if (servers.isEmpty) {
+      if (ctx.mounted) {
+        Toast.show(ctx, message: '未找到任何 MCP 服务器配置', type: ToastType.warning);
+      }
+      return;
+    }
+    if (!ctx.mounted) return;
+    showDialog(
+      context: ctx,
+      builder: (context) => _McpServerPickerDialog(servers: servers),
+    );
+  }
+
+  Future<Map<String, Map<String, dynamic>>> _loadAllMcpServers() async {
+    final home = PlatformUtils.userHome;
+    final configPath = PlatformUtils.joinPath(home, '.claude.json');
+    final file = File(configPath);
+    if (!await file.exists()) return {};
+
+    try {
+      final content = jsonDecode(await file.readAsString());
+      if (content is! Map<String, dynamic>) return {};
+
+      final result = <String, Map<String, dynamic>>{};
+
+      final globalServers = content['mcpServers'];
+      if (globalServers is Map) {
+        for (final entry in globalServers.entries) {
+          if (entry.value is Map) {
+            result['[Global] ${entry.key}'] = Map<String, dynamic>.from(
+              entry.value,
+            );
+          }
+        }
+      }
+
+      final projects = content['projects'];
+      if (projects is Map) {
+        for (final projEntry in projects.entries) {
+          final projConfig = projEntry.value;
+          if (projConfig is Map && projConfig['mcpServers'] is Map) {
+            final projPath = projEntry.key.toString();
+            final shortPath = projPath.split('/').last;
+            final projServers = projConfig['mcpServers'] as Map;
+            for (final sEntry in projServers.entries) {
+              if (sEntry.value is Map) {
+                result['[$shortPath] ${sEntry.key}'] =
+                    Map<String, dynamic>.from(sEntry.value);
+              }
+            }
+          }
+        }
+      }
+
+      return result;
+    } catch (e) {
+      LoggerService.error('Failed to load MCP servers: $e');
+      return {};
+    }
   }
 }
 
@@ -884,5 +1017,98 @@ class _PrefEditDialogState extends State<_PrefEditDialog> {
     }
 
     Navigator.pop(context, result);
+  }
+}
+
+/// MCP 服务器选择弹窗 → 选中后打开 McpFailedDialog
+class _McpServerPickerDialog extends StatelessWidget {
+  final Map<String, Map<String, dynamic>> servers;
+
+  const _McpServerPickerDialog({required this.servers});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final entries = servers.entries.toList();
+
+    return AlertDialog(
+      backgroundColor: isDark ? const Color(0xFF2D2D2D) : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          Icon(Icons.dns_outlined, color: Colors.orange.shade700, size: 20),
+          const SizedBox(width: 8),
+          const Text('选择 MCP 服务器', style: TextStyle(fontSize: 16)),
+        ],
+      ),
+      content: SizedBox(
+        width: 360,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 400),
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: entries.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 4),
+            itemBuilder: (context, index) {
+              final label = entries[index].key;
+              final config = entries[index].value;
+              final domains = extractDomainsFromConfig(config);
+              final subtitle = domains.isNotEmpty
+                  ? domains.take(2).join(', ')
+                  : (config['command']?.toString() ?? '');
+
+              return ListTile(
+                dense: true,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                leading: Icon(
+                  Icons.extension_outlined,
+                  size: 18,
+                  color: isDark ? Colors.orange.shade300 : Colors.orange,
+                ),
+                title: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: subtitle.isNotEmpty
+                    ? Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    : null,
+                trailing: const Icon(Icons.chevron_right, size: 16),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  final serverName = label.replaceFirst(
+                    RegExp(r'^\[.*?\]\s*'),
+                    '',
+                  );
+                  McpFailedDialog.show(
+                    globalNavigatorKey.currentContext!,
+                    serverName: serverName,
+                    config: config,
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
+    );
   }
 }

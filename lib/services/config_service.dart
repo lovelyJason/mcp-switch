@@ -183,6 +183,11 @@ class ConfigService extends ChangeNotifier {
     _remoteClawCallbackHost = prefs.getString('rc_callback_host') ?? '';
     _remoteClawUseLocalCallback =
         prefs.getBool('rc_use_local_callback') ?? true;
+
+    // Load Proxy config
+    _proxyUrl = prefs.getString('proxy_url') ?? '';
+    _proxyUsername = prefs.getString('proxy_username') ?? '';
+    _proxyPassword = prefs.getString('proxy_password') ?? '';
   }
 
   /// 进入设置页时调用：从 prefs + 配置文件重新同步当前设置状态。
@@ -901,6 +906,45 @@ class ConfigService extends ChangeNotifier {
     _remoteClawAutoStart = autoStart;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('rc_auto_start', autoStart);
+    notifyListeners();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Proxy 出站代理配置
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  String _proxyUrl = '';
+  String _proxyUsername = '';
+  String _proxyPassword = '';
+
+  String get proxyUrl => _proxyUrl;
+  String get proxyUsername => _proxyUsername;
+  String get proxyPassword => _proxyPassword;
+  bool get hasProxy => _proxyUrl.isNotEmpty;
+
+  Future<void> saveProxyConfig({
+    required String url,
+    String username = '',
+    String password = '',
+  }) async {
+    _proxyUrl = url;
+    _proxyUsername = username;
+    _proxyPassword = password;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('proxy_url', url);
+    await prefs.setString('proxy_username', username);
+    await prefs.setString('proxy_password', password);
+    notifyListeners();
+  }
+
+  Future<void> clearProxyConfig() async {
+    _proxyUrl = '';
+    _proxyUsername = '';
+    _proxyPassword = '';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('proxy_url');
+    await prefs.remove('proxy_username');
+    await prefs.remove('proxy_password');
     notifyListeners();
   }
 

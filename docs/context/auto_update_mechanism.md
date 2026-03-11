@@ -128,35 +128,90 @@ int _compareVersions(String v1, String v2) {
 }
 ```
 
-### 3.4 macOS 自动更新流程
+### 3.4 代理支持
+
+`UpdateService` 接受可选的 `ConfigService` 注入。如果用户在「设置→高级→全局出站代理」配置了代理地址，`checkForUpdates()` 和 `performAutoUpdate()` 都会通过 `ProxyService` 创建代理 HTTP Client 访问 GitHub，解决国内网络问题。
+
+```dart
+UpdateService({ConfigService? configService});
+
+http.Client _createClient() {
+  if (_configService != null && _configService.hasProxy) {
+    return ProxyService(_configService).createProxiedClient();
+  }
+  return http.Client();
+}
+```
+
+### 3.5 更新阶段状态机
+
+```
+UpdatePhase: idle → checking → downloading → extracting → restarting
+                                                           ↓
+                                               error（任意阶段失败）
+```
+
+| 阶段 | phase | progress | UI 表现 |
+|------|-------|----------|---------|
+| 空闲 | `idle` | 0 | 无 |
+| 检查中 | `checking` | 0 | 转圈 + "准备下载..." |
+| 下载中 | `downloading` | 0~1.0 | 确定进度圆环 + "正在下载更新 xx%" |
+| 解压安装 | `extracting` | 1.0 | 转圈 + "正在解压安装..." |
+| 即将重启 | `restarting` | 1.0 | 转圈 + "即将重启应用..." |
+| 失败 | `error` | - | 错误提示 |
+
+### 3.6 macOS 自动更新原理（5 步详解）
 
 ```
 performAutoUpdate(zipUrl)
     │
     ▼
-1. 下载 ZIP 文件到临时目录
+步骤 1: 流式下载 ZIP
+    │  使用 http.Client.send() 获取 StreamedResponse
+    │  逐 chunk 接收数据，实时计算 receivedBytes / totalBytes 更新进度
+    │  （不是一次性 http.get 加载到内存，而是边下边写）
     │
     ▼
-2. 解压到 {tempDir}/update_extract/
+步骤 2: 写入临时文件
+    │  将所有 chunks 拼接后写入 {tempDir}/update.zip
     │
     ▼
-3. 查找 "MCP Switch.app" 文件夹
+步骤 3: 调用系统 unzip 解压
+    │  Process.run('unzip', ['-o', zipFile.path, '-d', extractDir.path])
+    │  解压到 {tempDir}/update_extract/，里面包含 "MCP Switch.app" 目录
     │
     ▼
-4. 获取当前应用路径（向上遍历找到 .app 目录）
+步骤 4: 定位当前 .app 路径
+    │  Platform.resolvedExecutable 返回：
+    │    /Applications/MCP Switch.app/Contents/MacOS/mcp_switch
+    │  向上逐层回溯目录，直到找到以 .app 结尾的路径：
+    │    /Applications/MCP Switch.app
     │
     ▼
-5. 创建替换脚本 update_script.sh:
-   ┌─────────────────────────────────────┐
-   │  sleep 2                            │
-   │  rm -rf "{当前应用路径}"              │
-   │  mv "{新应用路径}" "{当前应用路径}"    │
-   │  open "{当前应用路径}"                │
-   └─────────────────────────────────────┘
+步骤 5: 生成替换脚本 + 自杀重启
+    │  生成 update_script.sh:
+    │  ┌─────────────────────────────────────────────────┐
+    │  │  #!/bin/bash                                    │
+    │  │  sleep 2                    # 等当前 app 退出    │
+    │  │  rm -rf "{旧 .app 路径}"     # 删掉旧版本         │
+    │  │  mv "{新 .app 路径}" "{旧}"  # 新版本移到原位     │
+    │  │  open "{.app 路径}"          # 启动新版本         │
+    │  └─────────────────────────────────────────────────┘
+    │
+    │  关键原理：应用不能在运行时替换自身文件，
+    │  所以启动一个 detached 子进程执行脚本，
+    │  然后立即 exit(0) 杀掉自己。
+    │  脚本因为 detached 模式不随父进程退出，
+    │  sleep 2 秒后执行替换和重启。
     │
     ▼
-6. 以 detached 模式执行脚本，然后 exit(0)
+    exit(0) → 应用退出 → 2s 后脚本替换 → open 启动新版本
 ```
+
+**为什么需要 detached + sleep？**
+- `detached` 模式使脚本进程独立于当前应用，父进程退出后子进程继续运行
+- `sleep 2` 确保旧应用完全退出释放文件锁后，再执行 `rm -rf` 删除和 `mv` 替换
+- `open` 命令是 macOS 特有的，等同于双击打开 .app 包
 
 ---
 
@@ -165,8 +220,8 @@ performAutoUpdate(zipUrl)
 ### 4.1 注册 (main.dart)
 
 ```dart
-// Initialize Update Service（自动检测更新）
-final updateService = UpdateService();
+// Initialize Update Service（自动检测更新，传入 configService 以支持代理）
+final updateService = UpdateService(configService: configService);
 updateService.init();
 
 runApp(
@@ -224,14 +279,36 @@ GitHub Release 中的 asset 文件名需包含 `macos` 且以 `.zip` 结尾，�
 
 ---
 
-## 六、国际化文案
+## 六、更新进度遮罩 UI
+
+点击"安装并重启"后，不再只显示 Toast，而是弹出一个**全屏半透明遮罩 + 居中卡片弹窗**：
+
+- 卡片内有 80px 的 `CircularProgressIndicator`
+- **下载阶段**：显示确定进度（0%~100%），圆环中心显示百分比数字
+- **其他阶段**：显示不确定进度（转圈），中心显示对应阶段图标
+- 下方文字显示阶段名称和副标题提示
+- 遮罩不可关闭（`barrierDismissible: false`），防止用户误操作
+- 通过 `Consumer<UpdateService>` 监听 `phase` 和 `progress` 实时刷新
+
+### 调试工具箱
+
+Debug 工具箱新增 "Update Progress UI Demo" 按钮，点击后弹出 demo 版遮罩，使用 `AnimationController` 循环模拟各阶段动画，便于开发调试。
+
+---
+
+## 七、国际化文案
 
 | Key | 中文 | English |
 |-----|------|---------|
 | `check_for_updates` | 检查更新 | Check for Updates |
+| `checking_for_updates` | 正在检查更新...（含代理提示） | Checking for updates...（含代理提示） |
 | `current_latest` | 当前已是最新版本 | Already up to date |
 | `new_version_available` | 发现新版本: {version} | New version available: {version} |
 | `downloading_update` | 正在下载更新... | Downloading update... |
+| `update_downloading_progress` | 正在下载更新 {percent}% | Downloading update {percent}% |
+| `update_extracting` | 正在解压安装... | Extracting and installing... |
+| `update_preparing` | 准备下载... | Preparing download... |
+| `update_restarting` | 即将重启应用... | Restarting app... |
 | `update_downloaded` | 更新已准备就绪 | Update ready |
 | `install_restart` | 安装并重启 | Install & Restart |
 | `update_failed` | 更新失败 | Update failed |
@@ -240,38 +317,45 @@ GitHub Release 中的 asset 文件名需包含 `macos` 且以 `.zip` 结尾，�
 
 ---
 
-## 七、关键文件
+## 八、关键文件
 
 | 文件 | 说明 |
 |------|------|
-| `lib/services/update_service.dart` | 更新检测核心服务（UpdateService + UpdateInfo） |
+| `lib/services/update_service.dart` | 更新检测核心服务（UpdateService + UpdateInfo + UpdatePhase） |
+| `lib/services/proxy_service.dart` | 代理 HTTP Client 创建（更新时如配了代理自动走代理） |
+| `lib/services/config_service.dart` | 代理配置存储（proxyUrl / proxyUsername / proxyPassword） |
 | `lib/main.dart` | 服务初始化和 Provider 注册 |
-| `lib/ui/pages/settings/settings_screen.dart` | 手动检测按钮和更新对话框 UI |
+| `lib/ui/pages/settings/settings_screen.dart` | 手动检测按钮、更新对话框、更新进度遮罩 UI |
+| `lib/ui/components/update_progress_overlay.dart` | 更新进度遮罩 Demo 版本（调试工具箱用） |
+| `lib/ui/components/floating_debug_button.dart` | 调试工具箱（含 Update Progress UI Demo 按钮） |
 | `lib/l10n/locales/zh.json` | 中文国际化文案 |
 | `lib/l10n/locales/en.json` | 英文国际化文案 |
 
 ---
 
-## 八、已知限制与注意事项
+## 九、已知限制与注意事项
 
-### 8.1 平台限制
+### 9.1 平台限制
 - 自动更新（下载 ZIP → 替换 → 重启）仅支持 **macOS**
 - Windows 用户会跳转到 GitHub Release 页面手动下载
 
-### 8.2 网络要求
+### 9.2 网络要求
 - 需要能访问 `api.github.com`，国内可能需要代理
-- API 请求超时时间为 10 秒
+- 检查更新超时 15 秒，下载超时 120 秒
+- 如配置了代理（设置→高级→全局出站代理），会自动使用代理访问 GitHub
 
-### 8.3 GitHub API 限制
+### 9.3 GitHub API 限制
 - 未认证请求限制：60 次/小时
 - 24 小时检测一次不会触发限流
 
-### 8.4 自动更新安全性
+### 9.4 自动更新安全性
 - 替换脚本使用 `sleep 2` 等待应用完全退出
 - 脚本以 detached 模式运行，不依赖父进程
 - 替换后自动打开新版本应用
+- 无签名验证，依赖 HTTPS 传输安全
 
 ---
 
 *文档创建时间：2026-02-10*
+*最后更新：2026-03-03（新增代理支持、流式下载进度、更新遮罩 UI）*
 *适用版本：MCP Switch v1.x*

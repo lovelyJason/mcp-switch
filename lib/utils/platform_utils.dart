@@ -1503,4 +1503,160 @@ class PlatformUtils {
 
   /// 规范化路径（处理 .. 和 . 等）
   static String normalize(String path) => p.normalize(path);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 终端检测与启动
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  static List<TerminalOption>? _cachedTerminalOptions;
+
+  /// 检测当前系统可用的终端应用
+  static Future<List<TerminalOption>> detectAvailableTerminals() async {
+    if (_cachedTerminalOptions != null) return _cachedTerminalOptions!;
+
+    final options = <TerminalOption>[];
+
+    if (Platform.isMacOS) {
+      options.add(const TerminalOption(
+        id: 'terminal',
+        name: 'Terminal',
+        icon: 'terminal',
+      ));
+      if (Directory('/Applications/iTerm.app').existsSync()) {
+        options.add(const TerminalOption(
+          id: 'iterm2',
+          name: 'iTerm2',
+          icon: 'iterm2',
+        ));
+      }
+    } else if (Platform.isWindows) {
+      options.add(const TerminalOption(
+        id: 'powershell',
+        name: 'PowerShell',
+        icon: 'powershell',
+      ));
+      options.add(const TerminalOption(
+        id: 'cmd',
+        name: 'CMD',
+        icon: 'cmd',
+      ));
+      try {
+        final result = await Process.run('where', ['wt'], runInShell: true);
+        if (result.exitCode == 0) {
+          options.add(const TerminalOption(
+            id: 'windows_terminal',
+            name: 'Windows Terminal',
+            icon: 'windows_terminal',
+          ));
+        }
+      } catch (_) {}
+    } else {
+      options.add(const TerminalOption(
+        id: 'terminal',
+        name: 'Terminal',
+        icon: 'terminal',
+      ));
+    }
+
+    _cachedTerminalOptions = options;
+    return options;
+  }
+
+  /// 在指定终端中执行命令
+  static Future<bool> launchInTerminal({
+    required String terminalId,
+    required String command,
+    String? workingDir,
+  }) async {
+    try {
+      final cdPart = workingDir != null ? 'cd ${_shellEscape(workingDir)} && ' : '';
+      final fullCmd = '$cdPart$command';
+
+      if (Platform.isMacOS) {
+        return _launchMacTerminal(terminalId, fullCmd);
+      } else if (Platform.isWindows) {
+        return _launchWindowsTerminal(terminalId, command, workingDir);
+      }
+      return false;
+    } catch (e) {
+      LoggerService.error('[launchInTerminal] 启动终端失败', e);
+      return false;
+    }
+  }
+
+  static Future<bool> _launchMacTerminal(String id, String command) async {
+    String script;
+    if (id == 'iterm2') {
+      script = '''
+tell application "iTerm2"
+  activate
+  create window with default profile
+  tell current session of current window
+    write text "${_appleScriptEscape(command)}"
+  end tell
+end tell''';
+    } else {
+      script = '''
+tell application "Terminal"
+  activate
+  do script "${_appleScriptEscape(command)}"
+end tell''';
+    }
+
+    final result = await Process.run('osascript', ['-e', script]);
+    return result.exitCode == 0;
+  }
+
+  static Future<bool> _launchWindowsTerminal(
+      String id, String command, String? workingDir) async {
+    final dir = workingDir ?? userHome;
+    ProcessResult result;
+
+    switch (id) {
+      case 'windows_terminal':
+        result = await Process.run(
+          'wt',
+          ['-d', dir, 'cmd', '/k', command],
+          runInShell: true,
+        );
+        break;
+      case 'cmd':
+        final cdCmd = 'cd /d "$dir" && $command';
+        result = await Process.run(
+          'start',
+          ['cmd', '/k', cdCmd],
+          runInShell: true,
+        );
+        break;
+      default: // powershell
+        final psCmd = "Set-Location '$dir'; $command";
+        result = await Process.run(
+          'start',
+          ['powershell', '-NoExit', '-Command', psCmd],
+          runInShell: true,
+        );
+    }
+    return result.exitCode == 0;
+  }
+
+  static String _shellEscape(String path) {
+    if (Platform.isWindows) return '"$path"';
+    return "'${path.replaceAll("'", "'\\''")}'";
+  }
+
+  static String _appleScriptEscape(String s) {
+    return s.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+  }
+}
+
+class TerminalOption {
+  final String id;
+  final String name;
+  final String icon;
+
+  const TerminalOption({
+    required this.id,
+    required this.name,
+    required this.icon,
+  });
 }

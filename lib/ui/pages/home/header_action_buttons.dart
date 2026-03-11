@@ -12,6 +12,7 @@ import '../plugins/codex_skills_screen.dart';
 import '../plugins/gemini_skills_screen.dart';
 import '../plugins/antigravity_skills_screen.dart';
 import '../provider_switch/provider_list_screen.dart';
+import '../sessions/session_manager_screen.dart';
 
 /// 头部操作按钮组（胶囊样式）
 /// 根据不同编辑器类型显示不同的按钮组合：
@@ -82,7 +83,7 @@ class HeaderActionButtons extends StatelessWidget {
     );
   }
 
-  /// Codex: Skills + Provider
+  /// Codex: Skills + Provider + Sessions
   Widget _buildCodexButtons(BuildContext context, bool disabled) {
     final codexSkillsBtn = IconButton(
       icon: Icon(
@@ -101,6 +102,7 @@ class HeaderActionButtons extends StatelessWidget {
     );
 
     final providerBtn = _buildProviderButton(context, disabled, 'codex');
+    final sessionsBtn = _buildSessionsButton(context, disabled);
 
     return _buildCapsuleContainer(
       context,
@@ -108,6 +110,8 @@ class HeaderActionButtons extends StatelessWidget {
         codexSkillsBtn,
         _buildDivider(),
         providerBtn,
+        _buildDivider(),
+        sessionsBtn,
       ],
     );
   }
@@ -276,8 +280,8 @@ class HeaderActionButtons extends StatelessWidget {
       position: PopupMenuPosition.under,
       offset: const Offset(0, 8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      color: Theme.of(context).cardColor,
-      elevation: 4,
+      color: Colors.white,
+      elevation: 8,
       shadowColor: Colors.black26,
       onSelected: (value) => _handleMoreMenuSelection(context, value),
       itemBuilder: (context) => [
@@ -295,6 +299,28 @@ class HeaderActionButtons extends StatelessWidget {
               const SizedBox(width: 10),
               Text(
                 'Rules',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Theme.of(context).textTheme.bodyMedium?.color,
+                ),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'sessions',
+          height: 40,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.history,
+                size: 16,
+                color: Theme.of(context).textTheme.bodyMedium?.color,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                S.get('session_manager'),
                 style: TextStyle(
                   fontSize: 13,
                   color: Theme.of(context).textTheme.bodyMedium?.color,
@@ -326,6 +352,10 @@ class HeaderActionButtons extends StatelessWidget {
   void _handleMoreMenuSelection(BuildContext context, String value) {
     if (value == 'rules') {
       _handleRulesNavigation(context);
+    } else if (value == 'sessions') {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const SessionManagerScreen()),
+      );
     }
   }
 
@@ -345,6 +375,25 @@ class HeaderActionButtons extends StatelessWidget {
     }
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => RulesScreen(editorType: selectedEditor)),
+    );
+  }
+
+  /// Sessions 按钮
+  Widget _buildSessionsButton(BuildContext context, bool disabled) {
+    return IconButton(
+      icon: Icon(
+        Icons.history,
+        size: 18,
+        color: disabled ? Colors.grey : Colors.orange,
+      ),
+      tooltip: S.get('session_manager'),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      onPressed: disabled ? null : () {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const SessionManagerScreen()),
+        );
+      },
     );
   }
 

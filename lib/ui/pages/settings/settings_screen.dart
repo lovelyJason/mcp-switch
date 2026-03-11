@@ -14,6 +14,7 @@ import '../../components/styled_dropdown.dart';
 import '../../components/custom_toast.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'environment_check_tab.dart';
+import 'widgets/proxy_settings_section.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -268,17 +269,29 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Future<void> _startAutoUpdate(String zipUrl) async {
-    Toast.show(
-      context,
-      message: S.get('downloading_update'),
-      type: ToastType.info,
+    final updateService = Provider.of<UpdateService>(context, listen: false);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black54,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: Consumer<UpdateService>(
+          builder: (ctx, service, _) => _UpdateProgressDialog(
+            phase: service.phase,
+            progress: service.progress,
+          ),
+        ),
+      ),
     );
 
     try {
-      final updateService = Provider.of<UpdateService>(context, listen: false);
       await updateService.performAutoUpdate(zipUrl);
     } catch (e) {
+      updateService.resetPhase();
       if (mounted) {
+        Navigator.of(context).pop();
         Toast.show(
           context,
           message: '${S.get("update_failed")}: $e',
@@ -1027,6 +1040,11 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
         const SizedBox(height: 12),
         _buildDeepLApiKeyField(),
+
+        const SizedBox(height: 32),
+
+        // 全局出站代理配置
+        const ProxySettingsSection(),
       ],
     );
   }
@@ -1780,5 +1798,157 @@ class _TestConnectionButtonState extends State<_TestConnectionButton> {
         textStyle: const TextStyle(fontSize: 12),
       ),
     );
+  }
+}
+
+class _UpdateProgressDialog extends StatelessWidget {
+  final UpdatePhase phase;
+  final double progress;
+
+  const _UpdateProgressDialog({
+    required this.phase,
+    required this.progress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Center(
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: 280,
+          padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 28),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF2D2D2D) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 80,
+                height: 80,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: CircularProgressIndicator(
+                        value: phase == UpdatePhase.downloading
+                            ? progress
+                            : null,
+                        strokeWidth: 4,
+                        backgroundColor: isDark
+                            ? Colors.white.withValues(alpha: 0.1)
+                            : Colors.grey.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.orange.shade600,
+                        ),
+                      ),
+                    ),
+                    if (phase == UpdatePhase.downloading)
+                      Text(
+                        '${(progress * 100).toInt()}%',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.orange.shade600,
+                        ),
+                      )
+                    else
+                      Icon(
+                        _phaseIcon(phase),
+                        size: 28,
+                        color: Colors.orange.shade600,
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                _phaseText(phase, progress),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _phaseSubtext(phase),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  IconData _phaseIcon(UpdatePhase phase) {
+    switch (phase) {
+      case UpdatePhase.checking:
+        return Icons.search;
+      case UpdatePhase.downloading:
+        return Icons.download;
+      case UpdatePhase.extracting:
+        return Icons.unarchive_outlined;
+      case UpdatePhase.restarting:
+        return Icons.restart_alt;
+      case UpdatePhase.error:
+        return Icons.error_outline;
+      case UpdatePhase.idle:
+        return Icons.check_circle_outline;
+    }
+  }
+
+  String _phaseText(UpdatePhase phase, double progress) {
+    switch (phase) {
+      case UpdatePhase.checking:
+        return S.get('update_preparing');
+      case UpdatePhase.downloading:
+        return S.get('update_downloading_progress')
+            .replaceAll('{percent}', '${(progress * 100).toInt()}');
+      case UpdatePhase.extracting:
+        return S.get('update_extracting');
+      case UpdatePhase.restarting:
+        return S.get('update_restarting');
+      case UpdatePhase.error:
+        return S.get('update_failed');
+      case UpdatePhase.idle:
+        return S.get('current_latest');
+    }
+  }
+
+  String _phaseSubtext(UpdatePhase phase) {
+    switch (phase) {
+      case UpdatePhase.checking:
+        return 'Connecting to GitHub...';
+      case UpdatePhase.downloading:
+        return 'Please do not close the app';
+      case UpdatePhase.extracting:
+        return 'Almost done...';
+      case UpdatePhase.restarting:
+        return 'App will restart shortly';
+      case UpdatePhase.error:
+        return 'Please try again later';
+      case UpdatePhase.idle:
+        return '';
+    }
   }
 }

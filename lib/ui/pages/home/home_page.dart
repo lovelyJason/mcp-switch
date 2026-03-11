@@ -7,6 +7,7 @@ import '../../components/claude_not_installed_banner.dart';
 import '../../components/claude_path_not_configured_banner.dart';
 import '../../components/codex_not_installed_banner.dart';
 import '../../components/gemini_not_installed_banner.dart';
+import '../../components/update_banner.dart';
 import '../mcp_config/config_list_screen.dart';
 import 'home_header.dart';
 
@@ -124,7 +125,10 @@ class _HomePageState extends State<HomePage> {
   Widget _buildContent() {
     return Column(
       children: [
-        // Banners
+        // 更新横幅（最优先显示）
+        const UpdateBanner(),
+
+        // CLI 状态 Banners
         ..._buildBanners(),
 
         // 主内容（当前固定为 ConfigListScreen，后续可扩展）

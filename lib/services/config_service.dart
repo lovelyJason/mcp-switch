@@ -345,6 +345,8 @@ class ConfigService extends ChangeNotifier {
 
           if (type == EditorType.codex) {
             _profiles[type] = _parseCodexToml(text, _profiles[type] ?? []);
+            // 异步补充 auth 状态（不阻塞加载）
+            _enrichCodexAuthStatus(_profiles[type]!);
             continue;
           }
 
@@ -1071,7 +1073,104 @@ class ConfigService extends ChangeNotifier {
       }
     }
   }
-  // --- HELPERS for Codex TOML ---
+  // --- HELPERS for Codex CLI / TOML ---
+
+  /// 异步执行 `codex mcp list`，从输出中提取 auth 状态并合并到已有 profiles
+  Future<void> _enrichCodexAuthStatus(List<McpProfile> profiles) async {
+    try {
+      final result = await PlatformUtils.runCommand('codex mcp list')
+          .timeout(const Duration(seconds: 15));
+      if (result.exitCode != 0) return;
+      final output = (result.stdout as String).trim();
+      if (output.isEmpty) return;
+
+      final authMap = _parseCodexMcpListAuth(output);
+      if (authMap.isEmpty) return;
+
+      bool changed = false;
+      for (final profile in profiles) {
+        final auth = authMap[profile.name];
+        if (auth == null || auth.isEmpty) continue;
+        final mcpServers = profile.content['mcpServers'];
+        if (mcpServers is Map && mcpServers.containsKey(profile.name)) {
+          final server = mcpServers[profile.name];
+          if (server is Map<String, dynamic>) {
+            server['auth'] = auth;
+            changed = true;
+          }
+        }
+      }
+      if (changed) notifyListeners();
+    } catch (_) {
+      // CLI 不可用时静默忽略
+    }
+  }
+
+  /// 从 `codex mcp list` 输出提取 name -> auth 映射
+  Map<String, String> _parseCodexMcpListAuth(String output) {
+    final authMap = <String, String>{};
+    final lines = output.split('\n');
+
+    int i = 0;
+    while (i < lines.length) {
+      final headerLine = lines[i];
+      if (headerLine.trim().isEmpty) { i++; continue; }
+
+      final isStdioTable = headerLine.trimLeft().startsWith('Name') && headerLine.contains('Command');
+      final isHttpTable = headerLine.trimLeft().startsWith('Name') && headerLine.contains('Url');
+      if (!isStdioTable && !isHttpTable) { i++; continue; }
+
+      final colStarts = _detectColumnStarts(headerLine);
+      final authIdx = isStdioTable ? 6 : 4;
+      i++;
+
+      while (i < lines.length) {
+        final line = lines[i];
+        if (line.trim().isEmpty) { i++; break; }
+        final cols = _splitByColumns(line, colStarts);
+        if (cols.isEmpty || cols[0].isEmpty) { i++; continue; }
+        final name = cols[0];
+        final auth = authIdx < cols.length ? cols[authIdx] : '';
+        if (auth.isNotEmpty) authMap[name] = auth;
+        i++;
+      }
+    }
+    return authMap;
+  }
+
+  /// 从 header 行检测各列的起始字符位置
+  List<int> _detectColumnStarts(String headerLine) {
+    final starts = <int>[0];
+    bool inSpace = false;
+    for (var i = 0; i < headerLine.length; i++) {
+      if (headerLine[i] == ' ') {
+        inSpace = true;
+      } else if (inSpace) {
+        // 连续空格后遇到非空格 = 新列开始
+        // 但至少要有 2 个空格才算列分隔
+        if (i >= 2 && headerLine[i - 1] == ' ' && headerLine[i - 2] == ' ') {
+          starts.add(i);
+        }
+        inSpace = false;
+      }
+    }
+    return starts;
+  }
+
+  /// 按列位置拆分行内容
+  List<String> _splitByColumns(String line, List<int> colStarts) {
+    final result = <String>[];
+    for (var c = 0; c < colStarts.length; c++) {
+      final start = colStarts[c];
+      final end = (c + 1 < colStarts.length) ? colStarts[c + 1] : line.length;
+      if (start >= line.length) {
+        result.add('');
+      } else {
+        result.add(line.substring(start, end.clamp(start, line.length)).trim());
+      }
+    }
+    return result;
+  }
 
   List<McpProfile> _parseCodexToml(
     String content,
@@ -1081,8 +1180,11 @@ class ConfigService extends ChangeNotifier {
     final lines = content.split('\n');
     String? currentServerName;
     String? currentCommand;
+    String? currentUrl;
     List<String> currentArgs = [];
+    Map<String, String> currentHttpHeaders = {};
     bool inArgs = false;
+    bool currentDisabled = false;
 
     // Map for ID preservation
     final Map<String, String> nameToId = {
@@ -1091,26 +1193,39 @@ class ConfigService extends ChangeNotifier {
 
     void saveCurrent() {
       if (currentServerName != null) {
+        final serverConfig = <String, dynamic>{};
+        if (currentUrl != null && currentUrl!.isNotEmpty) {
+          serverConfig['url'] = currentUrl!;
+          if (currentHttpHeaders.isNotEmpty) {
+            serverConfig['http_headers'] = Map<String, String>.from(
+              currentHttpHeaders,
+            );
+          }
+        } else {
+          serverConfig['command'] = currentCommand ?? '';
+          serverConfig['args'] = currentArgs;
+        }
+        if (currentDisabled) {
+          serverConfig['disabled'] = true;
+        }
         profiles.add(
           McpProfile(
             id: nameToId[currentServerName] ?? const Uuid().v4(),
             name: currentServerName!,
             description: 'Codex Server configuration',
             content: {
-              'mcpServers': {
-                currentServerName: {
-                  'command': currentCommand ?? '',
-                  'args': currentArgs,
-                },
-              },
+              'mcpServers': {currentServerName: serverConfig},
             },
           ),
         );
       }
       currentServerName = null;
       currentCommand = null;
+      currentUrl = null;
       currentArgs = [];
+      currentHttpHeaders = {};
       inArgs = false;
+      currentDisabled = false;
     }
 
     for (var line in lines) {
@@ -1123,9 +1238,31 @@ class ConfigService extends ChangeNotifier {
         continue;
       }
 
+      if (line.startsWith('enabled')) {
+        final match = RegExp(r'enabled\s*=\s*(\w+)').firstMatch(line);
+        if (match != null && match.group(1) == 'false') {
+          currentDisabled = true;
+        }
+        continue;
+      }
+
       if (line.startsWith('command')) {
         final match = RegExp(r'command\s*=\s*"(.*)"').firstMatch(line);
         if (match != null) currentCommand = match.group(1);
+        continue;
+      }
+
+      if (line.startsWith('url')) {
+        final match = RegExp(r'url\s*=\s*"(.*)"').firstMatch(line);
+        if (match != null) currentUrl = match.group(1);
+        continue;
+      }
+
+      if (line.startsWith('http_headers')) {
+        final match = RegExp(r'http_headers\s*=\s*\{(.*)\}').firstMatch(line);
+        if (match != null) {
+          currentHttpHeaders = _parseCodexInlineTable(match.group(1)!);
+        }
         continue;
       }
 
@@ -1170,7 +1307,7 @@ class ConfigService extends ChangeNotifier {
     for (var profile in profiles) {
       final content = profile.content;
       if (content['mcpServers'] is! Map) continue;
-      final Map<String, dynamic> servers = content['mcpServers'];
+      final servers = Map<String, dynamic>.from(content['mcpServers'] as Map);
 
       for (var entry in servers.entries) {
         final name = entry.key;
@@ -1183,22 +1320,66 @@ class ConfigService extends ChangeNotifier {
             : name;
         buffer.writeln('[mcp_servers.$safeName]');
 
-        buffer.writeln('command = "${config['command']}"');
-        final args = config['args'];
-        if (args is List && args.isNotEmpty) {
-          buffer.writeln('args = [');
-          for (var i = 0; i < args.length; i++) {
-            final arg = args[i];
-            final suffix = (i == args.length - 1) ? '' : ',';
-            buffer.writeln('  "$arg"$suffix');
+        if (config['disabled'] == true) {
+          buffer.writeln('enabled = false');
+        }
+
+        final url = config['url']?.toString() ?? '';
+        if (url.isNotEmpty) {
+          buffer.writeln('url = "${_escapeTomlString(url)}"');
+
+          final headers = _stringMapFrom(config['http_headers']);
+          if (headers.isNotEmpty) {
+            final headerStr = headers.entries
+                .map(
+                  (entry) =>
+                      '"${_escapeTomlString(entry.key)}" = "${_escapeTomlString(entry.value)}"',
+                )
+                .join(', ');
+            buffer.writeln('http_headers = { $headerStr }');
           }
-          buffer.writeln(']');
         } else {
-          buffer.writeln('args = []');
+          buffer.writeln(
+            'command = "${_escapeTomlString(config['command']?.toString() ?? '')}"',
+          );
+          final args = config['args'];
+          if (args is List && args.isNotEmpty) {
+            buffer.writeln('args = [');
+            for (var i = 0; i < args.length; i++) {
+              final arg = args[i];
+              final suffix = (i == args.length - 1) ? '' : ',';
+              buffer.writeln('  "${_escapeTomlString(arg.toString())}"$suffix');
+            }
+            buffer.writeln(']');
+          } else {
+            buffer.writeln('args = []');
+          }
         }
         buffer.writeln();
       }
     }
     return buffer.toString();
+  }
+
+  Map<String, String> _parseCodexInlineTable(String raw) {
+    final result = <String, String>{};
+    final pairRegex = RegExp(r'"([^"]+)"\s*=\s*"([^"]*)"');
+    for (final match in pairRegex.allMatches(raw)) {
+      result[match.group(1)!] = match.group(2)!;
+    }
+    return result;
+  }
+
+  Map<String, String> _stringMapFrom(dynamic value) {
+    if (value is Map) {
+      return value.map(
+        (key, entryValue) => MapEntry(key.toString(), entryValue.toString()),
+      );
+    }
+    return {};
+  }
+
+  String _escapeTomlString(String value) {
+    return value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
   }
 }

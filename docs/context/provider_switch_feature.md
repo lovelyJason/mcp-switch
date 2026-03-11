@@ -57,6 +57,28 @@ v1.8.0 起，`ProviderProfiles` 表新增 `configContent TEXT?` 列，存储**�
 | Codex | `config.toml` 完整 TOML | `widget.profile?.configContent` → `_codexExistingConfigContent` |
 | Gemini | `.env` 完整 KEY=VALUE | `widget.profile?.configContent` → `_geminiExistingEnvContent` |
 
+#### 新增模式本地配置合并（v1.7.2+）
+
+新增供应商时（`widget.profile == null`），`_initConfigFromSqlite()` 除了设置空初始值外，还会异步调用 `_loadLocalConfigForNewProfile()` 读取当前本地配置文件，将已有配置作为基础合并到配置预览中。
+
+**目的**：避免新增供应商保存后，切换激活时覆盖掉本地配置文件中已有的非表单管理字段（如 `CLAUDE_CODE_MAX__OUTPUT_TOKENS`、`MAX_THINKING_TOKENS`、Codex 的 `network_access` 等）。
+
+```
+新增模式 initState
+  → _initFromStored(null)          // 空初始值
+  → _loadLocalConfigForNewProfile() // 异步读取本地文件
+    → Claude: readClaudeConfigFile() → 解析为 _claudeBaseConfig
+              → _backfillClaudeForm(): 回填 maxOutputTokens, maxThinkingTokens 到表单
+    → Codex:  readCodexConfigFile() → 设为 _codexExistingConfigContent
+              → _backfillCodexForm(): 通过 _syncFromCodexToml 回填 model, base_url 等
+    → Gemini: readGeminiEnvFile()   → 设为 _geminiExistingEnvContent
+              → _syncFormFromGeminiEnv(): 回填 apiKey, baseUrl, model
+```
+
+**回填规则**：
+- 只在表单字段为空时回填（避免覆盖预设已填入的值）
+- 回填完成后更新 `_initialSnapshot`，防止误触"未保存更改"提示
+
 #### 保存写入（configContent 直写）
 
 保存时，编辑页通过 `_buildConfigContentForSave()` 构建完整配置文本，同时传入 `configContent` 参数给 Service，写入 SQLite 的 `configContent` 列和各字段列。

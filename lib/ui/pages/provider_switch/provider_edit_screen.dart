@@ -201,10 +201,21 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
     });
   }
 
-  /// 从 SQLite configContent 初始化配置预览数据（同步，无需读文件）
+  /// 从 SQLite configContent 初始化配置预览数据
+  /// 编辑模式：直接使用 SQLite 数据
+  /// 新增模式：异步读取本地配置文件作为基础，合并表单字段并回填
   void _initConfigFromSqlite() {
     final stored = widget.profile?.configContent;
 
+    if (_isEditMode) {
+      _initFromStored(stored);
+    } else {
+      _initFromStored(stored);
+      _loadLocalConfigForNewProfile();
+    }
+  }
+
+  void _initFromStored(String? stored) {
     if (_isClaude) {
       if (stored != null && stored.trim().isNotEmpty) {
         try {
@@ -227,6 +238,66 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       _codexConfigLoaded = true;
       _configPreviewFuture = Future.value(_codexExistingConfigContent);
     }
+  }
+
+  /// 新增模式：读取本地配置文件，合并到 baseConfig 并回填表单
+  Future<void> _loadLocalConfigForNewProfile() async {
+    try {
+      if (_isClaude) {
+        final fileContent = await ProviderSwitchService.readClaudeConfigFile();
+        if (fileContent.trim().isEmpty || fileContent.trim() == '{}') return;
+        final localData = jsonDecode(fileContent) as Map<String, dynamic>;
+        if (!mounted) return;
+        setState(() {
+          _claudeBaseConfig = localData;
+          _configPreviewFuture = Future.value(
+            const JsonEncoder.withIndent('  ').convert(_claudeBaseConfig),
+          );
+        });
+        _backfillClaudeForm(localData);
+      } else if (_isGemini) {
+        final fileContent = await ProviderSwitchService.readGeminiEnvFile();
+        if (fileContent.trim().isEmpty) return;
+        if (!mounted) return;
+        setState(() {
+          _geminiExistingEnvContent = fileContent;
+          _configPreviewFuture = Future.value(fileContent);
+        });
+        // 不回填表单：API Key、Base URL、Model 都是供应商特有字段
+      } else {
+        final fileContent = await ProviderSwitchService.readCodexConfigFile();
+        if (fileContent.trim().isEmpty) return;
+        if (!mounted) return;
+        setState(() {
+          _codexExistingConfigContent = fileContent;
+          _configPreviewFuture = Future.value(fileContent);
+        });
+        _backfillCodexForm(fileContent);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _initialSnapshot = _takeSnapshot();
+      });
+    } catch (_) {}
+  }
+
+  /// 回填 Claude 本地配置中的表单字段
+  void _backfillClaudeForm(Map<String, dynamic> data) {
+    final env = (data['env'] as Map<String, dynamic>?) ?? {};
+    final maxOut = env['CLAUDE_CODE_MAX__OUTPUT_TOKENS']?.toString() ?? '';
+    if (maxOut.isNotEmpty && _maxOutputTokensController.text.isEmpty) {
+      _maxOutputTokensController.text = maxOut;
+    }
+    final maxThink = env['MAX_THINKING_TOKENS']?.toString() ?? '';
+    if (maxThink.isNotEmpty && _maxThinkingTokensController.text.isEmpty) {
+      _maxThinkingTokensController.text = maxThink;
+    }
+  }
+
+  /// 回填 Codex 本地配置中的表单字段（仅通用配置，不回填供应商特有字段）
+  void _backfillCodexForm(String toml) {
+    // 不调用 _syncFromCodexToml，因为它会回填 model、base_url 等供应商特有字段
+    // 新增模式只需要保留本地 TOML 的完整内容到 _codexExistingConfigContent
+    // 表单字段由用户或预设填写，不从本地配置继承
   }
 
   Future<void> _checkConfigConflict() async {

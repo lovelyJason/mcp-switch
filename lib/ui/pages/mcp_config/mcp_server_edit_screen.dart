@@ -92,7 +92,9 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
 
   void _onJsonFocusChanged() {
     // 失焦时保存草稿（仅新建模式）
-    if (!_jsonFocusNode.hasFocus && widget.profile == null && widget.initialData == null) {
+    if (!_jsonFocusNode.hasFocus &&
+        widget.profile == null &&
+        widget.initialData == null) {
       _saveDraft();
     }
   }
@@ -175,7 +177,9 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
 
     // 根据配置内容判断连接类型
     final configType = config['type']?.toString() ?? '';
-    if (configType == 'http') {
+    if (configType == 'http' ||
+        (_currentEditorType == EditorType.codex &&
+            config['url']?.toString().isNotEmpty == true)) {
       _selectedConnectionType = 'http';
     } else if (configType == 'sse') {
       _selectedConnectionType = 'sse';
@@ -189,7 +193,10 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
       }
     }
 
-    _jsonController.text = const JsonEncoder.withIndent('  ').convert(config);
+    _jsonController.text = _formatConfigTextForEditor(
+      _nameController.text.isEmpty ? 'server' : _nameController.text,
+      Map<String, dynamic>.from(config),
+    );
   }
 
   void _initFromProfile() {
@@ -207,7 +214,9 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
 
     // 根据配置内容判断连接类型
     final configType = serverConfig['type']?.toString() ?? '';
-    if (configType == 'http') {
+    if (configType == 'http' ||
+        (_currentEditorType == EditorType.codex &&
+            serverConfig['url']?.toString().isNotEmpty == true)) {
       _selectedConnectionType = 'http';
     } else if (configType == 'sse') {
       _selectedConnectionType = 'sse';
@@ -221,8 +230,10 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
       }
     }
 
-    _jsonController.text =
-        const JsonEncoder.withIndent('  ').convert(serverConfig);
+    _jsonController.text = _formatConfigTextForEditor(
+      widget.profile!.name,
+      Map<String, dynamic>.from(serverConfig),
+    );
   }
 
   @override
@@ -258,7 +269,8 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
     try {
       // 如果是 http/sse 模式，不要从 command/args 输入框同步
       // 因为 http/sse 模式不需要这些字段
-      if (_selectedConnectionType == 'http' || _selectedConnectionType == 'sse') {
+      if (_selectedConnectionType == 'http' ||
+          _selectedConnectionType == 'sse') {
         _isUpdating = false;
         return;
       }
@@ -280,9 +292,13 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
       }
 
       if (_currentEditorType == EditorType.codex) {
-        final pName =
-            _nameController.text.isEmpty ? 'server' : _nameController.text;
-        _jsonController.text = McpPresetUtils.generateLocalToml(pName, currentConfig);
+        final pName = _nameController.text.isEmpty
+            ? 'server'
+            : _nameController.text;
+        _jsonController.text = McpPresetUtils.generateLocalToml(
+          pName,
+          currentConfig,
+        );
       } else {
         try {
           if (_jsonController.text.isNotEmpty) {
@@ -295,8 +311,9 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
           }
         } catch (_) {}
 
-        _jsonController.text =
-            const JsonEncoder.withIndent('  ').convert(currentConfig);
+        _jsonController.text = const JsonEncoder.withIndent(
+          '  ',
+        ).convert(currentConfig);
       }
     } catch (e) {
       print('Sync Error: $e');
@@ -341,16 +358,21 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
 
       if (_currentEditorType == EditorType.codex) {
         final data = McpPresetUtils.parseToml(text);
-        final pName =
-            _nameController.text.isEmpty ? 'server' : _nameController.text;
-        _jsonController.text = McpPresetUtils.generateLocalToml(pName, data);
+        final pName = _nameController.text.isEmpty
+            ? 'server'
+            : _nameController.text;
+        _jsonController.text = McpPresetUtils.generateCodexToml(pName, data);
       } else {
         final dynamic json = jsonDecode(text);
         final prettyString = const JsonEncoder.withIndent('  ').convert(json);
         _jsonController.text = prettyString;
       }
     } catch (e) {
-      Toast.show(context, message: S.get('format_error'), type: ToastType.error);
+      Toast.show(
+        context,
+        message: S.get('format_error'),
+        type: ToastType.error,
+      );
     }
   }
 
@@ -402,7 +424,9 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
   }
 
   void _applyConnectionTypeConfig(
-      McpPreset preset, McpConnectionType connectionConfig) {
+    McpPreset preset,
+    McpConnectionType connectionConfig,
+  ) {
     // 清空 JSON
     _jsonController.clear();
 
@@ -441,18 +465,25 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
   }
 
   void _generateRemoteConfig(
-      McpPreset preset, McpConnectionType connectionConfig) {
+    McpPreset preset,
+    McpConnectionType connectionConfig,
+  ) {
     final fieldValues = <String, String>{};
     for (final field in preset.formFields) {
       fieldValues[field.id] = _getFieldController(field.id).text.trim();
     }
 
-    final pName = _nameController.text.isEmpty ? 'server' : _nameController.text;
+    final pName = _nameController.text.isEmpty
+        ? 'server'
+        : _nameController.text;
 
     // Codex 使用 TOML 格式
     if (_currentEditorType == EditorType.codex) {
       _jsonController.text = McpPresetUtils.generateRemoteToml(
-        pName, connectionConfig, fieldValues);
+        pName,
+        connectionConfig,
+        fieldValues,
+      );
       return;
     }
 
@@ -481,7 +512,9 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
           (c) => c.type == _selectedConnectionType,
           orElse: () => preset.connectionTypes.first,
         );
-        if (connectionConfig.extraArgs.any((arg) => arg.contains('{{${field.id}}}'))) {
+        if (connectionConfig.extraArgs.any(
+          (arg) => arg.contains('{{${field.id}}}'),
+        )) {
           // extra_args 使用了此字段，重新应用配置
           _applyConnectionTypeConfig(preset, connectionConfig);
         }
@@ -668,7 +701,8 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
               editorType: _currentEditorType,
               isEditMode: isEditMode,
               claudeSaveMode: _claudeSaveMode,
-              onSaveModeChanged: (mode) => setState(() => _claudeSaveMode = mode),
+              onSaveModeChanged: (mode) =>
+                  setState(() => _claudeSaveMode = mode),
               onImport: _importPresets,
               onExport: _exportPresets,
               onBack: () {
@@ -754,7 +788,9 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
                 'Smithery',
                 style: TextStyle(
                   fontSize: 12,
-                  color: isDark ? Colors.deepPurple.shade300 : Colors.deepPurple,
+                  color: isDark
+                      ? Colors.deepPurple.shade300
+                      : Colors.deepPurple,
                 ),
               ),
               style: TextButton.styleFrom(
@@ -770,11 +806,13 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
           spacing: 0,
           runSpacing: 10,
           children: presets
-              .map((preset) => PresetChip(
-                    preset: preset,
-                    isSelected: _selectedPresetId == preset.id,
-                    onTap: () => _onPresetSelected(preset),
-                  ))
+              .map(
+                (preset) => PresetChip(
+                  preset: preset,
+                  isSelected: _selectedPresetId == preset.id,
+                  onTap: () => _onPresetSelected(preset),
+                ),
+              )
               .toList(),
         ),
       ],
@@ -787,11 +825,17 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
       children: [
         SectionTitle(S.get('basic_info')),
         const SizedBox(height: 12),
-        FieldLabel(label: S.get('mcp_name'), subLabel: S.get('name'), required: true),
+        FieldLabel(
+          label: S.get('mcp_name'),
+          subLabel: S.get('name'),
+          required: true,
+        ),
         TextFormField(
           controller: _nameController,
           decoration: _inputDecoration(
-            widget.isPathReadOnly ? S.get('not_editable') : S.get('mcp_name_hint'),
+            widget.isPathReadOnly
+                ? S.get('not_editable')
+                : S.get('mcp_name_hint'),
           ),
           readOnly: widget.isPathReadOnly,
           enabled: !widget.isPathReadOnly,
@@ -832,27 +876,31 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
           const SizedBox(height: 8),
           Row(
             children: ['local', 'http', 'sse']
-                .map((type) => Padding(
-                      padding: const EdgeInsets.only(right: 16),
-                      child: InkWell(
-                        onTap: () => _onCustomConnectionTypeChanged(type),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Radio<String>(
-                              value: type,
-                              groupValue: _selectedConnectionType,
-                              onChanged: (v) => _onCustomConnectionTypeChanged(v ?? 'local'),
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(connectionDefs[type]?.displayLabel ?? type),
-                          ],
-                        ),
+                .map(
+                  (type) => Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: InkWell(
+                      onTap: () => _onCustomConnectionTypeChanged(type),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Radio<String>(
+                            value: type,
+                            groupValue: _selectedConnectionType,
+                            onChanged: (v) =>
+                                _onCustomConnectionTypeChanged(v ?? 'local'),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(connectionDefs[type]?.displayLabel ?? type),
+                        ],
                       ),
-                    ))
+                    ),
+                  ),
+                )
                 .toList(),
           ),
         ],
@@ -872,12 +920,14 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
         const SizedBox(height: 8),
         Row(
           children: preset.connectionTypes
-              .map((connType) => ConnectionTypeRadio(
-                    connType: connType,
-                    groupValue: _selectedConnectionType,
-                    def: connectionDefs[connType.type],
-                    onChanged: (type) => _onConnectionTypeChanged(preset, type),
-                  ))
+              .map(
+                (connType) => ConnectionTypeRadio(
+                  connType: connType,
+                  groupValue: _selectedConnectionType,
+                  def: connectionDefs[connType.type],
+                  onChanged: (type) => _onConnectionTypeChanged(preset, type),
+                ),
+              )
               .toList(),
         ),
       ],
@@ -907,9 +957,22 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
           // Claude Code 需要 type 字段
           config = {'type': type, 'url': ''};
         }
-        _jsonController.text = const JsonEncoder.withIndent('  ').convert(config);
+        final name = _nameController.text.isEmpty
+            ? 'server'
+            : _nameController.text;
+        _jsonController.text = _formatConfigTextForEditor(
+          name,
+          Map<String, dynamic>.from(config),
+        );
       }
     });
+  }
+
+  String _formatConfigTextForEditor(String name, Map<String, dynamic> config) {
+    if (_currentEditorType == EditorType.codex) {
+      return McpPresetUtils.generateCodexToml(name, config);
+    }
+    return const JsonEncoder.withIndent('  ').convert(config);
   }
 
   Widget _buildDynamicFieldsSection() {
@@ -926,34 +989,38 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 文本字段
-        ...textFields.map((field) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 12),
-            FieldLabel(
-              label: field.displayLabel,
-              subLabel: field.displaySubLabel,
-              required: field.required,
-            ),
-            TextFormField(
-              controller: _getFieldController(field.id),
-              decoration: _inputDecoration(field.placeholder ?? ''),
-              onChanged: (_) => _onDynamicFieldChanged(preset, field),
-              validator: field.required
-                  ? (v) => v?.isEmpty == true
-                      ? '${field.displayLabel} ${S.get('is_required')}'
-                      : null
-                  : null,
-            ),
-          ],
-        )),
+        ...textFields.map(
+          (field) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 12),
+              FieldLabel(
+                label: field.displayLabel,
+                subLabel: field.displaySubLabel,
+                required: field.required,
+              ),
+              TextFormField(
+                controller: _getFieldController(field.id),
+                decoration: _inputDecoration(field.placeholder ?? ''),
+                onChanged: (_) => _onDynamicFieldChanged(preset, field),
+                validator: field.required
+                    ? (v) => v?.isEmpty == true
+                          ? '${field.displayLabel} ${S.get('is_required')}'
+                          : null
+                    : null,
+              ),
+            ],
+          ),
+        ),
         // 布尔字段（紧凑横向排列）
         if (boolFields.isNotEmpty) ...[
           const SizedBox(height: 16),
           Wrap(
             spacing: 16,
             runSpacing: 8,
-            children: boolFields.map((field) => _buildBooleanChip(field, preset)).toList(),
+            children: boolFields
+                .map((field) => _buildBooleanChip(field, preset))
+                .toList(),
           ),
         ],
       ],
@@ -1089,12 +1156,17 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
               icon: const Icon(Icons.auto_fix_high, size: 16),
               label: Text(
                 S.get('format'),
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
               ),
               style: TextButton.styleFrom(
                 foregroundColor: Colors.black54,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -1193,14 +1265,26 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
         }
       }
 
-      if (widget.onSave != null) {
-        widget.onSave!(name, serverConfig);
-        _clearDraft(); // 保存成功，清除草稿
-        Navigator.of(context).pop();
+      final configService = Provider.of<ConfigService>(context, listen: false);
+      final originalName =
+          widget.profile?.name ?? widget.initialData?['name'] as String?;
+      if (_checkNameDuplicate(name, configService, excludeName: originalName)) {
+        if (mounted) {
+          Toast.show(
+            context,
+            message: S.get('mcp_name_duplicate'),
+            type: ToastType.error,
+          );
+        }
         return;
       }
 
-      final configService = Provider.of<ConfigService>(context, listen: false);
+      if (widget.onSave != null) {
+        widget.onSave!(name, serverConfig);
+        _clearDraft();
+        Navigator.of(context).pop();
+        return;
+      }
 
       if (_currentEditorType == EditorType.claude && widget.profile == null) {
         if (_claudeSaveMode == 'cli') {
@@ -1290,13 +1374,34 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
     }
   }
 
+  /// 检查 MCP 名称是否与已有配置重复
+  /// [excludeName] 编辑模式下排除原名（改名时原名不算重复）
+  bool _checkNameDuplicate(
+    String name,
+    ConfigService configService, {
+    String? excludeName,
+  }) {
+    if (excludeName != null && name == excludeName) return false;
+    final profiles = configService.getProfiles(_currentEditorType);
+    for (final p in profiles) {
+      final mcpServers = p.content['mcpServers'];
+      if (mcpServers is Map && mcpServers.containsKey(name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /// 校验名称是否符合 CLI 要求（只能包含字母、数字、连字符、下划线）
   bool _isValidCliName(String name) {
     return RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(name);
   }
 
   /// CLI 模式：先弹 OAuth 弹窗，再执行 CLI 命令（避免终端面板遮挡弹窗）
-  Future<void> _showOAuthDialogForCli(String name, Map<String, dynamic> serverConfig) async {
+  Future<void> _showOAuthDialogForCli(
+    String name,
+    Map<String, dynamic> serverConfig,
+  ) async {
     final terminalService = context.read<TerminalService>();
     final configService = context.read<ConfigService>();
     final navigator = Navigator.of(context);
@@ -1445,7 +1550,6 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
     await Future.delayed(const Duration(milliseconds: 500));
     terminalService.sendCommand(cliCommand);
   }
-
 }
 
 extension StringExtension on String {

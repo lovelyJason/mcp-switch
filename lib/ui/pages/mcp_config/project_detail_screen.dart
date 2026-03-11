@@ -82,7 +82,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         builder: (_) => McpServerEditScreen(
           editorType: widget.editorType,
           initialData: {'name': name, 'config': config},
-          isPathReadOnly: true, // Server name is the key, usually editable but let's allow rename?
+          isPathReadOnly: false,
           // If we allow rename, we must remove old key and add new key.
           // McpServerEditScreen passes 'name' and 'config'.
           onSave: (newName, newConfig) {

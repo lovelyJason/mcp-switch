@@ -171,7 +171,7 @@ class _ProjectCardState extends State<ProjectCard>
         builder: (_) => McpServerEditScreen(
           editorType: EditorType.claude,
           initialData: {'name': name, 'config': config},
-          isPathReadOnly: true, // Allow changing config but maybe keep name fixed or handle rename logic
+          isPathReadOnly: false,
           onSave: (newName, newConfig) {
              // If name changed, we need to remove old and add new
              if (newName != name) {

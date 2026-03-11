@@ -8,6 +8,7 @@ class ProfileCard extends StatefulWidget {
   final VoidCallback onSelect;
   final VoidCallback onDelete;
   final VoidCallback onEdit;
+  final void Function(String name)? onLogin;
 
   const ProfileCard({
     super.key,
@@ -16,6 +17,7 @@ class ProfileCard extends StatefulWidget {
     required this.onSelect,
     required this.onDelete,
     required this.onEdit,
+    this.onLogin,
   });
 
   @override
@@ -164,6 +166,55 @@ class _ProfileCardState extends State<ProfileCard> {
                             );
                           },
                         ),
+                        // Auth 状态标识
+                        Builder(builder: (context) {
+                          final mcpServers = widget.profile.content['mcpServers'];
+                          final server = (mcpServers is Map)
+                              ? mcpServers[widget.profile.name]
+                              : null;
+                          final auth = (server is Map) ? server['auth'] as String? : null;
+                          if (auth == null || auth.isEmpty || auth == 'Unsupported') {
+                            return const SizedBox.shrink();
+                          }
+                          final needsLogin = auth == 'Not logged in';
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: needsLogin
+                                      ? Colors.orange.withOpacity(0.12)
+                                      : Colors.green.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  needsLogin ? 'Need Auth' : auth,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: needsLogin ? Colors.orange : Colors.green,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              if (needsLogin && widget.onLogin != null) ...[
+                                const SizedBox(width: 4),
+                                MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: GestureDetector(
+                                    onTap: () => widget.onLogin!(widget.profile.name),
+                                    child: const Icon(
+                                      Icons.login,
+                                      size: 14,
+                                      color: Colors.orange,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          );
+                        }),
                         if (widget.isActive) ...[
                           const SizedBox(width: 8),
                           Container(
@@ -173,7 +224,7 @@ class _ProfileCardState extends State<ProfileCard> {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: const Text(
-                              '当前使用', // Changed to blue to distinguish
+                              '当前使用',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: Colors.blue,

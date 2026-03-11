@@ -63,8 +63,10 @@ class UpdateService extends ChangeNotifier {
     return http.Client();
   }
 
-  /// 初始化服务：每次启动都检测一次
+  /// 初始化服务：每次启动都检测一次（仅 Release 模式）
   Future<void> init() async {
+    if (kDebugMode) return;
+
     final prefs = await SharedPreferences.getInstance();
     final autoCheck = prefs.getBool(_autoCheckKey) ?? true;
 
@@ -89,7 +91,10 @@ class UpdateService extends ChangeNotifier {
     try {
       client = _createClient();
       final response = await client
-          .get(Uri.parse(_repoUrl))
+          .get(Uri.parse(_repoUrl), headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'MCP-Switch-App',
+          })
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) {
@@ -194,7 +199,8 @@ class UpdateService extends ChangeNotifier {
     http.Client? client;
     try {
       client = _createClient();
-      final request = http.Request('GET', Uri.parse(zipUrl));
+      final request = http.Request('GET', Uri.parse(zipUrl))
+        ..headers['User-Agent'] = 'MCP-Switch-App';
       final streamedResponse = await client.send(request).timeout(
         const Duration(seconds: 120),
       );

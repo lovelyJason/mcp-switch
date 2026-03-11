@@ -13,7 +13,9 @@ import '../../components/project_card.dart';
 import '../../components/plugin_mcp_card.dart';
 import '../../components/gemini_extension_mcp_card.dart';
 import '../../components/custom_dialog.dart';
+import '../../components/custom_toast.dart';
 import '../../../l10n/s.dart';
+import '../../../services/terminal_service.dart';
 import 'mcp_server_edit_screen.dart';
 
 class ConfigListScreen extends StatefulWidget {
@@ -289,8 +291,16 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
               return ProfileCard(
                 profile: profile,
                 isActive: isActive,
-                onSelect: () =>
-                    configService.toggleServerStatus(widget.editorType, profile.id),
+                onSelect: () async {
+                  await configService.toggleServerStatus(widget.editorType, profile.id);
+                  if (widget.editorType == EditorType.codex && mounted) {
+                    Toast.show(
+                      context,
+                      message: S.get('codex_restart_hint'),
+                      type: ToastType.info,
+                    );
+                  }
+                },
                 onDelete: () => _confirmDelete(context, configService, profile),
                 onEdit: () {
                   Navigator.of(context).push(
@@ -302,6 +312,9 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                     ),
                   );
                 },
+                onLogin: widget.editorType == EditorType.codex
+                    ? (name) => _openCodexMcpLogin(name)
+                    : null,
               );
             },
           ),
@@ -576,5 +589,14 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
         service.deleteProfile(widget.editorType, profile.id);
       },
     );
+  }
+
+  void _openCodexMcpLogin(String mcpName) {
+    final terminalService = Provider.of<TerminalService>(context, listen: false);
+    terminalService.setFloatingTerminal(true);
+    terminalService.openTerminalPanel();
+    Future.delayed(const Duration(milliseconds: 500), () {
+      terminalService.sendCommand('codex mcp login $mcpName');
+    });
   }
 }

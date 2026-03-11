@@ -53,10 +53,7 @@ class McpPresetUtils {
   ) {
     final headers = interpolateHeaders(connectionConfig.headers, fieldValues);
 
-    return {
-      'serverUrl': connectionConfig.url ?? '',
-      'headers': headers,
-    };
+    return {'serverUrl': connectionConfig.url ?? '', 'headers': headers};
   }
 
   /// 生成 Codex 远程配置
@@ -65,10 +62,7 @@ class McpPresetUtils {
     Map<String, String> fieldValues,
   ) {
     final headers = interpolateHeaders(connectionConfig.headers, fieldValues);
-    return {
-      'url': connectionConfig.url ?? '',
-      'http_headers': headers,
-    };
+    return {'url': connectionConfig.url ?? '', 'http_headers': headers};
   }
 
   /// 生成远程 TOML 配置
@@ -78,23 +72,29 @@ class McpPresetUtils {
     Map<String, String> fieldValues,
   ) {
     final headers = interpolateHeaders(connectionConfig.headers, fieldValues);
-    final headersStr = headers.entries
-        .map((e) => '"${e.key}" = "${e.value}"')
-        .join(', ');
+    final safeName = name.contains(RegExp(r'[^a-zA-Z0-9_\-]'))
+        ? '"$name"'
+        : name;
+    final buffer = StringBuffer()
+      ..writeln('[mcp_servers.$safeName]')
+      ..writeln('url = "${connectionConfig.url ?? ''}"');
 
-    final safeName =
-        name.contains(RegExp(r'[^a-zA-Z0-9_\-]')) ? '"$name"' : name;
+    if (headers.isNotEmpty) {
+      final headersStr = headers.entries
+          .map((e) => '"${e.key}" = "${e.value}"')
+          .join(', ');
+      buffer.writeln('http_headers = { $headersStr }');
+    }
 
-    return '[mcp_servers.$safeName]\n'
-        'url = "${connectionConfig.url ?? ''}"\n'
-        'http_headers = { $headersStr }';
+    return buffer.toString().trimRight();
   }
 
   /// 生成本地 TOML 配置
   static String generateLocalToml(String name, Map<String, dynamic> config) {
     final buffer = StringBuffer();
-    final safeName =
-        name.contains(RegExp(r'[^a-zA-Z0-9_\-]')) ? '"$name"' : name;
+    final safeName = name.contains(RegExp(r'[^a-zA-Z0-9_\-]'))
+        ? '"$name"'
+        : name;
     buffer.writeln('[mcp_servers.$safeName]');
 
     final command = config['command']?.toString() ?? '';
@@ -119,6 +119,30 @@ class McpPresetUtils {
     }
 
     return buffer.toString();
+  }
+
+  /// 根据 Codex 配置内容生成对应 TOML（本地或远程）
+  static String generateCodexToml(String name, Map<String, dynamic> config) {
+    final safeName = name.contains(RegExp(r'[^a-zA-Z0-9_\-]'))
+        ? '"$name"'
+        : name;
+    final buffer = StringBuffer()..writeln('[mcp_servers.$safeName]');
+
+    final url = config['url']?.toString() ?? '';
+    if (url.isNotEmpty) {
+      buffer.writeln('url = "$url"');
+
+      final headers = config['http_headers'];
+      if (headers is Map && headers.isNotEmpty) {
+        final headersStr = headers.entries
+            .map((e) => '"${e.key}" = "${e.value}"')
+            .join(', ');
+        buffer.writeln('http_headers = { $headersStr }');
+      }
+      return buffer.toString().trimRight();
+    }
+
+    return generateLocalToml(name, config).trimRight();
   }
 
   /// 解析 TOML 为 Map
@@ -169,12 +193,26 @@ class McpPresetUtils {
                 .toList();
             result['args'] = args;
           }
+        } else if (key == 'http_headers') {
+          final headersMatch = RegExp(r'\{(.*)\}').firstMatch(value);
+          if (headersMatch != null) {
+            result['http_headers'] = _parseInlineTable(headersMatch.group(1)!);
+          }
         } else {
           result[key] = value;
         }
       }
     }
 
+    return result;
+  }
+
+  static Map<String, String> _parseInlineTable(String raw) {
+    final result = <String, String>{};
+    final pairRegex = RegExp(r'"([^"]+)"\s*=\s*"([^"]*)"');
+    for (final match in pairRegex.allMatches(raw)) {
+      result[match.group(1)!] = match.group(2)!;
+    }
     return result;
   }
 

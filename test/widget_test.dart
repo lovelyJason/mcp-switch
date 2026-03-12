@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:mcp_switch/services/config_service.dart';
+import 'package:mcp_switch/services/config/config_service.dart';
 
 import 'package:mcp_switch/main.dart';
 import 'package:mcp_switch/ui/components/editor_selector.dart';

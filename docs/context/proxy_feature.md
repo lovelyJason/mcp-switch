@@ -179,7 +179,7 @@ class MyService {
 
 | 文件 | 变更类型 |
 |------|----------|
-| `lib/services/config_service.dart` | 修改 — 新增 proxy 配置项 |
+| `lib/services/config/config_service.dart` | 修改 — 新增 proxy 配置项 |
 | `lib/services/proxy_service.dart` | **新建** — 代理 Client 创建 + 扫描 + 测试 |
 | `lib/ui/pages/settings/widgets/proxy_settings_section.dart` | **新建** — 代理设置 UI 组件 |
 | `lib/ui/pages/settings/settings_screen.dart` | 修改 — Advanced Tab 引入代理组件 |

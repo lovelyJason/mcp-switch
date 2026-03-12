@@ -4,7 +4,7 @@ import 'package:xterm/xterm.dart';
 import '../../l10n/s.dart';
 import '../../services/terminal_service.dart';
 import '../../services/prompt_service.dart';
-import '../../services/config_service.dart';
+import '../../services/config/config_service.dart';
 
 class ClaudeTerminal extends StatefulWidget {
   final VoidCallback onClose;

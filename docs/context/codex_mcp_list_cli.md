@@ -58,7 +58,8 @@ reloadProfiles()
 
 | 文件 | 改动 |
 |------|------|
-| `lib/services/config_service.dart` | 新增 `_enrichCodexAuthStatus()`、`_parseCodexMcpListAuth()`、`_detectColumnStarts()`、`_splitByColumns()` |
+| `lib/services/config/config_service.dart` | `_enrichCodexAuthStatus()` — CLI 调用 + auth 合并到 profiles |
+| `lib/services/config/codex_config_helper.dart` | `parseAuthFromCli()`、`detectColumnStarts()`、`splitByColumns()` — 纯函数解析 |
 | `lib/ui/components/profile_card.dart` | 新增 `onLogin` 回调参数，显示 Auth 状态标签和登录图标 |
 | `lib/ui/pages/mcp_config/config_list_screen.dart` | Codex ProfileCard 传入 `onLogin`，新增 `_openCodexMcpLogin()` |
 
@@ -88,6 +89,10 @@ void _openCodexMcpLogin(String mcpName) {
   });
 }
 ```
+
+## 相关文档
+
+- `docs/context/codex_mcp_tools_query.md`：Codex MCP tools 查询设计，说明为什么 tools 需要走 `codex app-server` + `mcpServerStatus/list`
 
 ## 注意事项
 

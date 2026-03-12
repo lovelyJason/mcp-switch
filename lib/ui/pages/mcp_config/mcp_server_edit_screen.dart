@@ -9,7 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../../../config/mcp_presets_config.dart';
 import '../../../models/editor_type.dart';
 import '../../../models/mcp_profile.dart';
-import '../../../services/config_service.dart';
+import '../../../services/config/config_service.dart';
 import '../../../services/terminal_service.dart';
 import '../../../l10n/s.dart';
 import '../../../services/mcp_oauth_automation_service.dart';

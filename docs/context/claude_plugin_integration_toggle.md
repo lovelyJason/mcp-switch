@@ -65,7 +65,7 @@
 ## 实现文件清单
 
 - `lib/services/claude_plugin_integration_service.dart`
-- `lib/services/config_service.dart`
+- `lib/services/config/config_service.dart`
 - `lib/services/provider_switch_service.dart`
 - `lib/ui/pages/settings/settings_screen.dart`
 - `lib/l10n/locales/zh.json`

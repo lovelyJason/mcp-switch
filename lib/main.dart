@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
-import 'services/config_service.dart';
+import 'services/config/config_service.dart';
 import 'services/prompt_service.dart';
 import 'services/terminal_service.dart';
 import 'services/ai_chat_service.dart';

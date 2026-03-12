@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
-import 'config_service.dart';
+import 'config/config_service.dart';
 import 'proxy_service.dart';
 
 /// 更新信息模型

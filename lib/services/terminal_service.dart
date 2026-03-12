@@ -7,7 +7,7 @@ import 'package:flutter_pty/flutter_pty.dart';
 import 'package:image/image.dart' as img;
 import '../utils/platform_utils.dart';
 import '../ui/components/windows_shell_selector_dialog.dart' show WindowsShellType;
-import 'config_service.dart';
+import 'config/config_service.dart';
 
 /// PTY 输出回调
 typedef TerminalOutputCallback = void Function(String data);

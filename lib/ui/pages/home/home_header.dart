@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../models/editor_type.dart';
-import '../../../services/config_service.dart';
+import '../../../services/config/config_service.dart';
 import '../../../services/terminal_service.dart';
 import '../../../l10n/s.dart';
 import '../../components/editor_selector.dart';

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../models/editor_type.dart';
-import '../../../services/config_service.dart';
+import '../../../services/config/config_service.dart';
 import '../../../utils/platform_utils.dart';
 import '../../components/claude_not_installed_banner.dart';
 import '../../components/claude_path_not_configured_banner.dart';

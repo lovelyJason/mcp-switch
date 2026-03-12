@@ -12,7 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../l10n/s.dart';
 import '../../../models/permission_request.dart';
-import '../../../services/config_service.dart';
+import '../../../services/config/config_service.dart';
 import '../../../services/remote_claw_service.dart';
 import '../../components/custom_toast.dart';
 import '../../components/custom_dialog.dart';

@@ -109,7 +109,7 @@ MCP Switch 使用 **SharedPreferences** 作为本地数据持久化方案，存�
 
 | 文件 | 说明 |
 |------|------|
-| `lib/services/config_service.dart` | 数据层核心，所有 CRUD 操作 |
+| `lib/services/config/config_service.dart` | 数据层核心，所有 CRUD 操作 |
 | `lib/models/mcp_profile.dart` | McpProfile 数据模型 |
 | `lib/models/editor_type.dart` | EditorType 枚举 |
 

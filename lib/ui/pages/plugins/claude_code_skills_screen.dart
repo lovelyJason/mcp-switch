@@ -14,7 +14,7 @@ import '../../../services/terminal_service.dart';
 import '../../../services/skills_service.dart';
 import '../../../services/skills_archive_service.dart';
 import '../../../services/translation_service.dart';
-import '../../../services/config_service.dart';
+import '../../../services/config/config_service.dart';
 import '../../../utils/platform_utils.dart';
 import '../../../models/skills/preset_marketplace.dart';
 import '../../../models/skills/installed_plugin.dart';

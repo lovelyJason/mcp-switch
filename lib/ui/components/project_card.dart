@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import '../../models/mcp_profile.dart';
 import '../../models/mcp_server_health.dart';
 import '../../models/editor_type.dart';
-import '../../services/config_service.dart';
+import '../../services/config/config_service.dart';
 import '../../services/mcp_health_check_service.dart';
 import '../../utils/platform_utils.dart';
 import '../../services/terminal_service.dart';

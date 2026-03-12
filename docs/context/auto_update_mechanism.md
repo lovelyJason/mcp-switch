@@ -323,7 +323,7 @@ Debug 工具箱新增 "Update Progress UI Demo" 按钮，点击后弹出 demo �
 |------|------|
 | `lib/services/update_service.dart` | 更新检测核心服务（UpdateService + UpdateInfo + UpdatePhase） |
 | `lib/services/proxy_service.dart` | 代理 HTTP Client 创建（更新时如配了代理自动走代理） |
-| `lib/services/config_service.dart` | 代理配置存储（proxyUrl / proxyUsername / proxyPassword） |
+| `lib/services/config/config_service.dart` | 代理配置存储（proxyUrl / proxyUsername / proxyPassword） |
 | `lib/main.dart` | 服务初始化和 Provider 注册 |
 | `lib/ui/pages/settings/settings_screen.dart` | 手动检测按钮、更新对话框、更新进度遮罩 UI |
 | `lib/ui/components/update_progress_overlay.dart` | 更新进度遮罩 Demo 版本（调试工具箱用） |

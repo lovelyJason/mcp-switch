@@ -212,7 +212,7 @@ Future<void> _translateContent() async {
 ### 4. DeepL API Key 配置
 
 ```dart
-// lib/services/config_service.dart
+// lib/services/config/config_service.dart
 
 String? _deeplApiKey;
 String? get deeplApiKey => _deeplApiKey;

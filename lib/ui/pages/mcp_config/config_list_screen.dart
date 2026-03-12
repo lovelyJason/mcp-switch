@@ -1,9 +1,8 @@
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../models/editor_type.dart';
 import '../../../models/mcp_profile.dart';
-import '../../../services/config_service.dart';
+import '../../../services/config/config_service.dart';
 import '../../../services/plugin_mcp_service.dart';
 import '../../../services/gemini_extension_mcp_service.dart';
 import '../../../services/cursor_workspace_service.dart';
@@ -14,6 +13,8 @@ import '../../components/plugin_mcp_card.dart';
 import '../../components/gemini_extension_mcp_card.dart';
 import '../../components/custom_dialog.dart';
 import '../../components/custom_toast.dart';
+import '../../components/mcp_tools_section.dart';
+import '../../../services/mcp_tools_service.dart';
 import '../../../l10n/s.dart';
 import '../../../services/terminal_service.dart';
 import 'mcp_server_edit_screen.dart';
@@ -29,10 +30,13 @@ class ConfigListScreen extends StatefulWidget {
 
 class _ConfigListScreenState extends State<ConfigListScreen> {
   final PluginMcpService _pluginMcpService = PluginMcpService();
-  final GeminiExtensionMcpService _geminiExtensionMcpService = GeminiExtensionMcpService();
-  bool _projectSortDescending = true; // 默认倒序排列
+  final GeminiExtensionMcpService _geminiExtensionMcpService =
+      GeminiExtensionMcpService();
+  bool _projectSortDescending = true;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+
+  final Map<String, bool> _toolsExpanded = {};
 
   // Cursor workspace 列表
   List<CursorWorkspace>? _cursorWorkspaces;
@@ -43,7 +47,9 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
     super.initState();
     _loadEditorData(widget.editorType);
     _searchController.addListener(() {
-      setState(() => _searchQuery = _searchController.text.trim().toLowerCase());
+      setState(
+        () => _searchQuery = _searchController.text.trim().toLowerCase(),
+      );
     });
   }
 
@@ -64,6 +70,10 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
     }
     if (type == EditorType.cursor) {
       _loadCursorWorkspaces();
+    }
+    if (type == EditorType.codex) {
+      McpToolsService.clearCache();
+      _toolsExpanded.clear();
     }
   }
 
@@ -98,7 +108,11 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.inbox_outlined, size: 60, color: Colors.grey.shade300),
+                Icon(
+                  Icons.inbox_outlined,
+                  size: 60,
+                  color: Colors.grey.shade300,
+                ),
                 const SizedBox(height: 16),
                 Text(
                   '暂无配置',
@@ -184,8 +198,13 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                             ...() {
                               var filtered = _searchQuery.isEmpty
                                   ? projectProfiles
-                                  : projectProfiles.where((p) =>
-                                      p.name.toLowerCase().contains(_searchQuery)).toList();
+                                  : projectProfiles
+                                        .where(
+                                          (p) => p.name.toLowerCase().contains(
+                                            _searchQuery,
+                                          ),
+                                        )
+                                        .toList();
                               if (_projectSortDescending) {
                                 filtered = filtered.reversed.toList();
                               }
@@ -193,10 +212,17 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                                 (profile) => ProjectCard(
                                   key: ValueKey(profile.id),
                                   profile: profile,
-                                  onDelete: () =>
-                                      _confirmDelete(context, configService, profile),
-                                  globalMcpServers: globalProfile?.content['mcpServers'] is Map
-                                      ? Map<String, dynamic>.from(globalProfile!.content['mcpServers'])
+                                  onDelete: () => _confirmDelete(
+                                    context,
+                                    configService,
+                                    profile,
+                                  ),
+                                  globalMcpServers:
+                                      globalProfile?.content['mcpServers']
+                                          is Map
+                                      ? Map<String, dynamic>.from(
+                                          globalProfile!.content['mcpServers'],
+                                        )
                                       : null,
                                 ),
                               );
@@ -217,7 +243,9 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
             listenable: _geminiExtensionMcpService,
             builder: (context, child) {
               return ScrollConfiguration(
-                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                behavior: ScrollConfiguration.of(
+                  context,
+                ).copyWith(scrollbars: false),
                 child: ListView(
                   padding: const EdgeInsets.symmetric(vertical: 20),
                   children: [
@@ -231,25 +259,31 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                       ),
                     ],
                     if (profiles.isNotEmpty) ...[
-                      _buildSectionHeader('MCP Servers @ ~/.gemini/settings.json'),
-                      ...profiles.map((profile) => ProfileCard(
-                        profile: profile,
-                        isActive: profile.id == activeId,
-                        onSelect: () => configService.toggleServerStatus(
-                            widget.editorType, profile.id),
-                        onDelete: () =>
-                            _confirmDelete(context, configService, profile),
-                        onEdit: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => McpServerEditScreen(
-                                editorType: widget.editorType,
-                                profile: profile,
+                      _buildSectionHeader(
+                        'MCP Servers @ ~/.gemini/settings.json',
+                      ),
+                      ...profiles.map(
+                        (profile) => ProfileCard(
+                          profile: profile,
+                          isActive: profile.id == activeId,
+                          onSelect: () => configService.toggleServerStatus(
+                            widget.editorType,
+                            profile.id,
+                          ),
+                          onDelete: () =>
+                              _confirmDelete(context, configService, profile),
+                          onEdit: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => McpServerEditScreen(
+                                  editorType: widget.editorType,
+                                  profile: profile,
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                      )),
+                            );
+                          },
+                        ),
+                      ),
                     ],
                     if (_geminiExtensionMcpService.mcpServers.isEmpty &&
                         profiles.isEmpty)
@@ -258,13 +292,18 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const SizedBox(height: 80),
-                            Icon(Icons.inbox_outlined,
-                                size: 60, color: Colors.grey.shade300),
+                            Icon(
+                              Icons.inbox_outlined,
+                              size: 60,
+                              color: Colors.grey.shade300,
+                            ),
                             const SizedBox(height: 16),
                             Text(
                               '暂无配置',
                               style: TextStyle(
-                                  color: Colors.grey.shade500, fontSize: 14),
+                                color: Colors.grey.shade500,
+                                fontSize: 14,
+                              ),
                             ),
                           ],
                         ),
@@ -280,6 +319,10 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
           return _buildCursorView(profiles, activeId, configService);
         }
 
+        if (widget.editorType == EditorType.codex) {
+          return _buildCodexView(profiles, activeId, configService);
+        }
+
         return ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
           child: ListView.builder(
@@ -292,14 +335,10 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                 profile: profile,
                 isActive: isActive,
                 onSelect: () async {
-                  await configService.toggleServerStatus(widget.editorType, profile.id);
-                  if (widget.editorType == EditorType.codex && mounted) {
-                    Toast.show(
-                      context,
-                      message: S.get('codex_restart_hint'),
-                      type: ToastType.info,
-                    );
-                  }
+                  await configService.toggleServerStatus(
+                    widget.editorType,
+                    profile.id,
+                  );
                 },
                 onDelete: () => _confirmDelete(context, configService, profile),
                 onEdit: () {
@@ -312,14 +351,77 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                     ),
                   );
                 },
-                onLogin: widget.editorType == EditorType.codex
-                    ? (name) => _openCodexMcpLogin(name)
-                    : null,
               );
             },
           ),
         );
       },
+    );
+  }
+
+  Widget _buildCodexView(
+    List<McpProfile> profiles,
+    String? activeId,
+    ConfigService configService,
+  ) {
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        itemCount: profiles.length,
+        itemBuilder: (context, index) {
+          final profile = profiles[index];
+          final isActive = profile.id == activeId;
+          final isEnabled = _isMcpEnabled(profile);
+          final expanded = _toolsExpanded[profile.id] == true;
+          final showTools = isEnabled;
+
+          return ProfileCard(
+            profile: profile,
+            isActive: isActive,
+            onSelect: () async {
+              McpToolsService.clearCache();
+              setState(() => _toolsExpanded.clear());
+              await configService.toggleServerStatus(
+                EditorType.codex,
+                profile.id,
+              );
+              if (!mounted) return;
+              Toast.show(
+                this.context,
+                message: S.get('codex_restart_hint'),
+                type: ToastType.info,
+              );
+            },
+            onDelete: () => _confirmDelete(context, configService, profile),
+            onEdit: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => McpServerEditScreen(
+                    editorType: EditorType.codex,
+                    profile: profile,
+                  ),
+                ),
+              );
+              if (!mounted) return;
+              McpToolsService.clearCache();
+              setState(() => _toolsExpanded.clear());
+            },
+            onLogin: (name) => _openCodexMcpLogin(name),
+            descriptionTrailing: showTools
+                ? _buildToolsToggle(profile, expanded)
+                : null,
+            footer: (expanded && showTools)
+                ? McpToolsSection(
+                    key: ValueKey('tools_${profile.id}'),
+                    profile: profile,
+                    editorType: EditorType.codex,
+                    onToolsLoaded: () => setState(() {}),
+                  )
+                : null,
+          );
+        },
+      ),
     );
   }
 
@@ -335,7 +437,9 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
         _buildCursorDisabledTip(),
         Expanded(
           child: ScrollConfiguration(
-            behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+            behavior: ScrollConfiguration.of(
+              context,
+            ).copyWith(scrollbars: false),
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 20),
               children: [
@@ -346,12 +450,18 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                 ),
                 ...profiles.map((profile) {
                   final isActive = profile.id == activeId;
+                  final isEnabled = _isMcpEnabled(profile);
+                  final expanded = _toolsExpanded[profile.id] == true;
+                  final showTools = isEnabled;
                   return ProfileCard(
                     profile: profile,
                     isActive: isActive,
-                    onSelect: () =>
-                        configService.toggleServerStatus(widget.editorType, profile.id),
-                    onDelete: () => _confirmDelete(context, configService, profile),
+                    onSelect: () => configService.toggleServerStatus(
+                      widget.editorType,
+                      profile.id,
+                    ),
+                    onDelete: () =>
+                        _confirmDelete(context, configService, profile),
                     onEdit: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -362,6 +472,17 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                         ),
                       );
                     },
+                    descriptionTrailing: showTools
+                        ? _buildToolsToggle(profile, expanded)
+                        : null,
+                    footer: (expanded && showTools)
+                        ? McpToolsSection(
+                            key: ValueKey('tools_${profile.id}'),
+                            profile: profile,
+                            editorType: EditorType.cursor,
+                            onToolsLoaded: () => setState(() {}),
+                          )
+                        : null,
                   );
                 }),
 
@@ -373,17 +494,21 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                     S.get('cursor_workspace_section'),
                     tooltip: S.get('cursor_workspace_tooltip'),
                   ),
-                  ..._cursorWorkspaces!.map((ws) => CursorWorkspaceCard(
-                    key: ValueKey(ws.folderPath),
-                    workspace: ws,
-                    globalServerNames: serverNames,
-                  )),
+                  ..._cursorWorkspaces!.map(
+                    (ws) => CursorWorkspaceCard(
+                      key: ValueKey(ws.folderPath),
+                      workspace: ws,
+                      globalServerNames: serverNames,
+                    ),
+                  ),
                 ],
 
                 if (_loadingWorkspaces)
                   const Padding(
                     padding: EdgeInsets.all(24),
-                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                    child: Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   ),
               ],
             ),
@@ -413,9 +538,9 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
       margin: const EdgeInsets.fromLTRB(24, 16, 24, 0),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: tipColor.withOpacity(isDark ? 0.1 : 0.06),
+        color: tipColor.withValues(alpha: isDark ? 0.1 : 0.06),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: tipColor.withOpacity(0.3)),
+        border: Border.all(color: tipColor.withValues(alpha: 0.3)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -482,12 +607,20 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
               decoration: InputDecoration(
                 hintText: S.get('project_search_hint'),
                 hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                prefixIcon: Icon(Icons.search, size: 16, color: Colors.grey.shade400),
+                prefixIcon: Icon(
+                  Icons.search,
+                  size: 16,
+                  color: Colors.grey.shade400,
+                ),
                 prefixIconConstraints: const BoxConstraints(minWidth: 32),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? GestureDetector(
                         onTap: () => _searchController.clear(),
-                        child: Icon(Icons.close, size: 14, color: Colors.grey.shade500),
+                        child: Icon(
+                          Icons.close,
+                          size: 14,
+                          color: Colors.grey.shade500,
+                        ),
                       )
                     : null,
                 suffixIconConstraints: const BoxConstraints(minWidth: 28),
@@ -586,13 +719,68 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
       cancelText: S.get('cancel'),
       confirmColor: Colors.redAccent,
       onConfirm: () {
+        if (widget.editorType == EditorType.codex) {
+          McpToolsService.clearCache();
+          _toolsExpanded.remove(profile.id);
+        }
         service.deleteProfile(widget.editorType, profile.id);
       },
     );
   }
 
+  bool _isMcpEnabled(McpProfile profile) {
+    final servers = profile.content['mcpServers'];
+    if (servers is! Map) return true;
+    final cfg = servers[profile.name];
+    if (cfg is! Map) return true;
+    if (cfg.containsKey('disabled')) return cfg['disabled'] != true;
+    if (cfg.containsKey('enabled')) return cfg['enabled'] == true;
+    return true;
+  }
+
+  Widget _buildToolsToggle(McpProfile profile, bool expanded) {
+    final cached = McpToolsService.getCached(profile.name);
+    final isPlaceholder = cached != null &&
+        cached.length == 1 &&
+        (cached.first.name == McpTool.authRequired.name ||
+            cached.first.name == McpTool.httpUnreachable.name);
+    final count = isPlaceholder ? 0 : (cached?.length ?? 0);
+    final hasTools = count > 0;
+
+    final label = expanded
+        ? (hasTools ? '$count tools · 收起' : '收起')
+        : (hasTools ? '$count tools' : 'tools');
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _toolsExpanded[profile.id] =
+              !(_toolsExpanded[profile.id] == true);
+        });
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: Colors.orange.shade400),
+          ),
+          const SizedBox(width: 2),
+          Icon(
+            expanded ? Icons.expand_less : Icons.expand_more,
+            size: 14,
+            color: Colors.orange.shade400,
+          ),
+        ],
+      ),
+    );
+  }
+
   void _openCodexMcpLogin(String mcpName) {
-    final terminalService = Provider.of<TerminalService>(context, listen: false);
+    final terminalService = Provider.of<TerminalService>(
+      context,
+      listen: false,
+    );
     terminalService.setFloatingTerminal(true);
     terminalService.openTerminalPanel();
     Future.delayed(const Duration(milliseconds: 500), () {
@@ -604,13 +792,21 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
       if (!terminalService.isTerminalPanelOpen) {
         terminalService.removeListener(listener);
         if (mounted) {
-          final configService = Provider.of<ConfigService>(context, listen: false);
+          McpToolsService.clearCache();
+          final configService = Provider.of<ConfigService>(
+            context,
+            listen: false,
+          );
           configService.reloadProfiles().then((_) {
             configService.refreshCodexAuthStatus();
+            if (mounted) {
+              setState(() => _toolsExpanded.clear());
+            }
           });
         }
       }
     }
+
     terminalService.addListener(listener);
   }
 }

@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mcp_switch/models/editor_type.dart';
 import 'package:mcp_switch/models/mcp_profile.dart';
-import 'package:mcp_switch/services/config_service.dart';
+import 'package:mcp_switch/services/config/config_service.dart';
+import 'package:mcp_switch/services/logger_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -14,6 +15,7 @@ void main() {
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
+      await LoggerService.init();
       tempDir = await Directory.systemTemp.createTemp('mcp_switch_test_');
     });
 

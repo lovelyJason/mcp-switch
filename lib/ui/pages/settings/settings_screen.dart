@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../constants/version.dart';
 import '../../../models/editor_type.dart';
-import '../../../services/config_service.dart';
+import '../../../services/config/config_service.dart';
 import '../../../services/ai_chat_service.dart';
 import '../../../services/update_service.dart';
 import '../../../utils/platform_utils.dart';

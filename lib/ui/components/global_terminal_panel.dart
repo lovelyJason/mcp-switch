@@ -6,7 +6,7 @@ import 'package:xterm/xterm.dart';
 import '../../l10n/s.dart';
 import '../../services/terminal_service.dart';
 import '../../services/prompt_service.dart';
-import '../../services/config_service.dart';
+import '../../services/config/config_service.dart';
 import 'terminal_ai_input_dialog.dart';
 
 /// 全局终端面板 - 不依赖 Scaffold，可以在任何页面显示

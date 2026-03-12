@@ -9,6 +9,8 @@ enum ToastType {
 }
 
 class Toast {
+  static OverlayEntry? _currentEntry;
+
   static void show(
     BuildContext context, {
     required String message,
@@ -16,6 +18,11 @@ class Toast {
     Duration duration = const Duration(milliseconds: 2000),
     bool showIcon = true,
   }) {
+    // 移除上一个 toast，避免重叠
+    if (_currentEntry != null && _currentEntry!.mounted) {
+      _currentEntry!.remove();
+    }
+
     final overlayState = Overlay.of(context);
     final overlayEntry = OverlayEntry(
       builder: (context) => _ToastWidget(
@@ -26,12 +33,15 @@ class Toast {
       ),
     );
 
+    _currentEntry = overlayEntry;
     overlayState.insert(overlayEntry);
 
-    // Auto remove is handled by the widget itself to allow animation
     Future.delayed(duration + const Duration(milliseconds: 300), () {
       if (overlayEntry.mounted) {
         overlayEntry.remove();
+      }
+      if (_currentEntry == overlayEntry) {
+        _currentEntry = null;
       }
     });
   }

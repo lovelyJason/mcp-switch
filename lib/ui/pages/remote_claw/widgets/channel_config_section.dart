@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../l10n/s.dart';
-import '../../../../services/config_service.dart';
+import '../../../../services/config/config_service.dart';
 import '../../../../services/remote_claw_service.dart';
 import '../../../components/custom_toast.dart';
 

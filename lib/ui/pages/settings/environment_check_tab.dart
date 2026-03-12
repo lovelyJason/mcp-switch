@@ -346,11 +346,30 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
     );
   }
 
+  /// 分析 stderr 并生成用户友好的诊断提示
+  String? _diagnoseError(String toolName, String error) {
+    final lower = error.toLowerCase();
+    if (lower.contains('invalid regular expression flags') ||
+        lower.contains('syntaxerror')) {
+      final nodeMatch = RegExp(r'Node\.js\s+v(\d+)').firstMatch(error);
+      final nodeVer = nodeMatch?.group(1);
+      if (nodeVer != null && int.tryParse(nodeVer) != null && int.parse(nodeVer) < 20) {
+        return S.get('env_node_version_too_low')
+            .replaceAll('{tool}', toolName)
+            .replaceAll('{version}', 'v$nodeVer');
+      }
+      return S.get('env_node_syntax_error').replaceAll('{tool}', toolName);
+    }
+    return null;
+  }
+
   void _showErrorDialog(String toolName, String error) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final diagnosis = _diagnoseError(toolName, error);
     showDialog(
       context: context,
       builder: (_) => Dialog(
+        backgroundColor: isDark ? const Color(0xFF2C2C2E) : Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520, maxHeight: 400),
@@ -381,6 +400,41 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
                 ),
               ),
               const Divider(height: 1),
+              if (diagnosis != null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.amber.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.lightbulb_outline, size: 16,
+                            color: Colors.amber.shade700),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            diagnosis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              height: 1.5,
+                              color: isDark
+                                  ? Colors.amber.shade200
+                                  : Colors.amber.shade900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               Flexible(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(20),

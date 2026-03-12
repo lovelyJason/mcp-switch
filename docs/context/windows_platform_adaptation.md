@@ -57,7 +57,7 @@ lib/
 | 文件路径 | 改动内容 |
 |---------|---------|
 | `lib/main.dart` | 日志输出使用 `PlatformUtils.userHome` |
-| `lib/services/config_service.dart` | `_getDefaultPath()` 使用 `PlatformUtils.joinPath()` |
+| `lib/services/config/config_service.dart` | `_getDefaultPath()` 使用 `PlatformUtils.joinPath()` |
 | `lib/services/skills_service.dart` | 所有路径操作改用 `PlatformUtils` |
 | `lib/services/terminal_service.dart` | `workingDirectory` 使用 `PlatformUtils.userHome` |
 | `lib/services/ai_chat_service.dart` | `_historyPath` 和 `_runTerminalCommand()` 使用 `PlatformUtils` |

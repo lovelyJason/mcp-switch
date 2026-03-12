@@ -11,7 +11,7 @@ import '../../l10n/s.dart';
 import '../../utils/global_keys.dart';
 import '../../models/chat_message.dart';
 import '../../services/ai_chat_service.dart';
-import '../../services/config_service.dart';
+import '../../services/config/config_service.dart';
 import '../pages/settings/settings_screen.dart';
 import 'custom_toast.dart';
 

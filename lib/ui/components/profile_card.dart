@@ -9,6 +9,8 @@ class ProfileCard extends StatefulWidget {
   final VoidCallback onDelete;
   final VoidCallback onEdit;
   final void Function(String name)? onLogin;
+  final Widget? footer;
+  final Widget? descriptionTrailing;
 
   const ProfileCard({
     super.key,
@@ -18,6 +20,8 @@ class ProfileCard extends StatefulWidget {
     required this.onDelete,
     required this.onEdit,
     this.onLogin,
+    this.footer,
+    this.descriptionTrailing,
   });
 
   @override
@@ -65,7 +69,10 @@ class _ProfileCardState extends State<ProfileCard> {
                   ]
                 : [],
           ),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
             children: [
               // Drag Handle or Menu Icon
               Icon(Icons.drag_indicator, // Or dots logic
@@ -236,14 +243,24 @@ class _ProfileCardState extends State<ProfileCard> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      widget.profile.description ?? widget.profile.officialLink ?? '未配置说明',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade600,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            widget.profile.description ?? widget.profile.officialLink ?? '未配置说明',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (widget.descriptionTrailing != null) ...[
+                          const SizedBox(width: 8),
+                          widget.descriptionTrailing!,
+                        ],
+                      ],
                     ),
                   ],
                 ),
@@ -308,6 +325,9 @@ class _ProfileCardState extends State<ProfileCard> {
                 ),
           ],
         ),
+              if (widget.footer != null) widget.footer!,
+            ],
+          ),
       ),
     );
   }

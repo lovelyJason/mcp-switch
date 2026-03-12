@@ -48,6 +48,8 @@
   "env_checking": "正在检测环境...",
   "env_installed": "已安装",
   "env_not_installed": "未安装",
+  "env_node_version_too_low": "可能原因：{tool} 依赖 Node.js >= 20，但当前使用的是 Node.js {version}。请检查 fnm/nvm 的默认 Node 版本（fnm default 或 nvm alias default），切换到 v20+ 后重试。",
+  "env_node_syntax_error": "可能原因：{tool} 依赖的 Node.js 模块使用了高版本语法，当前 Node.js 版本过低。请升级 Node.js 到 v20+ 后重试。",
   "check_for_updates": "检查更新",
   "checking_for_updates": "正在检查更新...如果检查失败，请点击右侧 Releases 按钮手动下载解压覆盖，或配置 设置→高级→全局出站代理",
   "current_latest": "当前已是最新版本",

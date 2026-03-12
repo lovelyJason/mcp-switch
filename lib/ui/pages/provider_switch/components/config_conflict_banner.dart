@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../../../../l10n/s.dart';
@@ -61,6 +63,11 @@ class ConfigConflictDiff extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localLines = localContent.isEmpty ? ['(empty)'] : localContent.split('\n');
+    final savedLines = savedContent.isEmpty ? ['(empty)'] : savedContent.split('\n');
+    final localDiff = _diffLineIndices(localLines, savedLines);
+    final savedDiff = _diffLineIndices(savedLines, localLines);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -91,14 +98,16 @@ class ConfigConflictDiff extends StatelessWidget {
           children: [
             Expanded(child: _buildPanel(
               title: S.get('config_conflict_local_file'),
-              content: localContent,
+              lines: localLines,
+              diffIndices: localDiff,
               onUse: onUseLocal,
               accentColor: Colors.orange,
             )),
             const SizedBox(width: 12),
             Expanded(child: _buildPanel(
               title: S.get('config_conflict_saved_data'),
-              content: savedContent,
+              lines: savedLines,
+              diffIndices: savedDiff,
               onUse: onUseSaved,
               accentColor: const Color(0xFF5B9BD5),
             )),
@@ -108,13 +117,42 @@ class ConfigConflictDiff extends StatelessWidget {
     );
   }
 
+  /// LCS 回溯，返回 [lines] 中与 [otherLines] 不同的行索引集合
+  static Set<int> _diffLineIndices(List<String> lines, List<String> otherLines) {
+    final m = lines.length, n = otherLines.length;
+    final dp = List.generate(m + 1, (_) => List.filled(n + 1, 0));
+    for (var i = 1; i <= m; i++) {
+      for (var j = 1; j <= n; j++) {
+        dp[i][j] = lines[i - 1].trim() == otherLines[j - 1].trim()
+            ? dp[i - 1][j - 1] + 1
+            : max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+    final matched = <int>{};
+    var i = m, j = n;
+    while (i > 0 && j > 0) {
+      if (lines[i - 1].trim() == otherLines[j - 1].trim()) {
+        matched.add(i - 1);
+        i--; j--;
+      } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+        i--;
+      } else {
+        j--;
+      }
+    }
+    return {for (var k = 0; k < m; k++) if (!matched.contains(k)) k};
+  }
+
   Widget _buildPanel({
     required String title,
-    required String content,
+    required List<String> lines,
+    required Set<int> diffIndices,
     required VoidCallback onUse,
     required Color accentColor,
   }) {
     final bgColor = isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF5F5F5);
+    final normalColor = isDark ? Colors.grey.shade300 : Colors.black87;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -142,14 +180,52 @@ class ConfigConflictDiff extends StatelessWidget {
             ),
           ),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(12),
-            child: SelectableText(
-              content.isEmpty ? '(empty)' : content,
-              style: TextStyle(
-                fontSize: 12,
-                fontFamily: 'Menlo',
-                height: 1.5,
-                color: isDark ? Colors.grey.shade300 : Colors.black87,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: SelectionArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < lines.length; i++)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 1),
+                      color: diffIndices.contains(i)
+                          ? accentColor.withValues(alpha: 0.10)
+                          : null,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 28,
+                            child: Text(
+                              '${i + 1}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontFamily: 'Menlo',
+                                height: 1.5,
+                                color: diffIndices.contains(i)
+                                    ? accentColor.withValues(alpha: 0.6)
+                                    : Colors.grey.shade500,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              lines[i],
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontFamily: 'Menlo',
+                                height: 1.5,
+                                fontWeight: diffIndices.contains(i)
+                                    ? FontWeight.w600 : FontWeight.normal,
+                                color: diffIndices.contains(i)
+                                    ? accentColor : normalColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
             ),
           ),

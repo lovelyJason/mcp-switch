@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../models/editor_type.dart';
 import '../../../models/mcp_profile.dart';
-import '../../../services/config_service.dart';
+import '../../../services/config/config_service.dart';
 import 'mcp_server_edit_screen.dart';
 
 class ProjectDetailScreen extends StatefulWidget {

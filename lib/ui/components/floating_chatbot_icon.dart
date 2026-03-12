@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/ai_chat_service.dart';
-import '../../services/config_service.dart';
+import '../../services/config/config_service.dart';
 
 /// 全局悬浮 AI Chatbot 图标
 class FloatingChatbotIcon extends StatefulWidget {

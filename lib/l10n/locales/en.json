@@ -45,6 +45,8 @@
   "env_checking": "Checking environment...",
   "env_installed": "Installed",
   "env_not_installed": "Not Installed",
+  "env_node_version_too_low": "Possible cause: {tool} requires Node.js >= 20, but the current version is Node.js {version}. Check your fnm/nvm default Node version (fnm default or nvm alias default) and switch to v20+.",
+  "env_node_syntax_error": "Possible cause: {tool} depends on Node.js modules that require newer syntax. Please upgrade Node.js to v20+.",
   "check_for_updates": "Check for Updates",
   "checking_for_updates": "Checking for updates... If it fails, click the Releases button or configure Settings → Advanced → Outbound Proxy.",
   "current_latest": "Currently running the latest version.",

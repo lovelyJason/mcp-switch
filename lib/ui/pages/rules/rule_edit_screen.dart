@@ -143,7 +143,7 @@ class _RuleEditScreenState extends State<RuleEditScreen> {
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: SvgPicture.asset(
-                'assets/icons/windsurf.svg',
+                'assets/icons/editors/windsurf.svg',
                 width: 24,
                 height: 24,
               ),
@@ -155,7 +155,7 @@ class _RuleEditScreenState extends State<RuleEditScreen> {
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: SvgPicture.asset(
-                'assets/icons/antigravity.svg',
+                'assets/icons/editors/antigravity.svg',
                 width: 24,
                 height: 24,
               ),

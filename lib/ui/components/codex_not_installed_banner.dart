@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../l10n/s.dart';
 import '../../utils/platform_utils.dart';
 import 'codex_copy_command_dialog.dart';
+import 'custom_dialog.dart';
 
 /// Codex CLI 未安装提示 Banner
 /// 显示在 Codex Tab 顶部，当检测到 Codex CLI 未安装时显示
@@ -48,6 +49,18 @@ class _CodexNotInstalledBannerState extends State<CodexNotInstalledBanner> {
   }
 
   Future<void> _handleInstall() async {
+    // 使用项目规范的确认弹窗
+    final confirm = await CustomConfirmDialog.show(
+      context,
+      title: S.get('codex_install_button'),
+      content: '确定要开始安装 Codex CLI 吗？\n安装过程将通过 npm 全局安装相关包。',
+      confirmText: S.get('ok'),
+      cancelText: S.get('cancel'),
+      confirmColor: Colors.deepPurple,
+    );
+
+    if (confirm != true) return;
+
     setState(() {
       _isInstalling = true;
       _logLines.clear();

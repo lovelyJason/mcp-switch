@@ -153,9 +153,9 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
   Widget _buildEditorSwitcher(bool isDark) {
     // (type, label, icon, fixedColor, useOriginalColor)
     final editors = [
-      ('claude', 'Claude Code', 'assets/icons/claude.svg', const Color(0xFFd97757), false),
-      ('codex', 'Codex', 'assets/icons/chatgpt.svg', null, false),
-      ('gemini', 'Gemini', 'assets/icons/gemini.svg', null, true),
+      ('claude', 'Claude Code', 'assets/icons/editors/claude.svg', const Color(0xFFd97757), false),
+      ('codex', 'Codex', 'assets/icons/editors/chatgpt.svg', null, false),
+      ('gemini', 'Gemini', 'assets/icons/editors/gemini.svg', null, true),
     ];
 
     ColorFilter? colorFilter(Color? fixedColor, bool useOriginal) {

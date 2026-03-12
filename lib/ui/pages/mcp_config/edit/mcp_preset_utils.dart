@@ -23,6 +23,7 @@ class McpPresetUtils {
       case EditorType.windsurf:
       case EditorType.antigravity:
       case EditorType.gemini:
+      case EditorType.kiro:
         return buildStandardRemoteConfig(connectionConfig, fieldValues);
     }
   }

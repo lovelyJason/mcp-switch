@@ -26,7 +26,7 @@ presets:
       description: Anthropic Official
       base_url: ''
       website: https://www.anthropic.com
-      icon: assets/icons/claude.svg
+      icon: assets/icons/editors/claude.svg
       is_official: true
 
     - id: dmxapi
@@ -34,7 +34,7 @@ presets:
       description: DMX API Relay
       base_url: https://api.dmxapi.com/v1
       website: https://www.dmxapi.com
-      icon: assets/icons/dmxapi.svg
+      icon: assets/icons/provider/dmxapi.svg
       is_official: false
 
     - id: openrouter
@@ -42,7 +42,7 @@ presets:
       description: OpenRouter Relay
       base_url: https://openrouter.ai/api/v1
       website: https://openrouter.ai
-      icon: assets/icons/openrouter.svg
+      icon: assets/icons/provider/openrouter.svg
       is_official: false
 
     - id: siliconflow
@@ -50,7 +50,7 @@ presets:
       description: SiliconFlow Relay
       base_url: https://api.siliconflow.cn/v1
       website: https://siliconflow.cn
-      icon: assets/icons/siliconflow.svg
+      icon: assets/icons/provider/siliconflow.svg
       is_official: false
 
     - id: deepseek
@@ -58,7 +58,7 @@ presets:
       description: DeepSeek Anthropic Compatible
       base_url: https://api.deepseek.com/anthropic
       website: https://platform.deepseek.com
-      icon: assets/icons/deepseek.svg
+      icon: assets/icons/provider/deepseek.svg
       is_official: false
 
     - id: minimax
@@ -66,7 +66,7 @@ presets:
       description: MiniMax Anthropic Compatible
       base_url: https://api.minimaxi.com/anthropic
       website: https://platform.minimaxi.com
-      icon: assets/icons/minimax.svg
+      icon: assets/icons/provider/minimax.svg
       is_official: false
 
     - id: zhipu
@@ -74,7 +74,7 @@ presets:
       description: Zhipu AI Anthropic Compatible
       base_url: https://open.bigmodel.cn/api/anthropic
       website: https://open.bigmodel.cn
-      icon: assets/icons/zhipu.svg
+      icon: assets/icons/provider/zhipu.svg
       is_official: false
 
     - id: kimi
@@ -82,7 +82,7 @@ presets:
       description: Moonshot AI Anthropic Compatible
       base_url: https://api.moonshot.cn/anthropic
       website: https://platform.moonshot.cn/console
-      icon: assets/icons/kimi.svg
+      icon: assets/icons/provider/kimi.svg
       is_official: false
 
     - id: packycode
@@ -90,7 +90,7 @@ presets:
       description: PackyCode API Relay
       base_url: https://www.packyapi.com
       website: https://www.packyapi.com
-      icon: assets/icons/packycode.svg
+      icon: assets/icons/provider/packycode.svg
       is_official: false
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ presets:
       description: OpenAI Official
       base_url: ''
       website: https://openai.com
-      icon: assets/icons/chatgpt.svg
+      icon: assets/icons/editors/chatgpt.svg
       is_official: true
 
     - id: dmxapi
@@ -110,7 +110,7 @@ presets:
       description: DMX API Relay
       base_url: https://api.dmxapi.com/v1
       website: https://www.dmxapi.com
-      icon: assets/icons/dmxapi.svg
+      icon: assets/icons/provider/dmxapi.svg
       is_official: false
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -122,5 +122,5 @@ presets:
       description: Google Official
       base_url: ''
       website: https://gemini.google.com
-      icon: assets/icons/gemini.svg
+      icon: assets/icons/editors/gemini.svg
       is_official: true

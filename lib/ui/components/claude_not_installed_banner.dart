@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../l10n/s.dart';
 import '../../utils/platform_utils.dart';
 import 'copy_command_dialog.dart';
+import 'custom_dialog.dart';
 
 /// Claude CLI 未安装提示 Banner
 /// 显示在 Claude Code Tab 顶部，当检测到 Claude CLI 未安装时显示
@@ -48,6 +49,18 @@ class _ClaudeNotInstalledBannerState extends State<ClaudeNotInstalledBanner> {
   }
 
   Future<void> _handleInstall() async {
+    // 使用项目规范的确认弹窗
+    final confirm = await CustomConfirmDialog.show(
+      context,
+      title: S.get('claude_install_button'),
+      content: '确定要开始安装 Claude CLI 吗？\n安装过程将下载必要文件并配置环境变量。',
+      confirmText: S.get('ok'),
+      cancelText: S.get('cancel'),
+      confirmColor: Colors.deepPurple,
+    );
+
+    if (confirm != true) return;
+
     setState(() {
       _isInstalling = true;
       _logLines.clear();

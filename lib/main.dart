@@ -9,6 +9,7 @@ import 'services/terminal_service.dart';
 import 'services/ai_chat_service.dart';
 import 'services/mcp_health_check_service.dart';
 import 'services/update_service.dart';
+import 'services/splash_service.dart';
 import 'ui/main_window.dart';
 import 'ui/components/floating_terminal_icon.dart';
 import 'ui/components/global_terminal_panel.dart';
@@ -163,8 +164,23 @@ void main() async {
   );
 }
 
-class McpSwitchApp extends StatelessWidget {
+
+class McpSwitchApp extends StatefulWidget {
   const McpSwitchApp({super.key});
+
+  @override
+  State<McpSwitchApp> createState() => _McpSwitchAppState();
+}
+
+class _McpSwitchAppState extends State<McpSwitchApp> {
+  @override
+  void initState() {
+    super.initState();
+    // 首帧渲染后隐藏原生 Splash
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      SplashService.hideSplash();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -266,3 +282,4 @@ class McpSwitchApp extends StatelessWidget {
     );
   }
 }
+

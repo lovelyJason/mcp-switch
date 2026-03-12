@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../l10n/s.dart';
 import '../../utils/platform_utils.dart';
 import 'gemini_copy_command_dialog.dart';
+import 'custom_dialog.dart';
 
 /// Gemini CLI 未安装提示 Banner
 /// 显示在 Gemini Tab 顶部，当检测到 Gemini CLI 未安装时显示
@@ -48,6 +49,18 @@ class _GeminiNotInstalledBannerState extends State<GeminiNotInstalledBanner> {
   }
 
   Future<void> _handleInstall() async {
+    // 使用项目规范的确认弹窗
+    final confirm = await CustomConfirmDialog.show(
+      context,
+      title: S.get('gemini_install_button'),
+      content: '确定要开始安装 Gemini CLI 吗？\n安装过程将通过 npm 全局安装相关包。',
+      confirmText: S.get('ok'),
+      cancelText: S.get('cancel'),
+      confirmColor: Colors.deepPurple,
+    );
+
+    if (confirm != true) return;
+
     setState(() {
       _isInstalling = true;
       _logLines.clear();

@@ -26,6 +26,8 @@ class HeaderActionButtons extends StatelessWidget {
   final bool isClaudeInstalled;
   final bool isCodexInstalled;
   final bool isGeminiInstalled;
+  final bool isWindsurfInstalled;
+  final bool isKiroInstalled;
   final GlobalKey<ScaffoldState> scaffoldKey;
 
   const HeaderActionButtons({
@@ -34,6 +36,8 @@ class HeaderActionButtons extends StatelessWidget {
     required this.isClaudeInstalled,
     required this.isCodexInstalled,
     required this.isGeminiInstalled,
+    required this.isWindsurfInstalled,
+    required this.isKiroInstalled,
     required this.scaffoldKey,
   });
 
@@ -42,12 +46,16 @@ class HeaderActionButtons extends StatelessWidget {
     final isClaude = selectedEditor == EditorType.claude;
     final isCodex = selectedEditor == EditorType.codex;
     final isGemini = selectedEditor == EditorType.gemini;
+    final isWindsurf = selectedEditor == EditorType.windsurf;
+    final isKiro = selectedEditor == EditorType.kiro;
     final isAntigravity = selectedEditor == EditorType.antigravity;
 
     // 功能按钮是否禁用（未安装 CLI 时禁用）
     final claudeDisabled = isClaude && !isClaudeInstalled;
     final codexDisabled = isCodex && !isCodexInstalled;
     final geminiDisabled = isGemini && !isGeminiInstalled;
+    final windsurfDisabled = isWindsurf && !isWindsurfInstalled;
+    final kiroDisabled = isKiro && !isKiroInstalled;
 
     if (isClaude) {
       return _buildClaudeButtons(context, claudeDisabled);
@@ -58,7 +66,7 @@ class HeaderActionButtons extends StatelessWidget {
     } else if (isAntigravity) {
       return _buildAntigravityButtons(context);
     } else {
-      return _buildDefaultButtons(context);
+      return _buildDefaultButtons(context, windsurfDisabled || kiroDisabled);
     }
   }
 
@@ -195,8 +203,8 @@ class HeaderActionButtons extends StatelessWidget {
   }
 
   /// 其他编辑器: Rules only
-  Widget _buildDefaultButtons(BuildContext context) {
-    return _buildSingleButtonContainer(context, _buildRulesButton(context));
+  Widget _buildDefaultButtons(BuildContext context, [bool disabled = false]) {
+    return _buildSingleButtonContainer(context, _buildRulesButton(context, disabled));
   }
 
   /// Skills 按钮 (Claude)
@@ -334,17 +342,17 @@ class HeaderActionButtons extends StatelessWidget {
   }
 
   /// Rules 按钮
-  Widget _buildRulesButton(BuildContext context) {
+  Widget _buildRulesButton(BuildContext context, [bool disabled = false]) {
     return IconButton(
       icon: Icon(
         Icons.article_outlined,
         size: 18,
-        color: Theme.of(context).textTheme.bodyMedium?.color,
+        color: disabled ? Colors.grey : Theme.of(context).textTheme.bodyMedium?.color,
       ),
-      tooltip: 'Rules',
+      tooltip: disabled ? S.get('env_not_installed') : 'Rules',
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-      onPressed: () => _handleRulesNavigation(context),
+      onPressed: disabled ? null : () => _handleRulesNavigation(context),
     );
   }
 

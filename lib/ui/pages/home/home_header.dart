@@ -22,6 +22,8 @@ class HomeHeader extends StatelessWidget {
   final bool isClaudeInstalled;
   final bool isCodexInstalled;
   final bool isGeminiInstalled;
+  final bool isWindsurfInstalled;
+  final bool isKiroInstalled;
   final bool isInstalling; // 任何 CLI 正在安装中
   final GlobalKey<ScaffoldState> scaffoldKey;
   final ValueChanged<EditorType> onEditorChanged;
@@ -32,6 +34,8 @@ class HomeHeader extends StatelessWidget {
     required this.isClaudeInstalled,
     required this.isCodexInstalled,
     required this.isGeminiInstalled,
+    required this.isWindsurfInstalled,
+    required this.isKiroInstalled,
     required this.isInstalling,
     required this.scaffoldKey,
     required this.onEditorChanged,
@@ -39,8 +43,20 @@ class HomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isClaude = selectedEditor == EditorType.claude;
-    final claudeDisabled = isClaude && !isClaudeInstalled;
+    final bool currentEditorDisabled;
+    if (selectedEditor == EditorType.claude) {
+      currentEditorDisabled = !isClaudeInstalled;
+    } else if (selectedEditor == EditorType.codex) {
+      currentEditorDisabled = !isCodexInstalled;
+    } else if (selectedEditor == EditorType.gemini) {
+      currentEditorDisabled = !isGeminiInstalled;
+    } else if (selectedEditor == EditorType.windsurf) {
+      currentEditorDisabled = !isWindsurfInstalled;
+    } else if (selectedEditor == EditorType.kiro) {
+      currentEditorDisabled = !isKiroInstalled;
+    } else {
+      currentEditorDisabled = false;
+    }
 
     return Container(
       height: kTitleBarHeight,
@@ -73,23 +89,25 @@ class HomeHeader extends StatelessWidget {
             isClaudeInstalled: isClaudeInstalled,
             isCodexInstalled: isCodexInstalled,
             isGeminiInstalled: isGeminiInstalled,
+            isWindsurfInstalled: isWindsurfInstalled,
+            isKiroInstalled: isKiroInstalled,
             scaffoldKey: scaffoldKey,
           ),
 
           const SizedBox(width: 8),
 
           // 终端按钮
-          _buildTerminalButton(context, claudeDisabled),
+          _buildTerminalButton(context, false),
 
           const SizedBox(width: 8),
 
           // 刷新按钮
-          _buildRefreshButton(context, claudeDisabled),
+          _buildRefreshButton(context, currentEditorDisabled),
 
           const SizedBox(width: 8),
 
           // 添加按钮
-          _buildAddButton(context, claudeDisabled),
+          _buildAddButton(context, currentEditorDisabled),
         ],
       ),
     );
@@ -166,7 +184,9 @@ class HomeHeader extends StatelessWidget {
                 ? Colors.white70
                 : Colors.black54),
       ),
-      tooltip: disabled ? S.get('claude_not_installed_title') : S.get('terminal_title'),
+      tooltip: disabled
+          ? S.get('${selectedEditor.name}_not_installed_title')
+          : S.get('terminal_title'),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
     );
@@ -197,7 +217,7 @@ class HomeHeader extends StatelessWidget {
   Widget _buildRefreshButton(BuildContext context, bool disabled) {
     return IconButton(
       icon: Icon(Icons.refresh, color: disabled ? Colors.grey : null),
-      tooltip: disabled ? S.get('claude_not_installed_title') : '刷新配置',
+      tooltip: disabled ? S.get('${selectedEditor.name}_not_installed_title') : '刷新配置',
       onPressed: disabled ? null : () async {
         await Provider.of<ConfigService>(context, listen: false).reloadProfiles();
         if (context.mounted) {

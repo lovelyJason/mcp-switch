@@ -7,6 +7,8 @@ import '../../components/claude_not_installed_banner.dart';
 import '../../components/claude_path_not_configured_banner.dart';
 import '../../components/codex_not_installed_banner.dart';
 import '../../components/gemini_not_installed_banner.dart';
+import '../../components/windsurf_not_installed_banner.dart';
+import '../../components/kiro_not_installed_banner.dart';
 import '../../components/update_banner.dart';
 import '../mcp_config/config_list_screen.dart';
 import 'home_header.dart';
@@ -41,11 +43,21 @@ class _HomePageState extends State<HomePage> {
   bool _checkingGemini = true;
   bool _isInstallingGemini = false;
 
+  // Windsurf 状态
+  WindsurfInstallStatus? _windsurfStatus;
+  bool _checkingWindsurf = true;
+
+  // Kiro 状态
+  KiroInstallStatus? _kiroStatus;
+  bool _checkingKiro = true;
+
   // 便捷 getter
   bool get _isClaudeInstalled => _claudeStatus?.isInstalled ?? true;
   bool get _needsPathSetup => _claudeStatus?.needsPathSetup ?? false;
   bool get _isCodexInstalled => _codexStatus?.isInstalled ?? true;
   bool get _isGeminiInstalled => _geminiStatus?.isInstalled ?? true;
+  bool get _isWindsurfInstalled => _windsurfStatus?.isInstalled ?? true;
+  bool get _isKiroInstalled => _kiroStatus?.isInstalled ?? true;
 
   @override
   void initState() {
@@ -59,6 +71,8 @@ class _HomePageState extends State<HomePage> {
       _checkClaudeStatus(),
       _checkCodexStatus(),
       _checkGeminiStatus(),
+      _checkWindsurfStatus(),
+      _checkKiroStatus(),
     ]);
   }
 
@@ -92,6 +106,26 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _checkWindsurfStatus() async {
+    final status = await PlatformUtils.checkWindsurfInstallStatus();
+    if (mounted) {
+      setState(() {
+        _windsurfStatus = status;
+        _checkingWindsurf = false;
+      });
+    }
+  }
+
+  Future<void> _checkKiroStatus() async {
+    final status = await PlatformUtils.checkKiroInstallStatus();
+    if (mounted) {
+      setState(() {
+        _kiroStatus = status;
+        _checkingKiro = false;
+      });
+    }
+  }
+
   void _handleEditorChanged(EditorType editor) {
     setState(() {
       _selectedEditor = editor;
@@ -108,6 +142,8 @@ class _HomePageState extends State<HomePage> {
           isClaudeInstalled: _isClaudeInstalled,
           isCodexInstalled: _isCodexInstalled,
           isGeminiInstalled: _isGeminiInstalled,
+          isWindsurfInstalled: _isWindsurfInstalled,
+          isKiroInstalled: _isKiroInstalled,
           isInstalling: _isInstallingClaude || _isInstallingCodex || _isInstallingGemini,
           scaffoldKey: widget.scaffoldKey,
           onEditorChanged: _handleEditorChanged,
@@ -208,6 +244,26 @@ class _HomePageState extends State<HomePage> {
               setState(() => _isInstallingGemini = isInstalling);
             },
           ),
+        ),
+      );
+    }
+
+    // Windsurf 未安装 Banner
+    if (_selectedEditor == EditorType.windsurf && !_checkingWindsurf && !_isWindsurfInstalled) {
+      banners.add(
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: WindsurfNotInstalledBanner(),
+        ),
+      );
+    }
+
+    // Kiro 未安装 Banner
+    if (_selectedEditor == EditorType.kiro && !_checkingKiro && !_isKiroInstalled) {
+      banners.add(
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: KiroNotInstalledBanner(),
         ),
       );
     }

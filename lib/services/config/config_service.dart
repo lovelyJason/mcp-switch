@@ -112,6 +112,8 @@ class ConfigService extends ChangeNotifier with _SettingsMixin, _SyncMixin {
         );
       case EditorType.gemini:
         return PlatformUtils.joinPath(home, '.gemini', 'settings.json');
+      case EditorType.kiro:
+        return PlatformUtils.joinPath(home, '.kiro', 'settings', 'mcp.json');
     }
   }
 

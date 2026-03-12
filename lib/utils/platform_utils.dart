@@ -74,6 +74,34 @@ class GeminiInstallStatus {
   String toString() => 'GeminiInstallStatus(exePath: $exePath, inPath: $inPath)';
 }
 
+/// Windsurf 安装状态
+class WindsurfInstallStatus {
+  /// Windsurf App 的安装路径（null 表示未找到）
+  final String? appPath;
+
+  const WindsurfInstallStatus({this.appPath});
+
+  /// 是否已安装（文件存在）
+  bool get isInstalled => appPath != null;
+
+  @override
+  String toString() => 'WindsurfInstallStatus(appPath: $appPath)';
+}
+
+/// Kiro 安装状态
+class KiroInstallStatus {
+  /// Kiro App 的安装路径（null 表示未找到）
+  final String? appPath;
+
+  const KiroInstallStatus({this.appPath});
+
+  /// 是否已安装（文件存在）
+  bool get isInstalled => appPath != null;
+
+  @override
+  String toString() => 'KiroInstallStatus(appPath: $appPath)';
+}
+
 /// 跨平台工具类
 /// 统一处理 Windows/macOS/Linux 的路径、命令执行、文件操作等差异
 class PlatformUtils {
@@ -1480,6 +1508,53 @@ class PlatformUtils {
       onOutput('安装出错: $e');
       return -1;
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Windsurf 相关
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// 检测 Windsurf 是否已安装
+  static Future<bool> isWindsurfInstalled() async {
+    if (Platform.isMacOS) {
+      return Directory('/Applications/Windsurf.app').exists();
+    }
+    // TODO: 其他平台检测
+    return false;
+  }
+
+  /// 检测 Windsurf 完整安装状态
+  static Future<WindsurfInstallStatus> checkWindsurfInstallStatus() async {
+    if (Platform.isMacOS) {
+      const appPath = '/Applications/Windsurf.app';
+      if (await Directory(appPath).exists()) {
+        return const WindsurfInstallStatus(appPath: appPath);
+      }
+    }
+    return const WindsurfInstallStatus(appPath: null);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Kiro 相关
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// 检测 Kiro 是否已安装
+  static Future<bool> isKiroInstalled() async {
+    if (Platform.isMacOS) {
+      return Directory('/Applications/Kiro IDE.app').exists();
+    }
+    return false;
+  }
+
+  /// 检测 Kiro 完整安装状态
+  static Future<KiroInstallStatus> checkKiroInstallStatus() async {
+    if (Platform.isMacOS) {
+      const appPath = '/Applications/Kiro IDE.app';
+      if (await Directory(appPath).exists()) {
+        return const KiroInstallStatus(appPath: appPath);
+      }
+    }
+    return const KiroInstallStatus(appPath: null);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

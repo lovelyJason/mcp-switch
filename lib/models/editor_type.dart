@@ -4,26 +4,28 @@ enum EditorType {
   claude,
   codex,
   antigravity,
-  gemini; // Added for completeness given the icon in screenshot might be related
+  gemini,
+  kiro;
 
   String get label {
     switch (this) {
+      case EditorType.claude:
+        return 'Claude Code';
+      case EditorType.codex:
+        return 'Codex';
       case EditorType.cursor:
         return 'Cursor';
       case EditorType.windsurf:
         return 'Windsurf';
-      case EditorType.claude:
-        return 'Claude';
-      case EditorType.codex:
-        return 'Codex';
       case EditorType.antigravity:
         return 'Antigravity';
-      case EditorType.gemini: 
+      case EditorType.gemini:
         return 'Gemini';
+      case EditorType.kiro:
+        return 'Kiro';
     }
   }
 
-  // Helper to get import 'package:path_provider/path_provider.dart';ed later)
-  String get iconPath => 'assets/icons/${name}.svg';
+  String get iconPath => 'assets/icons/editors/${this == codex ? "chatgpt" : name}.svg';
 
 }

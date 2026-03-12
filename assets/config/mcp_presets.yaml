@@ -54,7 +54,7 @@ presets:
   - id: figma-official
     name_key: figma_official               # i18n key，用于显示
     default_cli_name: figma-official       # CLI 命令中使用的名称（只能英文、数字、-、_）
-    icon: assets/icons/figma.svg
+    icon: assets/icons/mcp/figma.svg
     tips_key: figma_official_tips          # 灯泡提示 i18n key
 
     # 连接类型配置
@@ -75,7 +75,7 @@ presets:
   - id: figma-opensource
     name_key: figma_opensource
     default_cli_name: figma-developer
-    icon: assets/icons/figma.svg
+    icon: assets/icons/mcp/figma.svg
     tips_key: figma_opensource_tips
 
     connection_types:
@@ -101,7 +101,7 @@ presets:
   # ─────────────────────────────────────────────────────────────────────────────
   - id: context7
     name: Context7                         # 直接字符串（无 name_key 时使用）
-    icon: assets/icons/context7.svg
+    icon: assets/icons/mcp/context7.svg
     tips_key: context7_tips
 
     connection_types:
@@ -151,7 +151,7 @@ presets:
   # ─────────────────────────────────────────────────────────────────────────────
   - id: chrome-devtools
     name: chrome-devtools
-    icon: assets/icons/chrome-devtools.svg
+    icon: assets/icons/mcp/chrome-devtools.svg
     tips_key: chrome_devtools_tips
 
     connection_types:
@@ -170,7 +170,7 @@ presets:
   - id: playwright
     name: Playwright
     default_cli_name: playwright
-    icon: assets/icons/playwright.svg
+    icon: assets/icons/mcp/playwright.svg
     tips_key: playwright_tips
 
     connection_types:
@@ -189,7 +189,7 @@ presets:
   - id: mysql
     name: MySQL
     default_cli_name: mysql
-    icon: assets/icons/mysql.svg
+    icon: assets/icons/mcp/mysql.svg
     tips_key: mysql_tips
 
     connection_types:
@@ -263,7 +263,7 @@ presets:
   - id: oss-mcp-plus
     name: OSS MCP Plus
     default_cli_name: oss-mcp-plus
-    icon: assets/icons/oss-mcp-plus.svg
+    icon: assets/icons/mcp/oss-mcp-plus.svg
     tips_key: oss_mcp_plus_tips
 
     connection_types:

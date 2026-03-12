@@ -31,12 +31,12 @@
 
 | 工具 | 类型 | 检测方式 | 图标 |
 |------|------|---------|------|
-| Claude Code | CLI | `claude --version` + `which claude` | `assets/icons/claude.svg` |
-| Codex | CLI | `codex --version` + `which codex` | `assets/icons/codex.svg` |
-| Gemini CLI | CLI | `gemini --version` + `which gemini` | `assets/icons/gemini.svg` |
-| Antigravity | CLI | `antigravity --version` + `which antigravity` | `assets/icons/antigravity.svg` |
-| Cursor | macOS App | `Directory('/Applications/Cursor.app').exists()` | `assets/icons/cursor.svg` |
-| Windsurf | macOS App | `Directory('/Applications/Windsurf.app').exists()` | `assets/icons/windsurf.svg` |
+| Claude Code | CLI | `claude --version` + `which claude` | `assets/icons/editors/claude.svg` |
+| Codex | CLI | `codex --version` + `which codex` | `assets/icons/editors/chatgpt.svg` |
+| Gemini CLI | CLI | `gemini --version` + `which gemini` | `assets/icons/editors/gemini.svg` |
+| Antigravity | CLI | `antigravity --version` + `which antigravity` | `assets/icons/editors/antigravity.svg` |
+| Cursor | macOS App | `Directory('/Applications/Cursor.app').exists()` | `assets/icons/editors/cursor.svg` |
+| Windsurf | macOS App | `Directory('/Applications/Windsurf.app').exists()` | `assets/icons/editors/windsurf.svg` |
 
 ---
 

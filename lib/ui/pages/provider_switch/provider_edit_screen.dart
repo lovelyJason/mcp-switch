@@ -550,10 +550,10 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
           const SizedBox(width: 16),
           SvgPicture.asset(
             _isClaude
-                ? 'assets/icons/claude.svg'
+                ? 'assets/icons/editors/claude.svg'
                 : _isGemini
-                ? 'assets/icons/gemini.svg'
-                : 'assets/icons/chatgpt.svg',
+                ? 'assets/icons/editors/gemini.svg'
+                : 'assets/icons/editors/chatgpt.svg',
             width: 24,
             height: 24,
             colorFilter: _isClaude

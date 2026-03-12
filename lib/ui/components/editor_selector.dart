@@ -138,9 +138,7 @@ class _EditorSelectorState extends State<EditorSelector> {
                           _buildIcon(type, isSelected),
                           const SizedBox(width: 8),
                           Text(
-                            type == EditorType.claude
-                                ? 'Claude Code'
-                                : type.label,
+                            type.label,
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: isSelected
@@ -171,7 +169,7 @@ class _EditorSelectorState extends State<EditorSelector> {
     switch (type) {
       case EditorType.claude:
         return SvgPicture.asset(
-          'assets/icons/claude.svg',
+          'assets/icons/editors/claude.svg',
           width: size,
           height: size,
           colorFilter: const ColorFilter.mode(
@@ -181,27 +179,27 @@ class _EditorSelectorState extends State<EditorSelector> {
         );
       case EditorType.gemini:
         return SvgPicture.asset(
-          'assets/icons/gemini.svg',
+          'assets/icons/editors/gemini.svg',
           width: size,
           height: size,
         );
       case EditorType.codex:
          return SvgPicture.asset(
-          'assets/icons/chatgpt.svg',
+          'assets/icons/editors/chatgpt.svg',
           width: size,
           height: size,
           colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
         );
       case EditorType.cursor:
         return SvgPicture.asset(
-          'assets/icons/cursor.svg',
+          'assets/icons/editors/cursor.svg',
           width: size,
           height: size,
           colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
         );
       case EditorType.windsurf:
         return SvgPicture.asset(
-          'assets/icons/windsurf.svg',
+          'assets/icons/editors/windsurf.svg',
           width: size,
           height: size,
           colorFilter: ColorFilter.mode(
@@ -209,9 +207,15 @@ class _EditorSelectorState extends State<EditorSelector> {
             BlendMode.srcIn,
           ),
         );
+      case EditorType.kiro:
+        return SvgPicture.asset(
+          'assets/icons/editors/kiro.svg',
+          width: size,
+          height: size,
+        );
       case EditorType.antigravity:
         return SvgPicture.asset(
-          'assets/icons/antigravity.svg',
+          'assets/icons/editors/antigravity.svg',
           width: size,
           height: size,
         );

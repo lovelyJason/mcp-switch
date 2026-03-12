@@ -44,6 +44,11 @@ class SkillsEditorInfo {
       hasSkillsScreen: false,
       unavailableHint: 'skills_not_supported',
     ),
+    const SkillsEditorInfo(
+      type: EditorType.kiro,
+      hasSkillsScreen: false, // Assume Kiro doesn't have a distinct skills screen yet or we don't support it
+      unavailableHint: 'skills_not_supported',
+    ),
   ];
 
   static SkillsEditorInfo? getByType(EditorType type) {
@@ -162,7 +167,7 @@ class SkillsEditorSwitcher extends StatelessWidget {
     switch (type) {
       case EditorType.claude:
         return SvgPicture.asset(
-          'assets/icons/claude.svg',
+          'assets/icons/editors/claude.svg',
           width: size,
           height: size,
           colorFilter: const ColorFilter.mode(
@@ -172,34 +177,40 @@ class SkillsEditorSwitcher extends StatelessWidget {
         );
       case EditorType.gemini:
         return SvgPicture.asset(
-          'assets/icons/gemini.svg',
+          'assets/icons/editors/gemini.svg',
           width: size,
           height: size,
         );
       case EditorType.codex:
         return SvgPicture.asset(
-          'assets/icons/chatgpt.svg',
+          'assets/icons/editors/chatgpt.svg',
           width: size,
           height: size,
           colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
         );
       case EditorType.cursor:
         return SvgPicture.asset(
-          'assets/icons/cursor.svg',
+          'assets/icons/editors/cursor.svg',
           width: size,
           height: size,
           colorFilter: ColorFilter.mode(Colors.grey, BlendMode.srcIn),
         );
       case EditorType.windsurf:
         return SvgPicture.asset(
-          'assets/icons/windsurf.svg',
+          'assets/icons/editors/windsurf.svg',
           width: size,
           height: size,
           colorFilter: ColorFilter.mode(Colors.grey, BlendMode.srcIn),
         );
       case EditorType.antigravity:
         return SvgPicture.asset(
-          'assets/icons/antigravity.svg',
+          'assets/icons/editors/antigravity.svg',
+          width: size,
+          height: size,
+        );
+      case EditorType.kiro:
+        return SvgPicture.asset(
+          'assets/icons/editors/kiro.svg',
           width: size,
           height: size,
         );

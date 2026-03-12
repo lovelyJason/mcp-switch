@@ -59,26 +59,32 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
 
     // 并行检测所有工具
     final futures = await Future.wait([
-      _checkCliTool('Claude Code', 'assets/icons/claude.svg', 'claude'),
-      _checkCliTool('Codex', 'assets/icons/chatgpt.svg', 'codex'),
-      _checkCliTool('Gemini CLI', 'assets/icons/gemini.svg', 'gemini'),
+      _checkCliTool('Claude Code', 'assets/icons/editors/claude.svg', 'claude'),
+      _checkCliTool('Codex', 'assets/icons/editors/chatgpt.svg', 'codex'),
+      _checkCliTool('Gemini CLI', 'assets/icons/editors/gemini.svg', 'gemini'),
       _checkAppInstalled(
         'Antigravity',
-        'assets/icons/antigravity.svg',
+        'assets/icons/editors/antigravity.svg',
         '/Applications/Antigravity.app',
         'antigravity',
       ),
       _checkAppInstalled(
         'Cursor',
-        'assets/icons/cursor.svg',
+        'assets/icons/editors/cursor.svg',
         '/Applications/Cursor.app',
         'cursor',
       ),
       _checkAppInstalled(
         'Windsurf',
-        'assets/icons/windsurf.svg',
+        'assets/icons/editors/windsurf.svg',
         '/Applications/Windsurf.app',
         'windsurf',
+      ),
+      _checkAppInstalled(
+        'Kiro Editor',
+        'assets/icons/editors/kiro.svg',
+        '/Applications/Kiro IDE.app',
+        'kiro',
       ),
     ]);
 
@@ -127,6 +133,8 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
         return ('/Applications/Cursor.app', 'cursor');
       case 'Windsurf':
         return ('/Applications/Windsurf.app', 'windsurf');
+      case 'Kiro Editor':
+        return ('/Applications/Kiro IDE.app', 'kiro');
       case 'Antigravity':
         return ('/Applications/Antigravity.app', 'antigravity');
       default:

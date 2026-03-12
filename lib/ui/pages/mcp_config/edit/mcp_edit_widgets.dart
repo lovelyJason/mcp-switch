@@ -425,24 +425,7 @@ class EditHeader extends StatelessWidget {
     this.onEditorTypeChanged,
   });
 
-  String? _getEditorIconPath(EditorType type) {
-    switch (type) {
-      case EditorType.cursor:
-        return 'assets/icons/cursor.svg';
-      case EditorType.windsurf:
-        return 'assets/icons/windsurf.svg';
-      case EditorType.claude:
-        return 'assets/icons/claude.svg';
-      case EditorType.codex:
-        return 'assets/icons/chatgpt.svg';
-      case EditorType.antigravity:
-        return 'assets/icons/antigravity.svg';
-      case EditorType.gemini:
-        return 'assets/icons/gemini.svg';
-      default:
-        return null;
-    }
-  }
+  String? _getEditorIconPath(EditorType type) => type.iconPath;
 
   @override
   Widget build(BuildContext context) {
@@ -481,14 +464,17 @@ class EditHeader extends StatelessWidget {
             ),
             const SizedBox(width: 8),
           ],
-          Text(
-            isEditMode
-                ? S.get('edit_mcp_title').replaceAll('{editor}', editorType.label)
-                : S.get('add_mcp_title').replaceAll('{editor}', editorType.label),
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: textColor,
+          Flexible(
+            child: Text(
+              isEditMode
+                  ? S.get('edit_mcp_title').replaceAll('{editor}', editorType.label)
+                  : S.get('add_mcp_title').replaceAll('{editor}', editorType.label),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           // 编辑器切换下拉按钮（仅新增模式且提供了回调时显示）- 放在标题旁边

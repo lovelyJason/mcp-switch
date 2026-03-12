@@ -1,3 +1,25 @@
+## v1.8.0
+
+### ✨ 新增特性
+
+- **MCP Tools 查询与展示**：在 MCP 配置列表中，已启用的 MCP Server 可以展开查看其提供的 Tools 列表，支持三种查询方式：
+  - Codex：通过 `codex app-server` JSON-RPC 接口批量获取所有 MCP 的 tools
+  - Cursor (command 型)：直接启动 MCP 进程，通过 stdio NDJSON 协议发送 `tools/list` 请求
+  - Cursor (url 型)：通过 HTTP POST JSON-RPC 查询（需 OAuth 授权的 MCP 会显示友好提示）
+- **配置冲突 Diff 高亮**：配置冲突横幅中的左右对比面板现在基于 LCS 算法高亮差异行，并显示行号，更容易识别具体变更位置
+- **Node.js 版本诊断**：环境检测页在 MCP Server 启动失败时，若检测到 `SyntaxError` 或 `Invalid regular expression flags`，会智能提示当前 Node.js 版本过低（< v20），引导用户升级
+
+### 🚀 优化改进
+
+- **ConfigService 拆分重构**：将原本 1409 行的单文件 `config_service.dart` 拆分为 `config/` 目录下 4 个文件（主类 280 行 + Settings Mixin + Sync Mixin + CodexConfigHelper 工具类），提升可维护性
+- **Toast 防重叠**：连续触发多个 Toast 时，新 Toast 会自动移除上一个，避免多条提示在屏幕上堆叠
+- **ProfileCard 插槽扩展**：ProfileCard 组件新增 `descriptionTrailing` 和 `footer` 插槽，支持嵌入 Tools 展示等自定义内容
+
+### 🧪 测试
+
+- 新增 `codex_config_helper_test.dart`（20 个用例），覆盖 TOML 解析/生成、CLI 输出解析、工具方法等
+
+
 ## v1.7.3
 
 ### 🐛 问题修复

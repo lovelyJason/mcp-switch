@@ -70,23 +70,6 @@ presets:
     form_fields: []
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Atlassian MCP（Jira / Confluence）
-  # ─────────────────────────────────────────────────────────────────────────────
-  - id: atlassian
-    name: Atlassian
-    default_cli_name: atlassian
-    icon: assets/icons/mcp/atlassian.svg
-
-    connection_types:
-      - type: http
-        recommended: true
-        config:
-          url: https://mcp.atlassian.com/v1/mcp
-        claude_cli: 'claude mcp add --transport http --scope user {{name}} https://mcp.atlassian.com/v1/mcp'
-
-    form_fields: []
-
-  # ─────────────────────────────────────────────────────────────────────────────
   # Figma 开源 MCP (figma-developer-mcp)
   # ─────────────────────────────────────────────────────────────────────────────
   - id: figma-opensource
@@ -273,6 +256,23 @@ presets:
         required: false
         apply_mode: env
         env_key: ALLOW_DELETE_OPERATION
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Atlassian MCP（Jira / Confluence）
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: atlassian
+    name: Atlassian
+    default_cli_name: atlassian
+    icon: assets/icons/mcp/atlassian.svg
+
+    connection_types:
+      - type: http
+        recommended: true
+        config:
+          url: https://mcp.atlassian.com/v1/mcp
+        claude_cli: 'claude mcp add --transport http --scope user {{name}} https://mcp.atlassian.com/v1/mcp'
+
+    form_fields: []
 
   # ─────────────────────────────────────────────────────────────────────────────
   # OSS MCP Plus (阿里云 OSS MCP 增强版)

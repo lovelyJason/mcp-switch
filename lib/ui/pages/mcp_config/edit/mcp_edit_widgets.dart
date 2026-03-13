@@ -6,7 +6,7 @@ import '../../../../models/editor_type.dart';
 import '../../../components/mcp_editor_switcher.dart';
 
 /// 预设 Chip 按钮
-class PresetChip extends StatelessWidget {
+class PresetChip extends StatefulWidget {
   final McpPreset preset;
   final bool isSelected;
   final VoidCallback onTap;
@@ -19,91 +19,119 @@ class PresetChip extends StatelessWidget {
   });
 
   @override
+  State<PresetChip> createState() => _PresetChipState();
+}
+
+class _PresetChipState extends State<PresetChip> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isSelected = widget.isSelected;
 
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(right: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? Colors.blue.withOpacity(0.1)
-              : (isDark ? const Color(0xFF2C2C2E) : Colors.grey.shade50),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
+      onTap: widget.onTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          margin: const EdgeInsets.only(right: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          transform: Matrix4.translationValues(0, _hovered && !isSelected ? -2 : 0, 0),
+          decoration: BoxDecoration(
             color: isSelected
-                ? Colors.blue
-                : (isDark ? Colors.white10 : Colors.grey.shade200),
-            width: isSelected ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (preset.icon != null) ...[
-              SvgPicture.asset(
-                preset.icon!,
-                width: 16,
-                height: 16,
-                placeholderBuilder: (context) =>
-                    const SizedBox(width: 16, height: 16),
-              ),
-              const SizedBox(width: 8),
-            ],
-            Text(
-              preset.displayName,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: isSelected
-                    ? Colors.blue
-                    : (isDark ? Colors.white : Colors.black87),
-              ),
+                ? Colors.blue.withOpacity(0.1)
+                : (isDark ? const Color(0xFF2C2C2E) : Colors.white),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected
+                  ? Colors.blue
+                  : _hovered
+                      ? (isDark ? Colors.grey.shade500 : Colors.grey.shade400)
+                      : (isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+              width: isSelected ? 1.5 : 1,
             ),
-            // 灯泡提示图标
-            if (preset.tips != null) ...[
-              const SizedBox(width: 6),
-              Tooltip(
-                richMessage: WidgetSpan(
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 300),
-                    child: Text(
-                      preset.tips!,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        height: 1.5,
+            boxShadow: _hovered && !isSelected
+                ? [
+                    BoxShadow(
+                      color: isDark
+                          ? Colors.black.withValues(alpha: 0.4)
+                          : Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.preset.icon != null) ...[
+                SvgPicture.asset(
+                  widget.preset.icon!,
+                  width: 16,
+                  height: 16,
+                  placeholderBuilder: (context) =>
+                      const SizedBox(width: 16, height: 16),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Text(
+                widget.preset.displayName,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: isSelected
+                      ? Colors.blue
+                      : (isDark ? Colors.white : Colors.black87),
+                ),
+              ),
+              if (widget.preset.tips != null) ...[
+                const SizedBox(width: 6),
+                Tooltip(
+                  richMessage: WidgetSpan(
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 300),
+                      child: Text(
+                        widget.preset.tips!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          height: 1.5,
+                        ),
                       ),
                     ),
                   ),
+                  preferBelow: false,
+                  verticalOffset: 16,
+                  waitDuration: const Duration(milliseconds: 300),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1C1C1E),
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x4D000000),
+                        blurRadius: 12,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  child: Icon(
+                    Icons.lightbulb_outline,
+                    size: 14,
+                    color: isSelected
+                        ? Colors.blue.shade300
+                        : (isDark ? Colors.white54 : Colors.grey.shade500),
+                  ),
                 ),
-                preferBelow: false,
-                verticalOffset: 16,
-                waitDuration: const Duration(milliseconds: 300),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1C1C1E),
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x4D000000),
-                      blurRadius: 12,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                child: Icon(
-                  Icons.lightbulb_outline,
-                  size: 14,
-                  color: isSelected
-                      ? Colors.blue.shade300
-                      : (isDark ? Colors.white54 : Colors.grey.shade500),
-                ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

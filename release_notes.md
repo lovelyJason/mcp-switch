@@ -1,3 +1,21 @@
+## v1.8.1
+
+### ✨ 新增特性
+
+- **Kiro 编辑器支持**：新增 Amazon Kiro 编辑器的 MCP 配置管理，包含启动屏图标及配置路径适配
+- **Atlassian MCP 预设**：新增 Atlassian（Jira / Confluence）MCP 预设，HTTP 远程连接，URL 为 `mcp.atlassian.com/v1/mcp`
+
+### 🚀 优化改进
+
+- **MCP Tools 描述浮层可复制**：Tool chip 的描述文字从 Tooltip 改为悬浮浮层，支持鼠标移入选中和复制，且自动限制在窗口边界内
+- **图标目录重构**：统一编辑器图标管理结构
+
+### 🐛 问题修复
+
+- **Cursor 远程配置字段名修正**：Cursor/Kiro 的 HTTP 远程配置从错误的 `serverUrl` 改为 `url`，并补充缺失的 `type` 字段
+- **自定义配置草稿泄漏**：修复从预设切换到自定义配置时，预设数据残留在配置预览中的问题
+
+
 ## v1.8.0
 
 ### ✨ 新增特性

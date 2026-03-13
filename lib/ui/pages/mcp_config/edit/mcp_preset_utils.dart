@@ -20,11 +20,13 @@ class McpPresetUtils {
       case EditorType.codex:
         return buildCodexRemoteConfig(connectionConfig, fieldValues);
       case EditorType.cursor:
+      case EditorType.kiro:
+        return _buildWithUrlKey('url', connectionConfig, fieldValues);
       case EditorType.windsurf:
       case EditorType.antigravity:
+        return _buildWithUrlKey('serverUrl', connectionConfig, fieldValues);
       case EditorType.gemini:
-      case EditorType.kiro:
-        return buildStandardRemoteConfig(connectionConfig, fieldValues);
+        return _buildWithUrlKey('httpUrl', connectionConfig, fieldValues);
     }
   }
 
@@ -47,14 +49,18 @@ class McpPresetUtils {
     return config;
   }
 
-  /// 生成标准远程配置 (Cursor, Windsurf 等)
-  static Map<String, dynamic> buildStandardRemoteConfig(
+  /// 根据 URL 字段名生成远程配置
+  static Map<String, dynamic> _buildWithUrlKey(
+    String urlKey,
     McpConnectionType connectionConfig,
     Map<String, String> fieldValues,
   ) {
     final headers = interpolateHeaders(connectionConfig.headers, fieldValues);
-
-    return {'serverUrl': connectionConfig.url ?? '', 'headers': headers};
+    return {
+      'type': connectionConfig.type,
+      urlKey: connectionConfig.url ?? '',
+      'headers': headers,
+    };
   }
 
   /// 生成 Codex 远程配置

@@ -64,6 +64,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
   late EditorType _currentEditorType;
 
   // 草稿缓存 key
+  static const _draftPresetIdKey = 'mcp_edit_draft_preset_id';
   static const _draftNameKey = 'mcp_edit_draft_name';
   static const _draftConnectionTypeKey = 'mcp_edit_draft_connection_type';
   static const _draftJsonKey = 'mcp_edit_draft_json';
@@ -91,17 +92,27 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
   }
 
   void _onJsonFocusChanged() {
-    // 失焦时保存草稿（仅新建模式）
+    // 失焦时保存草稿（仅新建模式 + 自定义预设）
     if (!_jsonFocusNode.hasFocus &&
         widget.profile == null &&
-        widget.initialData == null) {
+        widget.initialData == null &&
+        _selectedPresetId == 'custom') {
       _saveDraft();
     }
   }
 
-  /// 加载草稿缓存
+  /// 加载草稿缓存（仅恢复自定义模式的草稿）
   Future<void> _loadDraft() async {
     final prefs = await SharedPreferences.getInstance();
+    final draftPresetId = prefs.getString(_draftPresetIdKey);
+
+    // 只恢复自定义模式的草稿，预设配置不需要缓存
+    if (draftPresetId != null && draftPresetId != 'custom') {
+      _clearDraft();
+      _updateJsonFromForm();
+      return;
+    }
+
     final draftName = prefs.getString(_draftNameKey);
     final draftConnectionType = prefs.getString(_draftConnectionTypeKey);
     final draftJson = prefs.getString(_draftJsonKey);
@@ -128,6 +139,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
   /// 保存草稿到缓存
   Future<void> _saveDraft() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_draftPresetIdKey, _selectedPresetId);
     await prefs.setString(_draftNameKey, _nameController.text);
     await prefs.setString(_draftConnectionTypeKey, _selectedConnectionType);
     await prefs.setString(_draftJsonKey, _jsonController.text);
@@ -136,6 +148,7 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
   /// 清除草稿缓存
   Future<void> _clearDraft() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_draftPresetIdKey);
     await prefs.remove(_draftNameKey);
     await prefs.remove(_draftConnectionTypeKey);
     await prefs.remove(_draftJsonKey);
@@ -383,6 +396,8 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
   void _onPresetSelected(McpPreset preset) {
     _jsonController.clear();
     _selectedPresetId = preset.id;
+
+    if (!preset.isCustom) _clearDraft();
 
     // 清空动态字段
     for (final controller in _dynamicFieldControllers.values) {
@@ -941,29 +956,27 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
       if (type == 'local') {
         _updateJsonFromForm();
       } else {
-        // http/sse 模式清空 command/args，生成空的远程配置
         _commandController.clear();
         _argsController.clear();
 
-        // 根据编辑器类型生成不同字段名
-        // Windsurf/Antigravity 使用 serverUrl，Gemini 使用 httpUrl，其他使用 url
-        Map<String, dynamic> config;
-        if (_currentEditorType == EditorType.windsurf ||
-            _currentEditorType == EditorType.antigravity) {
-          config = {'type': type, 'serverUrl': ''};
-        } else if (_currentEditorType == EditorType.gemini) {
-          config = {'type': type, 'httpUrl': ''};
-        } else {
-          // Claude Code 需要 type 字段
-          config = {'type': type, 'url': ''};
-        }
         final name = _nameController.text.isEmpty
             ? 'server'
             : _nameController.text;
-        _jsonController.text = _formatConfigTextForEditor(
-          name,
-          Map<String, dynamic>.from(config),
-        );
+
+        // Codex 使用 TOML
+        if (_currentEditorType == EditorType.codex) {
+          _jsonController.text =
+              '[mcp_servers.$name]\nurl = ""';
+        } else {
+          // 各编辑器的 URL 字段名不同
+          final urlKey = switch (_currentEditorType) {
+            EditorType.windsurf || EditorType.antigravity => 'serverUrl',
+            EditorType.gemini => 'httpUrl',
+            _ => 'url',
+          };
+          final config = {'type': type, urlKey: '', 'headers': <String, String>{}};
+          _jsonController.text = const JsonEncoder.withIndent('  ').convert(config);
+        }
       }
     });
   }

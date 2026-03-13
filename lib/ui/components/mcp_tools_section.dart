@@ -162,7 +162,19 @@ class _McpToolsSectionState extends State<McpToolsSection> {
   }
 
   Widget _buildToolChip(McpTool tool, bool isDark) {
-    final chip = Container(
+    final hasDesc = tool.description != null && tool.description!.isNotEmpty;
+    if (!hasDesc) {
+      return _chipBody(tool.name, isDark);
+    }
+    return _HoverableToolChip(
+      toolName: tool.name,
+      description: tool.description!,
+      isDark: isDark,
+    );
+  }
+
+  static Widget _chipBody(String name, bool isDark) {
+    return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
@@ -173,7 +185,7 @@ class _McpToolsSectionState extends State<McpToolsSection> {
         ),
       ),
       child: Text(
-        tool.name,
+        name,
         style: TextStyle(
           fontSize: 12,
           fontFamily: 'monospace',
@@ -181,27 +193,144 @@ class _McpToolsSectionState extends State<McpToolsSection> {
         ),
       ),
     );
+  }
+}
 
-    if (tool.description != null && tool.description!.isNotEmpty) {
-      return Tooltip(
-        message: tool.description!,
-        preferBelow: false,
-        verticalOffset: 16,
-        waitDuration: const Duration(milliseconds: 300),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF3A3A3C) : Colors.grey.shade800,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        textStyle: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          height: 1.4,
-        ),
-        child: chip,
-      );
-    }
+/// 支持悬浮显示可选中描述文字的 tool chip
+class _HoverableToolChip extends StatefulWidget {
+  final String toolName;
+  final String description;
+  final bool isDark;
 
-    return chip;
+  const _HoverableToolChip({
+    required this.toolName,
+    required this.description,
+    required this.isDark,
+  });
+
+  @override
+  State<_HoverableToolChip> createState() => _HoverableToolChipState();
+}
+
+class _HoverableToolChipState extends State<_HoverableToolChip> {
+  OverlayEntry? _entry;
+  bool _chipHovered = false;
+  bool _popoverHovered = false;
+
+  static const _showDelay = Duration(milliseconds: 350);
+  static const _hideDelay = Duration(milliseconds: 250);
+  int _showToken = 0;
+  int _hideToken = 0;
+
+  void _scheduleShow() {
+    final token = ++_showToken;
+    Future.delayed(_showDelay, () {
+      if (token == _showToken && _chipHovered && mounted) _show();
+    });
+  }
+
+  void _scheduleHide() {
+    final token = ++_hideToken;
+    Future.delayed(_hideDelay, () {
+      if (token == _hideToken && !_chipHovered && !_popoverHovered) _hide();
+    });
+  }
+
+  void _show() {
+    if (_entry != null) return;
+    final overlay = Overlay.of(context);
+    final box = context.findRenderObject() as RenderBox;
+    final chipSize = box.size;
+    final chipPos = box.localToGlobal(Offset.zero);
+
+    _entry = OverlayEntry(
+      builder: (ctx) {
+        final screen = MediaQuery.of(ctx).size;
+        const maxW = 340.0;
+        const gap = 6.0;
+        const edgePad = 16.0;
+
+        double left = chipPos.dx;
+        if (left + maxW > screen.width - edgePad) {
+          left = screen.width - maxW - edgePad;
+        }
+        if (left < edgePad) left = edgePad;
+
+        final spaceAbove = chipPos.dy - gap - edgePad;
+        final spaceBelow = screen.height - chipPos.dy - chipSize.height - gap - edgePad;
+        final showBelow = spaceAbove < 80;
+        final maxH = (showBelow ? spaceBelow : spaceAbove).clamp(60.0, 400.0);
+
+        return Stack(children: [
+          Positioned(
+            left: left,
+            top: showBelow ? chipPos.dy + chipSize.height + gap : null,
+            bottom: showBelow ? null : screen.height - chipPos.dy + gap,
+            child: MouseRegion(
+              onEnter: (_) {
+                _popoverHovered = true;
+                _hideToken++;
+              },
+              onExit: (_) {
+                _popoverHovered = false;
+                _scheduleHide();
+              },
+              child: Material(
+                elevation: 6,
+                shadowColor: Colors.black38,
+                borderRadius: BorderRadius.circular(8),
+                color: widget.isDark
+                    ? const Color(0xFF3A3A3C)
+                    : Colors.grey.shade800,
+                child: Container(
+                  constraints: BoxConstraints(maxWidth: maxW, maxHeight: maxH),
+                  padding: const EdgeInsets.all(12),
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      widget.description,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ]);
+      },
+    );
+    overlay.insert(_entry!);
+  }
+
+  void _hide() {
+    _entry?.remove();
+    _entry = null;
+  }
+
+  @override
+  void dispose() {
+    _showToken++;
+    _hideToken++;
+    _hide();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) {
+        _chipHovered = true;
+        _hideToken++;
+        _scheduleShow();
+      },
+      onExit: (_) {
+        _chipHovered = false;
+        _scheduleHide();
+      },
+      child: _McpToolsSectionState._chipBody(widget.toolName, widget.isDark),
+    );
   }
 }

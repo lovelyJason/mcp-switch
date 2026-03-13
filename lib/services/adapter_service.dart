@@ -43,9 +43,15 @@ class AdapterService {
     switch (targetEditor) {
       case EditorType.windsurf:
       case EditorType.antigravity:
-      case EditorType.cursor: // Valid assumption: New Cursor versions might support this or standard http
         return {
           'serverUrl': config.endpoint,
+          'headers': config.headers,
+        };
+
+      case EditorType.cursor:
+      case EditorType.kiro:
+        return {
+          'url': config.endpoint,
           'headers': config.headers,
         };
 

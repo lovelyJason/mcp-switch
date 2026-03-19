@@ -718,8 +718,6 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
               claudeSaveMode: _claudeSaveMode,
               onSaveModeChanged: (mode) =>
                   setState(() => _claudeSaveMode = mode),
-              onImport: _importPresets,
-              onExport: _exportPresets,
               onBack: () {
                 // 返回前刷新数据，确保列表页显示最新状态
                 context.read<ConfigService>().reloadProfiles();
@@ -786,7 +784,8 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
           children: [
             SectionTitle(S.get('preset_mcp')),
             const Spacer(),
-            // Smithery 按钮
+            ImportExportButtons(onImport: _importPresets, onExport: _exportPresets),
+            const SizedBox(width: 4),
             TextButton.icon(
               onPressed: () async {
                 final uri = Uri.parse('https://smithery.ai/');

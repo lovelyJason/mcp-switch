@@ -348,6 +348,7 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
                     isConfigSynced: profile.isActive
                         ? _isConfigSynced
                         : null,
+                    isActiveSynced: _isConfigSynced,
                     onReturnFromEdit: _checkConfigSync,
                   );
                 },
@@ -365,6 +366,7 @@ class _ProviderListItem extends StatefulWidget {
   final String editorType;
   final bool isDark;
   final bool? isConfigSynced;
+  final bool? isActiveSynced;
   final VoidCallback? onReturnFromEdit;
 
   const _ProviderListItem({
@@ -372,6 +374,7 @@ class _ProviderListItem extends StatefulWidget {
     required this.editorType,
     required this.isDark,
     this.isConfigSynced,
+    this.isActiveSynced,
     this.onReturnFromEdit,
   });
 
@@ -635,6 +638,15 @@ class _ProviderListItemState extends State<_ProviderListItem> {
       ),
       child: TextButton.icon(
         onPressed: () {
+          if (widget.isActiveSynced == false) {
+            Toast.show(
+              context,
+              message: S.get('provider_switch_blocked_by_sync'),
+              type: ToastType.warning,
+              duration: const Duration(seconds: 4),
+            );
+            return;
+          }
           final service = Provider.of<ProviderSwitchService>(
             context,
             listen: false,

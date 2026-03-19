@@ -80,10 +80,10 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
         '/Applications/Windsurf.app',
         'windsurf',
       ),
-      _checkAppInstalled(
-        'Kiro Editor',
+      _checkAppInstalledMulti(
+        'Kiro',
         'assets/icons/editors/kiro.svg',
-        '/Applications/Kiro IDE.app',
+        ['/Applications/Kiro.app', '/Applications/Kiro IDE.app'],
         'kiro',
       ),
     ]);
@@ -133,8 +133,8 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
         return ('/Applications/Cursor.app', 'cursor');
       case 'Windsurf':
         return ('/Applications/Windsurf.app', 'windsurf');
-      case 'Kiro Editor':
-        return ('/Applications/Kiro IDE.app', 'kiro');
+      case 'Kiro':
+        return ('/Applications/Kiro.app', 'kiro');
       case 'Antigravity':
         return ('/Applications/Antigravity.app', 'antigravity');
       default:
@@ -268,7 +268,23 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
     String appPath, [
     String? cliCommand,
   ]) async {
-    final exists = await Directory(appPath).exists();
+    return _checkAppInstalledMulti(name, icon, [appPath], cliCommand);
+  }
+
+  Future<_ToolCheckResult> _checkAppInstalledMulti(
+    String name,
+    String icon,
+    List<String> appPaths, [
+    String? cliCommand,
+  ]) async {
+    String? foundPath;
+    for (final p in appPaths) {
+      if (await Directory(p).exists()) {
+        foundPath = p;
+        break;
+      }
+    }
+    final exists = foundPath != null;
     String? version;
     String? error;
     if (exists && cliCommand != null) {
@@ -290,7 +306,7 @@ class _EnvironmentCheckTabState extends State<EnvironmentCheckTab> {
       icon: icon,
       isInstalled: exists,
       version: version,
-      path: exists ? appPath : null,
+      path: foundPath,
       error: exists && version == null && cliCommand != null ? error : null,
     );
   }

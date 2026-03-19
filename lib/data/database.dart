@@ -26,6 +26,7 @@ class ProviderProfiles extends Table {
   TextColumn get modelReasoningEffort => text().nullable()();
   TextColumn get personality => text().nullable()();
   TextColumn get oauthData => text().nullable()(); // Codex OAuth tokens JSON
+  TextColumn get vscodeModel => text().nullable()();
   // 完整配置内容 (JSON/TOML/ENV)
   TextColumn get configContent => text().nullable()();
   // 通用
@@ -48,7 +49,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration {
@@ -66,6 +67,10 @@ class AppDatabase extends _$AppDatabase {
         if (from < 4) {
           await _safeAddColumn(
               m, providerProfiles, providerProfiles.configContent);
+        }
+        if (from < 5) {
+          await _safeAddColumn(
+              m, providerProfiles, providerProfiles.vscodeModel);
         }
       },
     );

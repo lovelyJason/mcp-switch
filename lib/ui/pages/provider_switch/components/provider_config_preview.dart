@@ -326,7 +326,7 @@ mixin _ProviderEditPreview on State<ProviderEditScreen> {
     );
 
     final model = _selectedModel;
-    if (model != null && model.isNotEmpty) {
+    if (model != null && model.isNotEmpty && model != 'default') {
       data['model'] = model;
     } else {
       data.remove('model');

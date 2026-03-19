@@ -14,6 +14,7 @@ import '../../components/styled_dropdown.dart';
 import '../../components/custom_toast.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'environment_check_tab.dart';
+import 'widgets/backup_section.dart';
 import 'widgets/proxy_settings_section.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -1045,6 +1046,11 @@ class _SettingsScreenState extends State<SettingsScreen>
 
         // 全局出站代理配置
         const ProxySettingsSection(),
+
+        const SizedBox(height: 32),
+
+        // 数据导入导出
+        const BackupSection(),
       ],
     );
   }

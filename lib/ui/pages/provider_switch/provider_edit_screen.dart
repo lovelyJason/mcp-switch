@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -18,6 +19,13 @@ import 'components/config_conflict_banner.dart';
 
 part 'components/provider_edit_form_fields.dart';
 part 'components/provider_config_preview.dart';
+
+class _SpeedTestResult {
+  final int? latencyMs;
+  final int? statusCode;
+  final String? error;
+  const _SpeedTestResult({this.latencyMs, this.statusCode, this.error});
+}
 
 class ProviderEditScreen extends StatefulWidget {
   final String editorType;
@@ -86,6 +94,10 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   @override
   TextEditingController? _cliModelController;
   @override
+  bool _isSpeedTesting = false;
+  @override
+  _SpeedTestResult? _speedTestResult;
+  @override
   String _editedCodexText = '';
   @override
   bool _codexConfigLoaded = false;
@@ -104,6 +116,9 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   bool _hasConfigConflict = false;
   @override
   String _localFileContent = '';
+
+  bool _hasVscodeModelConflict = false;
+  String? _localVscodeModel;
 
   @override
   final ScrollController _pageScrollController = ScrollController();
@@ -147,16 +162,8 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
     _maxThinkingTokensController = TextEditingController(
       text: p?.maxThinkingTokens ?? '',
     );
-    _selectedModel =
-        p?.model ??
-        (_isClaude
-            ? ProviderSwitchService.claudeModels.first
-            : _isGemini
-            ? null
-            : ProviderSwitchService.codexModels.first);
-    _selectedVscodeModel = _isClaude
-        ? ProviderSwitchService.claudeModels.first
-        : null;
+    _selectedModel = p?.model;
+    _selectedVscodeModel = _isClaude ? p?.vscodeModel : null;
     _selectedReasoningEffort = p?.modelReasoningEffort ?? 'high';
     _selectedPersonality = p?.personality ?? 'pragmatic';
     _selectedPresetName = '_custom_';
@@ -302,30 +309,134 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
 
   Future<void> _checkConfigConflict() async {
     final p = widget.profile;
-    if (p == null || !p.isActive || p.configContent == null) return;
+    if (p == null || !p.isActive) return;
 
+    if (p.configContent != null) {
+      try {
+        String fileContent;
+        bool isSynced;
+        if (_isClaude) {
+          fileContent = await ProviderSwitchService.readClaudeConfigFile();
+          isSynced = ProviderSwitchService.jsonEquals(
+              p.configContent!, fileContent);
+        } else if (_isGemini) {
+          fileContent = await ProviderSwitchService.readGeminiEnvFile();
+          isSynced = ProviderSwitchService.envEquals(
+              p.configContent!, fileContent);
+        } else {
+          fileContent = await ProviderSwitchService.readCodexConfigFile();
+          isSynced = ProviderSwitchService.normalizedEquals(
+              p.configContent!, fileContent);
+        }
+        if (!isSynced && mounted) {
+          setState(() {
+            _hasConfigConflict = true;
+            _localFileContent = fileContent;
+          });
+        }
+      } catch (_) {}
+    }
+
+    if (_isClaude) {
+      await _checkVscodeModelConflict(p);
+    }
+  }
+
+  Future<void> _checkVscodeModelConflict(ProviderProfile p) async {
     try {
-      String fileContent;
-      bool isSynced;
-      if (_isClaude) {
-        fileContent = await ProviderSwitchService.readClaudeConfigFile();
-        isSynced = ProviderSwitchService.jsonEquals(p.configContent!, fileContent);
-      } else if (_isGemini) {
-        fileContent = await ProviderSwitchService.readGeminiEnvFile();
-        isSynced = ProviderSwitchService.envEquals(p.configContent!, fileContent);
-      } else {
-        fileContent = await ProviderSwitchService.readCodexConfigFile();
-        isSynced = ProviderSwitchService.normalizedEquals(
-          p.configContent!, fileContent,
-        );
-      }
-      if (!isSynced && mounted) {
+      final fileModel = await ProviderSwitchService.readVscodeSelectedModel();
+      final dbModel = (p.vscodeModel ?? '').trim();
+      final diskModel = (fileModel ?? '').trim();
+      if (dbModel != diskModel && mounted) {
         setState(() {
-          _hasConfigConflict = true;
-          _localFileContent = fileContent;
+          _hasVscodeModelConflict = true;
+          _localVscodeModel = fileModel;
         });
       }
     } catch (_) {}
+  }
+
+  Widget _buildVscodeModelConflictBanner() {
+    final dbVal = widget.profile?.vscodeModel ?? '';
+    final fileVal = _localVscodeModel ?? '';
+    final dbDisplay = dbVal.isEmpty
+        ? S.get('provider_vscode_model_empty')
+        : dbVal;
+    final fileDisplay = fileVal.isEmpty
+        ? S.get('provider_vscode_model_empty')
+        : fileVal;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      color: Colors.amber.withValues(alpha: 0.15),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            size: 18,
+            color: Colors.amber,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              S.get('vscode_model_conflict_banner')
+                  .replaceAll('{db}', dbDisplay)
+                  .replaceAll('{file}', fileDisplay),
+              style: const TextStyle(fontSize: 13, color: Colors.amber),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buildVscodeConflictAction(
+            label: S.get('vscode_model_use_file'),
+            onTap: () => _resolveVscodeModelConflict(useFile: true),
+          ),
+          const SizedBox(width: 4),
+          _buildVscodeConflictAction(
+            label: S.get('vscode_model_use_saved'),
+            onTap: () => _resolveVscodeModelConflict(useFile: false),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVscodeConflictAction({
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.amber,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _resolveVscodeModelConflict({required bool useFile}) {
+    setState(() {
+      if (useFile) {
+        _selectedVscodeModel = _localVscodeModel;
+      }
+      _hasVscodeModelConflict = false;
+      _localVscodeModel = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _initialSnapshot = _takeSnapshot();
+    });
   }
 
   @override
@@ -374,6 +485,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       'maxOutputTokens': _maxOutputTokensController.text.trim(),
       'maxThinkingTokens': _maxThinkingTokensController.text.trim(),
       'model': _selectedModel?.trim(),
+      'vscodeModel': _selectedVscodeModel?.trim(),
       'reasoningEffort': _selectedReasoningEffort,
       'personality': _selectedPersonality,
       'editedConfig': _isClaude && _claudeBaseConfig.isNotEmpty
@@ -456,6 +568,8 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
                 ConfigConflictBanner(
                   onDismiss: () => _resolveConflict(useLocal: false),
                 ),
+              if (_hasVscodeModelConflict)
+                _buildVscodeModelConflictBanner(),
               Expanded(
                 child: SingleChildScrollView(
                   controller: _pageScrollController,
@@ -749,6 +863,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
         personality: _selectedPersonality,
         website: website,
         configContent: configContent,
+        vscodeModel: _selectedVscodeModel,
       );
     } else {
       await service.addProfile(
@@ -764,6 +879,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
         personality: _selectedPersonality,
         website: website,
         configContent: configContent,
+        vscodeModel: _selectedVscodeModel,
       );
     }
 
@@ -816,6 +932,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       modelReasoningEffort: _selectedReasoningEffort,
       personality: _selectedPersonality,
       website: _websiteController.text.isEmpty ? null : _websiteController.text,
+      vscodeModel: _selectedVscodeModel,
       createdAt: widget.profile?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
     );

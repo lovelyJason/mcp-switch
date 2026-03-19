@@ -32,6 +32,11 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
   TextEditingController? get _cliModelController;
   set _cliModelController(TextEditingController? v);
 
+  bool get _isSpeedTesting;
+  set _isSpeedTesting(bool v);
+  _SpeedTestResult? get _speedTestResult;
+  set _speedTestResult(_SpeedTestResult? v);
+
   // ── Label + 红色必填星号 ─────────────────────────────────────────
   Widget _buildLabeledField({
     required String label,
@@ -156,7 +161,13 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
         _buildLabeledField(
           label: S.get('provider_base_url'),
           isRequired: !_isOfficialPreset,
-          trailing: _isOfficial ? _buildOfficialHintIcon(isDark) : null,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_isOfficial) _buildOfficialHintIcon(isDark),
+              if (!_isOfficial) _buildSpeedTestButton(isDark),
+            ],
+          ),
           child: TextFormField(
             controller: _baseUrlController,
             style: TextStyle(
@@ -221,7 +232,191 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
               ),
             ),
           ),
+        if (_speedTestResult != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _buildSpeedTestResultBadge(),
+          ),
       ],
+    );
+  }
+
+  Widget _buildSpeedTestButton(bool isDark) {
+    return Tooltip(
+      message: S.get('speed_test_tooltip'),
+      child: InkWell(
+        onTap: _isSpeedTesting ? null : _runSpeedTest,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_isSpeedTesting)
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    color: Colors.orange.shade300,
+                  ),
+                )
+              else
+                Icon(
+                  Icons.speed,
+                  size: 14,
+                  color: Colors.orange.shade300,
+                ),
+              const SizedBox(width: 4),
+              Text(
+                S.get('speed_test_btn'),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.orange.shade300,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _runSpeedTest() async {
+    final url = _baseUrlController.text.trim();
+    if (url.isEmpty) {
+      Toast.show(
+        context,
+        message: S.get('speed_test_no_url'),
+        type: ToastType.warning,
+      );
+      return;
+    }
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      Toast.show(
+        context,
+        message: S.get('provider_base_url_invalid'),
+        type: ToastType.warning,
+      );
+      return;
+    }
+
+    setState(() {
+      _isSpeedTesting = true;
+      _speedTestResult = null;
+    });
+
+    try {
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 10);
+      final sw = Stopwatch()..start();
+      final request = await client.getUrl(uri);
+      final response = await request.close();
+      sw.stop();
+      final latency = sw.elapsedMilliseconds;
+      final status = response.statusCode;
+      client.close(force: true);
+
+      if (!mounted) return;
+      setState(() {
+        _isSpeedTesting = false;
+        _speedTestResult = _SpeedTestResult(
+          latencyMs: latency,
+          statusCode: status,
+        );
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSpeedTesting = false;
+        _speedTestResult = _SpeedTestResult(
+          error: e.toString().replaceAll(RegExp(r'^[A-Za-z]*Exception: '), ''),
+        );
+      });
+    }
+  }
+
+  Widget _buildSpeedTestResultBadge() {
+    final result = _speedTestResult!;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (result.error != null) {
+      return _speedBadge(
+        icon: Icons.error_outline,
+        color: Colors.red,
+        text: '${S.get('speed_test_failed')}: ${result.error}',
+        isDark: isDark,
+      );
+    }
+
+    final ms = result.latencyMs!;
+    final status = result.statusCode!;
+    final isServerError = status >= 500;
+
+    final Color latencyColor;
+    if (isServerError) {
+      latencyColor = Colors.red;
+    } else if (ms < 300) {
+      latencyColor = Colors.green;
+    } else if (ms < 600) {
+      latencyColor = Colors.orange;
+    } else {
+      latencyColor = Colors.red;
+    }
+
+    final String statusLabel;
+    if (status >= 200 && status < 300) {
+      statusLabel = 'HTTP $status';
+    } else if (status == 401 || status == 403) {
+      statusLabel = S.get('speed_test_status_auth');
+    } else if (isServerError) {
+      statusLabel = S.get('speed_test_status_server_error');
+    } else {
+      statusLabel = 'HTTP $status';
+    }
+
+    return _speedBadge(
+      icon: isServerError ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+      color: latencyColor,
+      text: '${ms}ms · $statusLabel',
+      isDark: isDark,
+    );
+  }
+
+  Widget _speedBadge({
+    required IconData icon,
+    required Color color,
+    required String text,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.12 : 0.08),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 12, color: color),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          InkWell(
+            onTap: () => setState(() => _speedTestResult = null),
+            borderRadius: BorderRadius.circular(10),
+            child: Icon(Icons.close, size: 14, color: color),
+          ),
+        ],
+      ),
     );
   }
 
@@ -283,9 +478,8 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
 
   // ── Model ────────────────────────────────────────────────────────
   Widget _buildModelField(bool isDark) {
-    // Claude 用精简版模型列表 + Autocomplete，Gemini/Codex 用原来的
     final models = _isClaude
-        ? ProviderSwitchService.claudeModelsSimple
+        ? ProviderSwitchService.claudeModels
         : _isGemini
         ? ProviderSwitchService.geminiModels
         : _codexModelOptions;
@@ -410,7 +604,8 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
   Widget _buildVscodeModelField(bool isDark) {
     if (!_isClaude) return const SizedBox.shrink();
 
-    final models = List<String>.from(ProviderSwitchService.claudeModelsSimple);
+    final models =
+        List<String>.from(ProviderSwitchService.vscodePluginModels);
     final currentModel = _selectedVscodeModel?.trim();
     if (currentModel != null &&
         currentModel.isNotEmpty &&
@@ -420,6 +615,15 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
 
     return _buildLabeledField(
       label: S.get('provider_vscode_model'),
+      trailing: Tooltip(
+        message: S.get('provider_vscode_model_format_hint'),
+        preferBelow: false,
+        child: Icon(
+          Icons.help_outline,
+          size: 16,
+          color: isDark ? Colors.grey.shade500 : Colors.grey.shade400,
+        ),
+      ),
       child: _buildAutocompleteModelField(
         value: _selectedVscodeModel,
         models: models,

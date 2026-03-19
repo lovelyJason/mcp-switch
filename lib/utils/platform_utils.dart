@@ -1538,10 +1538,17 @@ class PlatformUtils {
   // Kiro 相关
   // ═══════════════════════════════════════════════════════════════════════════
 
+  static const _kiroPaths = [
+    '/Applications/Kiro.app',
+    '/Applications/Kiro IDE.app',
+  ];
+
   /// 检测 Kiro 是否已安装
   static Future<bool> isKiroInstalled() async {
     if (Platform.isMacOS) {
-      return Directory('/Applications/Kiro IDE.app').exists();
+      for (final path in _kiroPaths) {
+        if (await Directory(path).exists()) return true;
+      }
     }
     return false;
   }
@@ -1549,9 +1556,10 @@ class PlatformUtils {
   /// 检测 Kiro 完整安装状态
   static Future<KiroInstallStatus> checkKiroInstallStatus() async {
     if (Platform.isMacOS) {
-      const appPath = '/Applications/Kiro IDE.app';
-      if (await Directory(appPath).exists()) {
-        return const KiroInstallStatus(appPath: appPath);
+      for (final path in _kiroPaths) {
+        if (await Directory(path).exists()) {
+          return KiroInstallStatus(appPath: path);
+        }
       }
     }
     return const KiroInstallStatus(appPath: null);

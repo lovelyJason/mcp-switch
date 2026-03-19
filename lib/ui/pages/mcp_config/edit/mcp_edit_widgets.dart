@@ -436,8 +436,6 @@ class EditHeader extends StatelessWidget {
   final bool isEditMode;
   final String claudeSaveMode;
   final ValueChanged<String> onSaveModeChanged;
-  final VoidCallback onImport;
-  final VoidCallback onExport;
   final VoidCallback onBack;
   final ValueChanged<EditorType>? onEditorTypeChanged;
 
@@ -447,8 +445,6 @@ class EditHeader extends StatelessWidget {
     required this.isEditMode,
     required this.claudeSaveMode,
     required this.onSaveModeChanged,
-    required this.onImport,
-    required this.onExport,
     required this.onBack,
     this.onEditorTypeChanged,
   });
@@ -493,6 +489,7 @@ class EditHeader extends StatelessWidget {
             const SizedBox(width: 8),
           ],
           Flexible(
+            flex: 3,
             child: Text(
               isEditMode
                   ? S.get('edit_mcp_title').replaceAll('{editor}', editorType.label)
@@ -505,19 +502,14 @@ class EditHeader extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          // 编辑器切换下拉按钮（仅新增模式且提供了回调时显示）- 放在标题旁边
           if (!isEditMode && onEditorTypeChanged != null) ...[
-            const SizedBox(width: 8),
+            const SizedBox(width: 16),
             McpEditorSwitcher(
               currentEditor: editorType,
               onSwitch: onEditorTypeChanged!,
             ),
           ],
           const Spacer(),
-          if (!isEditMode) ...[
-            ImportExportButtons(onImport: onImport, onExport: onExport),
-            const SizedBox(width: 12),
-          ],
           if (editorType == EditorType.claude && !isEditMode)
             SaveModeToggle(
               currentMode: claudeSaveMode,

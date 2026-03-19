@@ -409,6 +409,7 @@ class ProviderSwitchService extends ChangeNotifier {
     String? personality,
     String? website,
     String? configContent,
+    String? vscodeModel,
   }) async {
     final now = DateTime.now();
     final entry = ProviderProfilesCompanion.insert(
@@ -425,6 +426,7 @@ class ProviderSwitchService extends ChangeNotifier {
       personality: Value(personality),
       website: Value(website),
       configContent: Value(configContent),
+      vscodeModel: Value(vscodeModel),
       createdAt: now,
       updatedAt: now,
     );
@@ -448,6 +450,7 @@ class ProviderSwitchService extends ChangeNotifier {
     String? personality,
     String? website,
     String? configContent,
+    String? vscodeModel,
   }) async {
     final existingProfile = await _db.getProfileById(id);
     final wasActive = existingProfile?.isActive ?? false;
@@ -466,6 +469,7 @@ class ProviderSwitchService extends ChangeNotifier {
       personality: Value(personality),
       website: Value(website),
       configContent: Value(configContent),
+      vscodeModel: Value(vscodeModel),
       updatedAt: Value(DateTime.now()),
     );
     await _db.updateProfile(entry);
@@ -511,6 +515,7 @@ class ProviderSwitchService extends ChangeNotifier {
     try {
       if (editorType == 'claude') {
         await _writeClaudeSettings(profile);
+        await _writeVscodePluginModel(profile);
         await _syncClaudePluginIntegration(profile);
       } else if (editorType == 'codex') {
         await _writeCodexConfig(profile);
@@ -754,13 +759,46 @@ class ProviderSwitchService extends ChangeNotifier {
     setOrRemove(env, 'CLAUDE_CODE_MAX__OUTPUT_TOKENS', profile.maxOutputTokens);
     setOrRemove(env, 'MAX_THINKING_TOKENS', profile.maxThinkingTokens);
 
-    if (profile.model != null && profile.model!.isNotEmpty) {
+    if (profile.model != null &&
+        profile.model!.isNotEmpty &&
+        profile.model != 'default') {
       config['model'] = profile.model;
     } else {
       config.remove('model');
     }
 
     await file.writeAsString(encoder.convert(config));
+  }
+
+  /// 写入 VSCode 插件模型到 VSCode settings.json
+  Future<void> _writeVscodePluginModel(ProviderProfile profile) async {
+    final vscodeModel = profile.vscodeModel;
+    final home = PlatformUtils.userHome;
+    final codeUserDir = PlatformUtils.joinPath(
+      home,
+      'Library',
+      'Application Support',
+      'Code',
+      'User',
+    );
+    final settingsPath = PlatformUtils.joinPath(codeUserDir, 'settings.json');
+    final file = File(settingsPath);
+
+    Map<String, dynamic> settings = {};
+    if (await file.exists()) {
+      try {
+        settings = jsonDecode(await file.readAsString());
+      } catch (_) {}
+    }
+
+    if (vscodeModel != null && vscodeModel.isNotEmpty) {
+      settings['claudeCode.selectedModel'] = vscodeModel;
+    } else {
+      settings.remove('claudeCode.selectedModel');
+    }
+
+    const encoder = JsonEncoder.withIndent('    ');
+    await file.writeAsString(encoder.convert(settings));
   }
 
   static void setOrRemove(Map<String, dynamic> map, String key, String? value) {
@@ -853,7 +891,9 @@ class ProviderSwitchService extends ChangeNotifier {
     try {
       if (editorType == 'claude') {
         final fileContent = await readClaudeConfigFile();
-        return jsonEquals(dbContent, fileContent);
+        if (!jsonEquals(dbContent, fileContent)) return false;
+        if (!await checkVscodeModelSync(active)) return false;
+        return true;
       } else if (editorType == 'codex') {
         final fileContent = await readCodexConfigFile();
         return normalizedEquals(dbContent, fileContent);
@@ -865,6 +905,32 @@ class ProviderSwitchService extends ChangeNotifier {
       return false;
     }
     return true;
+  }
+
+  /// 读取 VSCode settings.json 中的 claudeCode.selectedModel
+  static Future<String?> readVscodeSelectedModel() async {
+    final home = PlatformUtils.userHome;
+    final codeUserDir = PlatformUtils.joinPath(
+      home, 'Library', 'Application Support', 'Code', 'User',
+    );
+    final settingsPath = PlatformUtils.joinPath(codeUserDir, 'settings.json');
+    final file = File(settingsPath);
+    if (!await file.exists()) return null;
+    try {
+      final data = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      return data['claudeCode.selectedModel']?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 检查 VSCode 插件模型是否与 SQLite 一致
+  Future<bool> checkVscodeModelSync(ProviderProfile profile) async {
+    final dbModel = profile.vscodeModel;
+    final fileModel = await readVscodeSelectedModel();
+    final dbNorm = (dbModel ?? '').trim();
+    final fileNorm = (fileModel ?? '').trim();
+    return dbNorm == fileNorm;
   }
 
   static bool jsonEquals(String a, String b) {
@@ -946,22 +1012,33 @@ class ProviderSwitchService extends ChangeNotifier {
     }
   }
 
-  /// 获取 Claude 可用模型列表
+  /// Claude CLI 模型列表（从 claude binary 提取）
   static const List<String> claudeModels = [
-    'opus',
-    'sonnet',
+    'default',
     'haiku',
-    'claude-opus-4-5-20251101',
+    'sonnet',
+    'sonnet[1m]',
+    'opus',
+    'opus[1m]',
+    'claude-sonnet-4-6',
+    'claude-sonnet-4-6[1m]',
     'claude-sonnet-4-5-20250929',
-    'claude-sonnet-4-20250514',
+    'claude-sonnet-4-5-20250929[1m]',
+    'claude-opus-4-6',
+    'claude-opus-4-5-20251101',
+    'claude-opus-4-1-20250805',
     'claude-haiku-4-5-20251001',
-    'claude-3-5-sonnet-20241022',
-    'claude-3-5-haiku-20241022',
-    'claude-3-opus-20240229',
   ];
 
-  /// CLI 模型精简版（仅 opus/sonnet/haiku）
-  static const List<String> claudeModelsSimple = ['opus', 'sonnet', 'haiku'];
+  /// VSCode 插件模型预设列表
+  static const List<String> vscodePluginModels = [
+    'claude-sonnet-4-6',
+    'claude-sonnet-4-5',
+    'claude-opus-4-6',
+    'claude-opus-4-5',
+    'claude-opus-4-1',
+    'claude-haiku-4-5',
+  ];
 
   /// 获取 Codex 可用模型列表
   static const List<String> codexModels = [

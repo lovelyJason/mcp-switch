@@ -57,6 +57,7 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
   void didUpdateWidget(ConfigListScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.editorType != oldWidget.editorType) {
+      _searchController.clear();
       _loadEditorData(widget.editorType);
     }
   }
@@ -490,17 +491,28 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
                 if (CursorWorkspaceService.instance.shouldUseSqlite &&
                     _cursorWorkspaces != null &&
                     _cursorWorkspaces!.isNotEmpty) ...[
-                  _buildSectionHeader(
-                    S.get('cursor_workspace_section'),
-                    tooltip: S.get('cursor_workspace_tooltip'),
-                  ),
-                  ..._cursorWorkspaces!.map(
-                    (ws) => CursorWorkspaceCard(
-                      key: ValueKey(ws.folderPath),
-                      workspace: ws,
-                      globalServerNames: serverNames,
-                    ),
-                  ),
+                  _buildWorkspaceSectionHeader(),
+                  ...() {
+                    var filtered = _searchQuery.isEmpty
+                        ? _cursorWorkspaces!
+                        : _cursorWorkspaces!
+                              .where(
+                                (ws) => ws.folderPath
+                                    .toLowerCase()
+                                    .contains(_searchQuery),
+                              )
+                              .toList();
+                    if (_projectSortDescending) {
+                      filtered = filtered.reversed.toList();
+                    }
+                    return filtered.map(
+                      (ws) => CursorWorkspaceCard(
+                        key: ValueKey(ws.folderPath),
+                        workspace: ws,
+                        globalServerNames: serverNames,
+                      ),
+                    );
+                  }(),
                 ],
 
                 if (_loadingWorkspaces)
@@ -579,6 +591,107 @@ class _ConfigListScreenState extends State<ConfigListScreen> {
           const SizedBox(width: 6),
           Tooltip(
             message: S.get('project_config_tooltip'),
+            preferBelow: false,
+            verticalOffset: 16,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade800,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            textStyle: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              height: 1.5,
+            ),
+            child: Icon(
+              Icons.help_outline,
+              size: 16,
+              color: Colors.grey.shade500,
+            ),
+          ),
+          const Spacer(),
+          SizedBox(
+            width: 180,
+            height: 30,
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(fontSize: 12),
+              decoration: InputDecoration(
+                hintText: S.get('project_search_hint'),
+                hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                prefixIcon: Icon(
+                  Icons.search,
+                  size: 16,
+                  color: Colors.grey.shade400,
+                ),
+                prefixIconConstraints: const BoxConstraints(minWidth: 32),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? GestureDetector(
+                        onTap: () => _searchController.clear(),
+                        child: Icon(
+                          Icons.close,
+                          size: 14,
+                          color: Colors.grey.shade500,
+                        ),
+                      )
+                    : null,
+                suffixIconConstraints: const BoxConstraints(minWidth: 28),
+                filled: true,
+                fillColor: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey.shade800
+                    : Colors.grey.shade100,
+                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Tooltip(
+            message: _projectSortDescending ? '当前：最新在前' : '当前：最早在前',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () {
+                setState(() {
+                  _projectSortDescending = !_projectSortDescending;
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(
+                  _projectSortDescending
+                      ? Icons.arrow_downward
+                      : Icons.arrow_upward,
+                  size: 16,
+                  color: Colors.orange.shade300,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWorkspaceSectionHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+      child: Row(
+        children: [
+          Text(
+            S.get('cursor_workspace_section'),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Tooltip(
+            message: S.get('cursor_workspace_tooltip'),
             preferBelow: false,
             verticalOffset: 16,
             padding: const EdgeInsets.all(12),

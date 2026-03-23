@@ -392,6 +392,10 @@ class McpConnectionType {
     return {};
   }
 
+  /// 获取 Codex bearer_token_env_var 名称
+  /// Codex 使用环境变量存储 Bearer Token，而非 inline headers
+  String? get codexBearerEnv => config['codex_bearer_env']?.toString();
+
   factory McpConnectionType.fromMap(Map<String, dynamic> map) {
     return McpConnectionType(
       type: map['type']?.toString() ?? 'local',

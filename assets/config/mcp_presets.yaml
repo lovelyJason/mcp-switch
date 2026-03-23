@@ -355,7 +355,10 @@ presets:
         recommended: true
         config:
           url: https://api.githubcopilot.com/mcp/
-        claude_cli: 'claude mcp add --transport http --scope user {{name}} https://api.githubcopilot.com/mcp/'
+          headers:
+            Authorization: 'Bearer {{github_token}}'
+          codex_bearer_env: GITHUB_PERSONAL_ACCESS_TOKEN
+        claude_cli: 'claude mcp add --transport http --scope user {{name}} https://api.githubcopilot.com/mcp/ --header "Authorization: Bearer {{github_token}}"'
 
       - type: local
         recommended: false

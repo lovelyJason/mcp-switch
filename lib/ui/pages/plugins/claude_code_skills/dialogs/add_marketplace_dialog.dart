@@ -655,14 +655,37 @@ class _CustomMarketplaceInputDialog extends StatefulWidget {
 
 class _CustomMarketplaceInputDialogState extends State<_CustomMarketplaceInputDialog> {
   final _controller = TextEditingController();
+  final _tokenController = TextEditingController();
   String? _parsedRepo;
   String? _errorMessage;
   bool _isAlreadyInstalled = false;
+  bool _isSelfHosted = false;
+  bool _needsGitSuffix = false;
+
+  static const _publicHosts = [
+    'github.com',
+    'gitlab.com',
+    'gitee.com',
+    'bitbucket.org',
+    'codeberg.org',
+  ];
 
   @override
   void dispose() {
     _controller.dispose();
+    _tokenController.dispose();
     super.dispose();
+  }
+
+  /// 判断 URL 是否为自建 Git 仓库（非公共托管平台）
+  bool _isSelfHostedUrl(String url) {
+    for (final host in _publicHosts) {
+      if (url.contains(host)) return false;
+    }
+    return url.startsWith('https://') ||
+        url.startsWith('http://') ||
+        url.startsWith('git@') ||
+        url.startsWith('ssh://');
   }
 
   /// 解析输入，提取 owner/repo 格式或 git URL
@@ -670,29 +693,22 @@ class _CustomMarketplaceInputDialogState extends State<_CustomMarketplaceInputDi
     final trimmed = input.trim();
     if (trimmed.isEmpty) return null;
 
-    // 匹配 owner/repo 格式的正则
     final repoPattern = RegExp(r'^([a-zA-Z0-9_-]+)/([a-zA-Z0-9_.-]+)$');
 
-    // 情况1: 直接是 owner/repo 格式
-    if (repoPattern.hasMatch(trimmed)) {
-      return trimmed;
-    }
+    if (repoPattern.hasMatch(trimmed)) return trimmed;
 
-    // 情况2: /plugin marketplace add owner/repo
+    // /plugin marketplace add owner/repo
     final cmdPattern = RegExp(r'/plugin\s+marketplace\s+add\s+([a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)');
     final cmdMatch = cmdPattern.firstMatch(trimmed);
-    if (cmdMatch != null) {
-      return cmdMatch.group(1);
-    }
+    if (cmdMatch != null) return cmdMatch.group(1);
 
-    // 情况3: claude plugin marketplace add owner/repo
-    final claudePattern = RegExp(r'claude\s+plugin\s+marketplace\s+add\s+([a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)');
+    // claude plugin marketplace add owner/repo
+    final claudePattern = RegExp(
+        r'claude\s+plugin\s+marketplace\s+add\s+([a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)');
     final claudeMatch = claudePattern.firstMatch(trimmed);
-    if (claudeMatch != null) {
-      return claudeMatch.group(1);
-    }
+    if (claudeMatch != null) return claudeMatch.group(1);
 
-    // 情况4: GitHub URL https://github.com/owner/repo
+    // GitHub URL
     final urlPattern = RegExp(r'github\.com/([a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)');
     final urlMatch = urlPattern.firstMatch(trimmed);
     if (urlMatch != null) {
@@ -704,7 +720,7 @@ class _CustomMarketplaceInputDialogState extends State<_CustomMarketplaceInputDi
       return repo;
     }
 
-    // 情况5: 任意 Git URL（https://xxx.com/xxx 或 git@xxx:xxx）
+    // 任意 Git URL
     if (trimmed.startsWith('https://') ||
         trimmed.startsWith('http://') ||
         trimmed.startsWith('git@') ||
@@ -715,32 +731,57 @@ class _CustomMarketplaceInputDialogState extends State<_CustomMarketplaceInputDi
     return null;
   }
 
+  /// 将 token 注入 URL：https://host/path → https://oauth2:token@host/path
+  String _injectTokenIntoUrl(String url, String token) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme) return url;
+    final newUri = uri.replace(userInfo: 'oauth2:$token');
+    return newUri.toString();
+  }
+
   void _onInputChanged(String value) {
     final parsed = _parseMarketplaceInput(value);
-    // 检查是否已安装
+    final trimmed = value.trim();
+
     bool alreadyInstalled = false;
     if (parsed != null) {
       alreadyInstalled = widget.installedMarketplaces.any((m) => m.repo == parsed);
     }
+
+    final selfHosted = _isSelfHostedUrl(trimmed);
+    final needsSuffix = selfHosted && !trimmed.endsWith('.git');
+
     setState(() {
       _parsedRepo = parsed;
       _isAlreadyInstalled = alreadyInstalled;
-      _errorMessage = (value.trim().isNotEmpty && parsed == null)
+      _isSelfHosted = selfHosted;
+      _needsGitSuffix = needsSuffix;
+      _errorMessage = (trimmed.isNotEmpty && parsed == null)
           ? S.get('invalid_marketplace_format')
           : null;
     });
   }
 
-  void _onConfirm() {
-    if (_parsedRepo != null) {
-      Navigator.of(context).pop();
-      widget.onConfirm(_parsedRepo!);
+  /// 构建最终要执行的仓库地址
+  String _buildFinalRepo() {
+    if (_parsedRepo == null) return '';
+    final token = _tokenController.text.trim();
+    if (token.isNotEmpty && _isSelfHosted) {
+      return _injectTokenIntoUrl(_parsedRepo!, token);
     }
+    return _parsedRepo!;
+  }
+
+  void _onConfirm() {
+    if (_parsedRepo == null || _needsGitSuffix) return;
+    Navigator.of(context).pop();
+    widget.onConfirm(_buildFinalRepo());
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final canConfirm = _parsedRepo != null && !_isAlreadyInstalled && !_needsGitSuffix;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -751,127 +792,211 @@ class _CustomMarketplaceInputDialogState extends State<_CustomMarketplaceInputDi
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 标题
-            Row(
-              children: [
-                const Icon(Icons.add_box_outlined, color: Colors.teal),
-                const SizedBox(width: 8),
-                Text(
-                  S.get('custom_marketplace_install'),
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
+            _buildTitle(),
             const SizedBox(height: 20),
-
-            // 输入框
-            TextField(
-              controller: _controller,
-              onChanged: _onInputChanged,
-              autofocus: true,
-              decoration: InputDecoration(
-                labelText: S.get('custom_marketplace_repo'),
-                hintText: S.get('custom_marketplace_hint'),
-                hintStyle: TextStyle(fontSize: 12, color: Colors.grey.withValues(alpha: 0.5)),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                errorText: _errorMessage,
-                prefixIcon: const Icon(Icons.link, size: 20),
-              ),
-              onSubmitted: (_) => _onConfirm(),
-            ),
-
-            // 解析结果预览
-            if (_parsedRepo != null) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _isAlreadyInstalled
-                      ? Colors.orange.withValues(alpha: isDark ? 0.15 : 0.08)
-                      : Colors.green.withValues(alpha: isDark ? 0.15 : 0.08),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: _isAlreadyInstalled
-                        ? Colors.orange.withValues(alpha: 0.3)
-                        : Colors.green.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _isAlreadyInstalled ? Icons.warning_amber : Icons.check_circle,
-                      size: 18,
-                      color: _isAlreadyInstalled ? Colors.orange : Colors.green,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (_isAlreadyInstalled)
-                            Text(
-                              S.get('marketplace_already_installed'),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.orange,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            )
-                          else ...[
-                            Text(
-                              'claude plugin marketplace add',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.withValues(alpha: 0.8),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _parsedRepo!,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                fontFamily: 'monospace',
-                                color: Colors.green,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            _buildRepoInput(isDark),
+            if (_needsGitSuffix) _buildGitSuffixWarning(isDark),
+            if (_isSelfHosted && !_needsGitSuffix) ...[
+              const SizedBox(height: 14),
+              _buildTokenInput(isDark),
             ],
-
+            if (_parsedRepo != null && !_needsGitSuffix) _buildPreview(isDark),
             const SizedBox(height: 24),
+            _buildButtons(canConfirm),
+          ],
+        ),
+      ),
+    );
+  }
 
-            // 按钮
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: Text(S.get('cancel')),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: (_parsedRepo != null && !_isAlreadyInstalled) ? _onConfirm : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.grey.withValues(alpha: 0.3),
-                  ),
-                  child: Text(S.get('add')),
-                ),
-              ],
+  Widget _buildTitle() {
+    return Row(
+      children: [
+        const Icon(Icons.add_box_outlined, color: Colors.teal),
+        const SizedBox(width: 8),
+        Text(
+          S.get('custom_marketplace_install'),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRepoInput(bool isDark) {
+    return TextField(
+      controller: _controller,
+      onChanged: _onInputChanged,
+      autofocus: true,
+      decoration: InputDecoration(
+        labelText: S.get('custom_marketplace_repo'),
+        hintText: S.get('custom_marketplace_hint'),
+        hintStyle: TextStyle(fontSize: 12, color: Colors.grey.withValues(alpha: 0.5)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        errorText: _errorMessage,
+        prefixIcon: const Icon(Icons.link, size: 20),
+      ),
+      onSubmitted: (_) => _onConfirm(),
+    );
+  }
+
+  Widget _buildGitSuffixWarning(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.red.withValues(alpha: isDark ? 0.15 : 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, size: 16, color: Colors.red),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                S.get('selfhosted_git_suffix_warning'),
+                style: const TextStyle(fontSize: 12, color: Colors.red),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                _controller.text = '${_controller.text.trim()}.git';
+                _onInputChanged(_controller.text);
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.red,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 28),
+                textStyle: const TextStyle(fontSize: 12),
+              ),
+              child: const Text('+.git'),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildTokenInput(bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _tokenController,
+          obscureText: true,
+          decoration: InputDecoration(
+            labelText: S.get('selfhosted_git_token'),
+            hintText: S.get('selfhosted_git_token_placeholder'),
+            hintStyle: TextStyle(fontSize: 12, color: Colors.grey.withValues(alpha: 0.5)),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            prefixIcon: const Icon(Icons.vpn_key_outlined, size: 20),
+            isDense: true,
+          ),
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 6),
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: Text(
+            S.get('selfhosted_git_token_hint'),
+            style: TextStyle(fontSize: 11, color: Colors.grey.withValues(alpha: 0.6)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPreview(bool isDark) {
+    final finalRepo = _buildFinalRepo();
+    // 脱敏显示：隐藏 token 部分
+    final displayRepo = _tokenController.text.trim().isNotEmpty
+        ? finalRepo.replaceAll(RegExp(r'oauth2:[^@]+@'), 'oauth2:***@')
+        : finalRepo;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: _isAlreadyInstalled
+              ? Colors.orange.withValues(alpha: isDark ? 0.15 : 0.08)
+              : Colors.green.withValues(alpha: isDark ? 0.15 : 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: _isAlreadyInstalled
+                ? Colors.orange.withValues(alpha: 0.3)
+                : Colors.green.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              _isAlreadyInstalled ? Icons.warning_amber : Icons.check_circle,
+              size: 18,
+              color: _isAlreadyInstalled ? Colors.orange : Colors.green,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _isAlreadyInstalled
+                  ? Text(
+                      S.get('marketplace_already_installed'),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'claude plugin marketplace add',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.withValues(alpha: 0.8),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          displayRepo,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'monospace',
+                            color: Colors.green,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildButtons(bool canConfirm) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(S.get('cancel')),
+        ),
+        const SizedBox(width: 12),
+        ElevatedButton(
+          onPressed: canConfirm ? _onConfirm : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.teal,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: Colors.grey.withValues(alpha: 0.3),
+          ),
+          child: Text(S.get('add')),
+        ),
+      ],
     );
   }
 }

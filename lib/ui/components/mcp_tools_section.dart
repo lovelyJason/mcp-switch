@@ -77,7 +77,9 @@ class _McpToolsSectionState extends State<McpToolsSection> {
         _tools = tools;
         _loading = false;
       });
-      widget.onToolsLoaded?.call();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onToolsLoaded?.call();
+      });
     }
   }
 

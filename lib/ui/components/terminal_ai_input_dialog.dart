@@ -218,6 +218,7 @@ class _TerminalAIInputDialogState extends State<TerminalAIInputDialog>
     if (text.isEmpty) return;
 
     if (widget.apiKey == null || widget.apiKey!.isEmpty) {
+      print('❌ [Terminal AI] API Key 未配置');
       if (!mounted) return;
       setState(() {
         _errorMessage = S.get('api_key_not_configured');
@@ -235,6 +236,12 @@ class _TerminalAIInputDialogState extends State<TerminalAIInputDialog>
     try {
       final baseUrl = widget.apiBaseUrl ?? 'https://api.anthropic.com';
       final uri = Uri.parse(_buildApiUrl(baseUrl));
+
+      print('🚀 [Terminal AI] 开始请求');
+      print('   - API URL: $uri');
+      print('   - Model: ${_selectedModel.modelId}');
+      print('   - API Key: ${widget.apiKey!.substring(0, 10)}...');
+      print('   - User Input: $text');
 
       // 优化的 system prompt：只回答终端相关问题
       final systemPrompt = '''You are a terminal command assistant. You ONLY help with terminal/shell/CLI related questions.
@@ -266,13 +273,49 @@ Platform: ${Platform.operatingSystem}''';
         body: body,
       );
 
+      print('📥 [Terminal AI] 收到响应: ${response.statusCode}');
+
       if (!mounted) return; // 检查组件是否还在树中
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
+        print('✅ [Terminal AI] 响应数据: ${data.toString().substring(0, data.toString().length > 200 ? 200 : data.toString().length)}...');
         final content = data['content'] as List?;
         if (content != null && content.isNotEmpty) {
-          final responseText = content[0]['text'] as String? ?? '';
+          // 兼容多种 API 响应格式
+          String responseText = '';
+
+          // 尝试提取文本内容
+          for (final block in content) {
+            if (block is Map<String, dynamic>) {
+              // 标准 Anthropic 格式：{"type": "text", "text": "..."}
+              if (block['type'] == 'text' && block['text'] != null) {
+                responseText = block['text'] as String;
+                break;
+              }
+              // MiniMax 格式：{"thinking": "...", "text": "..."}
+              if (block['text'] != null) {
+                responseText = block['text'] as String;
+                break;
+              }
+            } else if (block is String) {
+              // 直接是字符串
+              responseText = block;
+              break;
+            }
+          }
+
+          print('💬 [Terminal AI] AI 回复: $responseText');
+
+          if (responseText.isEmpty) {
+            print('⚠️ [Terminal AI] 无法从响应中提取文本，原始 content: $content');
+            setState(() {
+              _errorMessage = 'API 返回格式异常，无法提取文本';
+              _isLoading = false;
+            });
+            return;
+          }
+
           // 清理 markdown 代码块
           var cleanedResponse = _cleanMarkdown(responseText);
           // 检测非终端问题的拒绝响应，替换为中文提示
@@ -285,16 +328,28 @@ Platform: ${Platform.operatingSystem}''';
             _aiResponse = cleanedResponse;
             _isLoading = false;
           });
+        } else {
+          print('⚠️ [Terminal AI] 响应内容为空');
+          setState(() {
+            _errorMessage = 'API 返回空内容';
+            _isLoading = false;
+          });
         }
       } else {
         final errorBody = response.body;
+        print('❌ [Terminal AI] API 错误 ${response.statusCode}: $errorBody');
         setState(() {
           _errorMessage = 'API ${response.statusCode}: $errorBody';
           _isLoading = false;
         });
       }
-    } catch (e) {
-      if (!mounted) return;
+    } catch (e, stack) {
+      print('💥 [Terminal AI] 请求异常: $e');
+      print('📚 [Terminal AI] 堆栈: $stack');
+      if (!mounted) {
+        print('⚠️ [Terminal AI] 组件已卸载，无法更新 UI');
+        return;
+      }
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;

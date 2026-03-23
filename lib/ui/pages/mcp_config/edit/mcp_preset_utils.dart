@@ -64,21 +64,33 @@ class McpPresetUtils {
   }
 
   /// 生成 Codex 远程配置
+  /// Codex 使用 bearer_token_env_var 而非 inline headers
   static Map<String, dynamic> buildCodexRemoteConfig(
     McpConnectionType connectionConfig,
     Map<String, String> fieldValues,
   ) {
+    final config = <String, dynamic>{'url': connectionConfig.url ?? ''};
+
+    if (connectionConfig.codexBearerEnv != null) {
+      config['bearer_token_env_var'] = connectionConfig.codexBearerEnv!;
+    }
+
     final headers = interpolateHeaders(connectionConfig.headers, fieldValues);
-    return {'url': connectionConfig.url ?? '', 'http_headers': headers};
+    final filteredHeaders = Map<String, String>.from(headers)
+      ..removeWhere((k, _) => k.toLowerCase() == 'authorization');
+    if (filteredHeaders.isNotEmpty) {
+      config['http_headers'] = filteredHeaders;
+    }
+
+    return config;
   }
 
-  /// 生成远程 TOML 配置
+  /// 生成远程 TOML 配置（Codex）
   static String generateRemoteToml(
     String name,
     McpConnectionType connectionConfig,
     Map<String, String> fieldValues,
   ) {
-    final headers = interpolateHeaders(connectionConfig.headers, fieldValues);
     final safeName = name.contains(RegExp(r'[^a-zA-Z0-9_\-]'))
         ? '"$name"'
         : name;
@@ -86,8 +98,16 @@ class McpPresetUtils {
       ..writeln('[mcp_servers.$safeName]')
       ..writeln('url = "${connectionConfig.url ?? ''}"');
 
-    if (headers.isNotEmpty) {
-      final headersStr = headers.entries
+    if (connectionConfig.codexBearerEnv != null) {
+      buffer.writeln(
+          'bearer_token_env_var = "${connectionConfig.codexBearerEnv}"');
+    }
+
+    final headers = interpolateHeaders(connectionConfig.headers, fieldValues);
+    final filteredHeaders = Map<String, String>.from(headers)
+      ..removeWhere((k, _) => k.toLowerCase() == 'authorization');
+    if (filteredHeaders.isNotEmpty) {
+      final headersStr = filteredHeaders.entries
           .map((e) => '"${e.key}" = "${e.value}"')
           .join(', ');
       buffer.writeln('http_headers = { $headersStr }');
@@ -224,21 +244,30 @@ class McpPresetUtils {
   }
 
   /// 插值替换 headers 中的模板变量
+  /// 当模板变量对应的字段值为空时，跳过该 header（适用于可选 PAT 等场景）
   static Map<String, String> interpolateHeaders(
     Map<String, String> headers,
     Map<String, String> fieldValues,
   ) {
-    return headers.map((key, value) {
-      var interpolated = value;
-      for (final entry in fieldValues.entries) {
-        final placeholder = '{{${entry.key}}}';
-        final replacement = entry.value.isEmpty
-            ? 'YOUR_${entry.key.toUpperCase()}'
-            : entry.value;
-        interpolated = interpolated.replaceAll(placeholder, replacement);
+    final result = <String, String>{};
+    for (final entry in headers.entries) {
+      var interpolated = entry.value;
+      bool hasEmptyPlaceholder = false;
+      for (final fv in fieldValues.entries) {
+        final placeholder = '{{${fv.key}}}';
+        if (interpolated.contains(placeholder)) {
+          if (fv.value.isEmpty) {
+            hasEmptyPlaceholder = true;
+            break;
+          }
+          interpolated = interpolated.replaceAll(placeholder, fv.value);
+        }
       }
-      return MapEntry(key, interpolated);
-    });
+      if (!hasEmptyPlaceholder) {
+        result[entry.key] = interpolated;
+      }
+    }
+    return result;
   }
 
   /// 格式化 JSON 为可读格式

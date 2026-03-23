@@ -1,3 +1,15 @@
+## v1.9.1
+
+### ✨ 新增特性
+- **自建 Git 市场支持**：自定义市场弹窗现在可以识别自建 Git 仓库（非 GitHub/GitLab/Gitee 等公共平台），自动检测 `.git` 后缀并提示补全，同时支持输入访问令牌（Token）以克隆私有仓库
+- **Cursor 项目搜索**：Cursor 的 Workspace 项目配置区新增搜索框和排序按钮，与 Claude Code 项目级配置体验一致
+
+### 🐛 问题修复
+- **GitHub MCP Token 不生效**：修复 GitHub MCP 预设中 PAT 未回填到配置 headers 的问题，同时适配 Codex 的 `bearer_token_env_var` 格式
+- **构建时 setState 报错**：修复 MCP Tools 加载回调在构建阶段触发父级 `setState` 导致的 Flutter 框架异常
+- **Terminal AI 空回复**：添加请求全链路日志，兼容 MiniMax 等第三方 API 的响应格式，解决 AI 回复显示为空的问题
+
+
 ## v1.9.0
 
 ### ✨ 新增特性

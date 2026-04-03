@@ -488,33 +488,39 @@ class EditHeader extends StatelessWidget {
             ),
             const SizedBox(width: 8),
           ],
-          Flexible(
-            flex: 3,
-            child: Text(
-              isEditMode
-                  ? S.get('edit_mcp_title').replaceAll('{editor}', editorType.label)
-                  : S.get('add_mcp_title').replaceAll('{editor}', editorType.label),
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: textColor,
-              ),
-              overflow: TextOverflow.ellipsis,
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    isEditMode
+                        ? S.get('edit_mcp_title').replaceAll('{editor}', editorType.label)
+                        : S.get('add_mcp_title').replaceAll('{editor}', editorType.label),
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (!isEditMode && onEditorTypeChanged != null) ...[
+                  const SizedBox(width: 16),
+                  McpEditorSwitcher(
+                    currentEditor: editorType,
+                    onSwitch: onEditorTypeChanged!,
+                  ),
+                ],
+              ],
             ),
           ),
-          if (!isEditMode && onEditorTypeChanged != null) ...[
+          if (editorType == EditorType.claude && !isEditMode) ...[
             const SizedBox(width: 16),
-            McpEditorSwitcher(
-              currentEditor: editorType,
-              onSwitch: onEditorTypeChanged!,
-            ),
-          ],
-          const Spacer(),
-          if (editorType == EditorType.claude && !isEditMode)
             SaveModeToggle(
               currentMode: claudeSaveMode,
               onModeChanged: onSaveModeChanged,
             ),
+          ],
         ],
       ),
     );

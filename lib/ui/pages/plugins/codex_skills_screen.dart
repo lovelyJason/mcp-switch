@@ -8,8 +8,10 @@ import 'dart:convert';
 import '../../../l10n/s.dart';
 import '../../../models/editor_type.dart';
 import '../../../services/codex_skills_service.dart';
+import '../../../services/codex_plugins_service.dart';
 import '../../../utils/platform_utils.dart';
 import '../../../models/codex_skill.dart';
+import '../../../models/codex_plugin.dart';
 import '../../components/custom_toast.dart';
 import '../../components/custom_dialog.dart';
 import '../../components/skills_editor_switcher.dart';
@@ -20,6 +22,8 @@ import 'antigravity_skills_screen.dart';
 // Part 文件 - Dialogs
 part 'codex_skills/dialogs/codex_skill_detail_dialog.dart';
 part 'codex_skills/dialogs/custom_skill_install_dialog.dart';
+// Part 文件 - Sections
+part 'codex_skills/sections/plugin_section.dart';
 
 /// Codex Skills 管理页面
 class CodexSkillsScreen extends StatefulWidget {
@@ -31,11 +35,16 @@ class CodexSkillsScreen extends StatefulWidget {
 
 class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTickerProviderStateMixin {
   final _skillsService = CodexSkillsService();
+  final _pluginsService = CodexPluginsService();
 
   List<CodexSkill> _localSkills = [];
+  List<CodexSkill> _agentsSkills = [];
   List<CuratedCodexSkill> _curatedSkills = [];
+  List<CodexPlugin> _marketplacePlugins = [];
   bool _loadingLocal = true;
+  bool _loadingAgents = true;
   bool _loadingCurated = true;
+  bool _loadingPlugins = true;
 
   late TabController _tabController;
 
@@ -54,6 +63,8 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
 
   Future<void> _loadData() async {
     _loadLocalSkills();
+    _loadAgentsSkills();
+    _loadMarketplacePlugins();
     _loadCuratedSkills();
   }
 
@@ -69,6 +80,38 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
       setState(() {
         _localSkills = [];
         _loadingLocal = false;
+      });
+    }
+  }
+
+  Future<void> _loadAgentsSkills() async {
+    setState(() => _loadingAgents = true);
+    try {
+      final skills = await _skillsService.loadAgentsSkills();
+      setState(() {
+        _agentsSkills = skills;
+        _loadingAgents = false;
+      });
+    } catch (e) {
+      setState(() {
+        _agentsSkills = [];
+        _loadingAgents = false;
+      });
+    }
+  }
+
+  Future<void> _loadMarketplacePlugins() async {
+    setState(() => _loadingPlugins = true);
+    try {
+      final plugins = await _pluginsService.loadMarketplacePlugins();
+      setState(() {
+        _marketplacePlugins = plugins;
+        _loadingPlugins = false;
+      });
+    } catch (e) {
+      setState(() {
+        _marketplacePlugins = [];
+        _loadingPlugins = false;
       });
     }
   }
@@ -196,6 +239,10 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
                   children: [
                     _buildLocalSkillsSection(isDark),
                     const SizedBox(height: 24),
+                    _buildAgentsSkillsSection(isDark),
+                    const SizedBox(height: 24),
+                    _buildMarketplacePluginsSection(isDark),
+                    const SizedBox(height: 24),
                     _buildCuratedSkillsSection(isDark),
                   ],
                 ),
@@ -262,10 +309,7 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              _skillsService.clearCache();
-              _loadData();
-            },
+            onPressed: _loadData,
             tooltip: S.get('refresh_config'),
           ),
         ],
@@ -455,6 +499,177 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============ Agents Skills 区域 ============
+  Widget _buildAgentsSkillsSection(bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(
+          S.get('codex_agents_skills'),
+          Icons.smart_toy_outlined,
+          Colors.orange,
+        ),
+        const SizedBox(height: 4),
+        Padding(
+          padding: const EdgeInsets.only(left: 28),
+          child: Text(
+            S.get('codex_agents_skills_hint'),
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.withValues(alpha: 0.7),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_loadingAgents)
+          const Center(child: CircularProgressIndicator())
+        else if (_agentsSkills.isEmpty)
+          _buildEmptyCard(S.get('codex_no_agents_skills'))
+        else
+          _buildAgentsSkillCards(isDark),
+      ],
+    );
+  }
+
+  Widget _buildAgentsSkillCards(bool isDark) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 12.0;
+        const cardsPerRow = 3;
+        final cardWidth =
+            (constraints.maxWidth - (spacing * (cardsPerRow - 1))) /
+            cardsPerRow;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: _agentsSkills
+              .map((skill) => _buildAgentsSkillCard(skill, isDark, cardWidth))
+              .toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildAgentsSkillCard(
+    CodexSkill skill,
+    bool isDark,
+    double cardWidth,
+  ) {
+    const accentColor = Colors.orange;
+
+    return SizedBox(
+      width: cardWidth,
+      child: Card(
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(
+            color: accentColor.withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: accentColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(
+                      Icons.smart_toy_outlined,
+                      size: 16,
+                      color: accentColor,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      skill.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (skill.groupName != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(
+                          alpha: isDark ? 0.2 : 0.1,
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        skill.groupName!,
+                        style: const TextStyle(
+                          fontSize: 9,
+                          color: accentColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  if (skill.isSymlink) ...[
+                    const SizedBox(width: 4),
+                    Tooltip(
+                      message: 'symlink',
+                      child: Icon(
+                        Icons.link,
+                        size: 13,
+                        color: Colors.grey.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                skill.description ?? S.get('no_description'),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey.withValues(alpha: 0.8),
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  InkWell(
+                    onTap: () => _copySkillCommand(skill.name),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.copy,
+                        size: 16,
+                        color: accentColor.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),

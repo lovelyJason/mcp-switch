@@ -5,6 +5,10 @@ class CodexSkill {
   final String? description;
   final bool hasSkillMd;
   final bool isSystem;
+  /// 所属组名（来自 ~/.agents/skills/ 二级目录结构）
+  final String? groupName;
+  /// 是否来自软链
+  final bool isSymlink;
 
   CodexSkill({
     required this.name,
@@ -12,6 +16,8 @@ class CodexSkill {
     this.description,
     this.hasSkillMd = false,
     this.isSystem = false,
+    this.groupName,
+    this.isSymlink = false,
   });
 }
 

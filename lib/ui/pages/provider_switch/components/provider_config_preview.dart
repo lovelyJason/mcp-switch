@@ -22,6 +22,9 @@ mixin _ProviderEditPreview on State<ProviderEditScreen> {
   TextEditingController? get _cliModelController;
   TextEditingController get _maxOutputTokensController;
   TextEditingController get _maxThinkingTokensController;
+  TextEditingController get _defaultHaikuModelController;
+  TextEditingController get _defaultSonnetModelController;
+  TextEditingController get _defaultOpusModelController;
   String? get _selectedModel;
   set _selectedModel(String? v);
   String? get _selectedReasoningEffort;
@@ -260,6 +263,19 @@ mixin _ProviderEditPreview on State<ProviderEditScreen> {
     if (maxThink != _maxThinkingTokensController.text) {
       _maxThinkingTokensController.text = maxThink;
     }
+    final haikuModel = env['ANTHROPIC_DEFAULT_HAIKU_MODEL']?.toString() ?? '';
+    if (haikuModel != _defaultHaikuModelController.text) {
+      _defaultHaikuModelController.text = haikuModel;
+    }
+    final sonnetModel =
+        env['ANTHROPIC_DEFAULT_SONNET_MODEL']?.toString() ?? '';
+    if (sonnetModel != _defaultSonnetModelController.text) {
+      _defaultSonnetModelController.text = sonnetModel;
+    }
+    final opusModel = env['ANTHROPIC_DEFAULT_OPUS_MODEL']?.toString() ?? '';
+    if (opusModel != _defaultOpusModelController.text) {
+      _defaultOpusModelController.text = opusModel;
+    }
     final model = data['model']?.toString();
     if (model != null && model != _selectedModel) {
       _selectedModel = model;
@@ -323,6 +339,21 @@ mixin _ProviderEditPreview on State<ProviderEditScreen> {
       env,
       'MAX_THINKING_TOKENS',
       _maxThinkingTokensController.text.trim(),
+    );
+    ProviderSwitchService.setOrRemove(
+      env,
+      'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+      _defaultHaikuModelController.text.trim(),
+    );
+    ProviderSwitchService.setOrRemove(
+      env,
+      'ANTHROPIC_DEFAULT_SONNET_MODEL',
+      _defaultSonnetModelController.text.trim(),
+    );
+    ProviderSwitchService.setOrRemove(
+      env,
+      'ANTHROPIC_DEFAULT_OPUS_MODEL',
+      _defaultOpusModelController.text.trim(),
     );
 
     final model = _selectedModel;

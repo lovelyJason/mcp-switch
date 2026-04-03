@@ -258,6 +258,32 @@ presets:
         env_key: ALLOW_DELETE_OPERATION
 
   # ─────────────────────────────────────────────────────────────────────────────
+  # SQLite MCP（本地 SQLite 数据库查询）
+  # ─────────────────────────────────────────────────────────────────────────────
+  - id: sqlite
+    name: SQLite
+    default_cli_name: sqlite
+    icon: assets/icons/mcp/sqlite.svg
+    tips_key: sqlite_tips
+
+    connection_types:
+      - type: local
+        recommended: true
+        config:
+          command: npx
+          args: ['-y', 'mcp-server-sqlite-npx']
+          extra_args:
+            - '{{db_path}}'
+        claude_cli: 'claude mcp add --scope user {{name}} -- npx -y mcp-server-sqlite-npx {{db_path}}'
+
+    form_fields:
+      - id: db_path
+        label_key: sqlite_db_path
+        sub_label_key: sqlite_db_path_hint
+        placeholder: '/path/to/your/database.db'
+        required: true
+
+  # ─────────────────────────────────────────────────────────────────────────────
   # Atlassian MCP（Jira / Confluence）
   # ─────────────────────────────────────────────────────────────────────────────
   - id: atlassian

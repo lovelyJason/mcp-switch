@@ -22,6 +22,7 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
   set _selectedPersonality(String? v);
   bool get _isOfficial;
   bool get _isOfficialPreset;
+  String? get _selectedPresetName;
   bool get _isClaude;
   bool get _isGemini;
   bool get _isRefreshingCodexModels;
@@ -31,6 +32,9 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
   void _syncFormToCodexPreview();
   TextEditingController? get _cliModelController;
   set _cliModelController(TextEditingController? v);
+  TextEditingController get _defaultHaikuModelController;
+  TextEditingController get _defaultSonnetModelController;
+  TextEditingController get _defaultOpusModelController;
 
   bool get _isSpeedTesting;
   set _isSpeedTesting(bool v);
@@ -659,6 +663,57 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
               decoration: _inputDecoration('31999'),
             ),
           ),
+        ),
+      ],
+    );
+  }
+
+  // ── Anthropic Default Model Fields ──────────────────────────────
+  Widget _buildDefaultModelsFields(bool isDark) {
+    final isZhipu = _selectedPresetName == 'zhipu';
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildLabeledField(
+                label: S.get('provider_default_haiku_model'),
+                child: TextFormField(
+                  controller: _defaultHaikuModelController,
+                  style: const TextStyle(fontSize: 14),
+                  decoration: _inputDecoration(isZhipu ? 'glm-4.5-air' : ''),
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildLabeledField(
+                label: S.get('provider_default_sonnet_model'),
+                child: TextFormField(
+                  controller: _defaultSonnetModelController,
+                  style: const TextStyle(fontSize: 14),
+                  decoration: _inputDecoration(isZhipu ? 'glm-4.7' : ''),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildLabeledField(
+                label: S.get('provider_default_opus_model'),
+                child: TextFormField(
+                  controller: _defaultOpusModelController,
+                  style: const TextStyle(fontSize: 14),
+                  decoration: _inputDecoration(isZhipu ? 'glm-4.7' : ''),
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            const Expanded(child: SizedBox()),
+          ],
         ),
       ],
     );

@@ -410,6 +410,9 @@ class ProviderSwitchService extends ChangeNotifier {
     String? website,
     String? configContent,
     String? vscodeModel,
+    String? defaultHaikuModel,
+    String? defaultSonnetModel,
+    String? defaultOpusModel,
   }) async {
     final now = DateTime.now();
     final entry = ProviderProfilesCompanion.insert(
@@ -427,6 +430,9 @@ class ProviderSwitchService extends ChangeNotifier {
       website: Value(website),
       configContent: Value(configContent),
       vscodeModel: Value(vscodeModel),
+      defaultHaikuModel: Value(defaultHaikuModel),
+      defaultSonnetModel: Value(defaultSonnetModel),
+      defaultOpusModel: Value(defaultOpusModel),
       createdAt: now,
       updatedAt: now,
     );
@@ -451,6 +457,9 @@ class ProviderSwitchService extends ChangeNotifier {
     String? website,
     String? configContent,
     String? vscodeModel,
+    String? defaultHaikuModel,
+    String? defaultSonnetModel,
+    String? defaultOpusModel,
   }) async {
     final existingProfile = await _db.getProfileById(id);
     final wasActive = existingProfile?.isActive ?? false;
@@ -470,6 +479,9 @@ class ProviderSwitchService extends ChangeNotifier {
       website: Value(website),
       configContent: Value(configContent),
       vscodeModel: Value(vscodeModel),
+      defaultHaikuModel: Value(defaultHaikuModel),
+      defaultSonnetModel: Value(defaultSonnetModel),
+      defaultOpusModel: Value(defaultOpusModel),
       updatedAt: Value(DateTime.now()),
     );
     await _db.updateProfile(entry);

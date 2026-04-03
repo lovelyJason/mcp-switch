@@ -382,6 +382,7 @@ class _CustomSkillInstallDialogState extends State<_CustomSkillInstallDialog> {
     const skillDirectories = [
       {'name': 'skillsmp.com', 'url': 'https://skillsmp.com/'},
       {'name': 'aitmpl.com/skills', 'url': 'https://www.aitmpl.com/skills'},
+      {'name': 'skills.sh', 'url': 'https://skills.sh/'},
     ];
 
     return Column(

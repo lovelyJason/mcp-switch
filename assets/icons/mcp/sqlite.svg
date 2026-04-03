@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- SQLite official blue: #044a64 -->
+
+  <!-- Top ellipse -->
+  <ellipse cx="12" cy="6" rx="8" ry="3" fill="#044a64"/>
+
+  <!-- Body -->
+  <path d="M4 6v12c0 1.66 3.58 3 8 3s8-1.34 8-3V6" fill="none" stroke="#044a64" stroke-width="2"/>
+
+  <!-- Middle stripe -->
+  <path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" fill="none" stroke="#89c4e1" stroke-width="1.5"/>
+
+  <!-- Bottom ellipse edge -->
+  <ellipse cx="12" cy="18" rx="8" ry="3" fill="none" stroke="#044a64" stroke-width="2"/>
+
+  <!-- Fill for body -->
+  <rect x="4" y="6" width="16" height="12" fill="#044a64" opacity="0.15"/>
+</svg>

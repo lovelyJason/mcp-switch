@@ -48,6 +48,97 @@ class CodexSkillsService {
     }
   }
 
+  /// 加载 ~/.agents/skills/ 下的 Skills，包含软链和二级目录
+  Future<List<CodexSkill>> loadAgentsSkills() async {
+    final skills = <CodexSkill>[];
+    final agentsDir = Directory(
+      PlatformUtils.joinPath(_home, '.agents', 'skills'),
+    );
+
+    try {
+      if (!await agentsDir.exists()) return [];
+
+      final entities = await agentsDir.list(followLinks: false).toList();
+      for (final entity in entities) {
+        final name = PlatformUtils.basename(entity.path);
+        if (name.startsWith('.')) continue;
+
+        // 解析软链或普通目录
+        final String resolvedPath;
+        if (entity is Link) {
+          resolvedPath = await entity.resolveSymbolicLinks();
+        } else {
+          resolvedPath = entity.path;
+        }
+
+        final type = await FileSystemEntity.type(
+          resolvedPath,
+          followLinks: true,
+        );
+        if (type != FileSystemEntityType.directory) continue;
+
+        final resolvedDir = Directory(resolvedPath);
+
+        final isLink = entity is Link;
+
+        // 判断是否直接有 SKILL.md（一级 skill）
+        final skillMd = File(
+          PlatformUtils.joinPath(resolvedPath, 'SKILL.md'),
+        );
+        if (await skillMd.exists()) {
+          String? desc;
+          try {
+            desc = parseSkillDescription(await skillMd.readAsString());
+          } catch (_) {}
+          skills.add(CodexSkill(
+            name: name,
+            path: entity.path,
+            description: desc,
+            hasSkillMd: true,
+            isSymlink: isLink,
+          ));
+          continue;
+        }
+
+        // 否则扫描二级子目录（分组结构，如 tsai-fe-toolkit/{skill}/）
+        final subEntities = await resolvedDir.list(followLinks: true).toList();
+        for (final sub in subEntities) {
+          if (sub is! Directory) continue;
+          final subName = PlatformUtils.basename(sub.path);
+          if (subName.startsWith('.')) continue;
+
+          final subSkillMd = File(
+            PlatformUtils.joinPath(sub.path, 'SKILL.md'),
+          );
+          if (!await subSkillMd.exists()) continue;
+
+          String? desc;
+          try {
+            desc = parseSkillDescription(await subSkillMd.readAsString());
+          } catch (_) {}
+          skills.add(CodexSkill(
+            name: subName,
+            path: sub.path,
+            description: desc,
+            hasSkillMd: true,
+            groupName: name,
+            // 子条目继承父级软链状态
+            isSymlink: isLink,
+          ));
+        }
+      }
+
+      skills.sort((a, b) {
+        final groupCmp = (a.groupName ?? '').compareTo(b.groupName ?? '');
+        if (groupCmp != 0) return groupCmp;
+        return a.name.compareTo(b.name);
+      });
+      return skills;
+    } catch (e) {
+      return [];
+    }
+  }
+
   /// 扫描指定目录下的 Skills
   Future<void> _scanSkillsDir(
     Directory dir,

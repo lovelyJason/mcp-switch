@@ -173,6 +173,40 @@ class $ProviderProfilesTable extends ProviderProfiles
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _defaultHaikuModelMeta = const VerificationMeta(
+    'defaultHaikuModel',
+  );
+  @override
+  late final GeneratedColumn<String> defaultHaikuModel =
+      GeneratedColumn<String>(
+        'default_haiku_model',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _defaultSonnetModelMeta =
+      const VerificationMeta('defaultSonnetModel');
+  @override
+  late final GeneratedColumn<String> defaultSonnetModel =
+      GeneratedColumn<String>(
+        'default_sonnet_model',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _defaultOpusModelMeta = const VerificationMeta(
+    'defaultOpusModel',
+  );
+  @override
+  late final GeneratedColumn<String> defaultOpusModel = GeneratedColumn<String>(
+    'default_opus_model',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _configContentMeta = const VerificationMeta(
     'configContent',
   );
@@ -223,6 +257,9 @@ class $ProviderProfilesTable extends ProviderProfiles
     personality,
     oauthData,
     vscodeModel,
+    defaultHaikuModel,
+    defaultSonnetModel,
+    defaultOpusModel,
     configContent,
     createdAt,
     updatedAt,
@@ -350,6 +387,33 @@ class $ProviderProfilesTable extends ProviderProfiles
         ),
       );
     }
+    if (data.containsKey('default_haiku_model')) {
+      context.handle(
+        _defaultHaikuModelMeta,
+        defaultHaikuModel.isAcceptableOrUnknown(
+          data['default_haiku_model']!,
+          _defaultHaikuModelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('default_sonnet_model')) {
+      context.handle(
+        _defaultSonnetModelMeta,
+        defaultSonnetModel.isAcceptableOrUnknown(
+          data['default_sonnet_model']!,
+          _defaultSonnetModelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('default_opus_model')) {
+      context.handle(
+        _defaultOpusModelMeta,
+        defaultOpusModel.isAcceptableOrUnknown(
+          data['default_opus_model']!,
+          _defaultOpusModelMeta,
+        ),
+      );
+    }
     if (data.containsKey('config_content')) {
       context.handle(
         _configContentMeta,
@@ -444,6 +508,18 @@ class $ProviderProfilesTable extends ProviderProfiles
         DriftSqlType.string,
         data['${effectivePrefix}vscode_model'],
       ),
+      defaultHaikuModel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}default_haiku_model'],
+      ),
+      defaultSonnetModel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}default_sonnet_model'],
+      ),
+      defaultOpusModel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}default_opus_model'],
+      ),
       configContent: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}config_content'],
@@ -481,6 +557,9 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
   final String? personality;
   final String? oauthData;
   final String? vscodeModel;
+  final String? defaultHaikuModel;
+  final String? defaultSonnetModel;
+  final String? defaultOpusModel;
   final String? configContent;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -500,6 +579,9 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     this.personality,
     this.oauthData,
     this.vscodeModel,
+    this.defaultHaikuModel,
+    this.defaultSonnetModel,
+    this.defaultOpusModel,
     this.configContent,
     required this.createdAt,
     required this.updatedAt,
@@ -543,6 +625,15 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     }
     if (!nullToAbsent || vscodeModel != null) {
       map['vscode_model'] = Variable<String>(vscodeModel);
+    }
+    if (!nullToAbsent || defaultHaikuModel != null) {
+      map['default_haiku_model'] = Variable<String>(defaultHaikuModel);
+    }
+    if (!nullToAbsent || defaultSonnetModel != null) {
+      map['default_sonnet_model'] = Variable<String>(defaultSonnetModel);
+    }
+    if (!nullToAbsent || defaultOpusModel != null) {
+      map['default_opus_model'] = Variable<String>(defaultOpusModel);
     }
     if (!nullToAbsent || configContent != null) {
       map['config_content'] = Variable<String>(configContent);
@@ -591,6 +682,15 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
       vscodeModel: vscodeModel == null && nullToAbsent
           ? const Value.absent()
           : Value(vscodeModel),
+      defaultHaikuModel: defaultHaikuModel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(defaultHaikuModel),
+      defaultSonnetModel: defaultSonnetModel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(defaultSonnetModel),
+      defaultOpusModel: defaultOpusModel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(defaultOpusModel),
       configContent: configContent == null && nullToAbsent
           ? const Value.absent()
           : Value(configContent),
@@ -624,6 +724,13 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
       personality: serializer.fromJson<String?>(json['personality']),
       oauthData: serializer.fromJson<String?>(json['oauthData']),
       vscodeModel: serializer.fromJson<String?>(json['vscodeModel']),
+      defaultHaikuModel: serializer.fromJson<String?>(
+        json['defaultHaikuModel'],
+      ),
+      defaultSonnetModel: serializer.fromJson<String?>(
+        json['defaultSonnetModel'],
+      ),
+      defaultOpusModel: serializer.fromJson<String?>(json['defaultOpusModel']),
       configContent: serializer.fromJson<String?>(json['configContent']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -648,6 +755,9 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
       'personality': serializer.toJson<String?>(personality),
       'oauthData': serializer.toJson<String?>(oauthData),
       'vscodeModel': serializer.toJson<String?>(vscodeModel),
+      'defaultHaikuModel': serializer.toJson<String?>(defaultHaikuModel),
+      'defaultSonnetModel': serializer.toJson<String?>(defaultSonnetModel),
+      'defaultOpusModel': serializer.toJson<String?>(defaultOpusModel),
       'configContent': serializer.toJson<String?>(configContent),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -670,6 +780,9 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     Value<String?> personality = const Value.absent(),
     Value<String?> oauthData = const Value.absent(),
     Value<String?> vscodeModel = const Value.absent(),
+    Value<String?> defaultHaikuModel = const Value.absent(),
+    Value<String?> defaultSonnetModel = const Value.absent(),
+    Value<String?> defaultOpusModel = const Value.absent(),
     Value<String?> configContent = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -695,6 +808,15 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     personality: personality.present ? personality.value : this.personality,
     oauthData: oauthData.present ? oauthData.value : this.oauthData,
     vscodeModel: vscodeModel.present ? vscodeModel.value : this.vscodeModel,
+    defaultHaikuModel: defaultHaikuModel.present
+        ? defaultHaikuModel.value
+        : this.defaultHaikuModel,
+    defaultSonnetModel: defaultSonnetModel.present
+        ? defaultSonnetModel.value
+        : this.defaultSonnetModel,
+    defaultOpusModel: defaultOpusModel.present
+        ? defaultOpusModel.value
+        : this.defaultOpusModel,
     configContent: configContent.present
         ? configContent.value
         : this.configContent,
@@ -732,6 +854,15 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
       vscodeModel: data.vscodeModel.present
           ? data.vscodeModel.value
           : this.vscodeModel,
+      defaultHaikuModel: data.defaultHaikuModel.present
+          ? data.defaultHaikuModel.value
+          : this.defaultHaikuModel,
+      defaultSonnetModel: data.defaultSonnetModel.present
+          ? data.defaultSonnetModel.value
+          : this.defaultSonnetModel,
+      defaultOpusModel: data.defaultOpusModel.present
+          ? data.defaultOpusModel.value
+          : this.defaultOpusModel,
       configContent: data.configContent.present
           ? data.configContent.value
           : this.configContent,
@@ -758,6 +889,9 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
           ..write('personality: $personality, ')
           ..write('oauthData: $oauthData, ')
           ..write('vscodeModel: $vscodeModel, ')
+          ..write('defaultHaikuModel: $defaultHaikuModel, ')
+          ..write('defaultSonnetModel: $defaultSonnetModel, ')
+          ..write('defaultOpusModel: $defaultOpusModel, ')
           ..write('configContent: $configContent, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -766,7 +900,7 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     editorType,
     name,
@@ -782,10 +916,13 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     personality,
     oauthData,
     vscodeModel,
+    defaultHaikuModel,
+    defaultSonnetModel,
+    defaultOpusModel,
     configContent,
     createdAt,
     updatedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -805,6 +942,9 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
           other.personality == this.personality &&
           other.oauthData == this.oauthData &&
           other.vscodeModel == this.vscodeModel &&
+          other.defaultHaikuModel == this.defaultHaikuModel &&
+          other.defaultSonnetModel == this.defaultSonnetModel &&
+          other.defaultOpusModel == this.defaultOpusModel &&
           other.configContent == this.configContent &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
@@ -826,6 +966,9 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
   final Value<String?> personality;
   final Value<String?> oauthData;
   final Value<String?> vscodeModel;
+  final Value<String?> defaultHaikuModel;
+  final Value<String?> defaultSonnetModel;
+  final Value<String?> defaultOpusModel;
   final Value<String?> configContent;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -846,6 +989,9 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     this.personality = const Value.absent(),
     this.oauthData = const Value.absent(),
     this.vscodeModel = const Value.absent(),
+    this.defaultHaikuModel = const Value.absent(),
+    this.defaultSonnetModel = const Value.absent(),
+    this.defaultOpusModel = const Value.absent(),
     this.configContent = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -867,6 +1013,9 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     this.personality = const Value.absent(),
     this.oauthData = const Value.absent(),
     this.vscodeModel = const Value.absent(),
+    this.defaultHaikuModel = const Value.absent(),
+    this.defaultSonnetModel = const Value.absent(),
+    this.defaultOpusModel = const Value.absent(),
     this.configContent = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
@@ -892,6 +1041,9 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     Expression<String>? personality,
     Expression<String>? oauthData,
     Expression<String>? vscodeModel,
+    Expression<String>? defaultHaikuModel,
+    Expression<String>? defaultSonnetModel,
+    Expression<String>? defaultOpusModel,
     Expression<String>? configContent,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -914,6 +1066,10 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
       if (personality != null) 'personality': personality,
       if (oauthData != null) 'oauth_data': oauthData,
       if (vscodeModel != null) 'vscode_model': vscodeModel,
+      if (defaultHaikuModel != null) 'default_haiku_model': defaultHaikuModel,
+      if (defaultSonnetModel != null)
+        'default_sonnet_model': defaultSonnetModel,
+      if (defaultOpusModel != null) 'default_opus_model': defaultOpusModel,
       if (configContent != null) 'config_content': configContent,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -937,6 +1093,9 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     Value<String?>? personality,
     Value<String?>? oauthData,
     Value<String?>? vscodeModel,
+    Value<String?>? defaultHaikuModel,
+    Value<String?>? defaultSonnetModel,
+    Value<String?>? defaultOpusModel,
     Value<String?>? configContent,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -958,6 +1117,9 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
       personality: personality ?? this.personality,
       oauthData: oauthData ?? this.oauthData,
       vscodeModel: vscodeModel ?? this.vscodeModel,
+      defaultHaikuModel: defaultHaikuModel ?? this.defaultHaikuModel,
+      defaultSonnetModel: defaultSonnetModel ?? this.defaultSonnetModel,
+      defaultOpusModel: defaultOpusModel ?? this.defaultOpusModel,
       configContent: configContent ?? this.configContent,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -1015,6 +1177,15 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     if (vscodeModel.present) {
       map['vscode_model'] = Variable<String>(vscodeModel.value);
     }
+    if (defaultHaikuModel.present) {
+      map['default_haiku_model'] = Variable<String>(defaultHaikuModel.value);
+    }
+    if (defaultSonnetModel.present) {
+      map['default_sonnet_model'] = Variable<String>(defaultSonnetModel.value);
+    }
+    if (defaultOpusModel.present) {
+      map['default_opus_model'] = Variable<String>(defaultOpusModel.value);
+    }
     if (configContent.present) {
       map['config_content'] = Variable<String>(configContent.value);
     }
@@ -1048,6 +1219,9 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
           ..write('personality: $personality, ')
           ..write('oauthData: $oauthData, ')
           ..write('vscodeModel: $vscodeModel, ')
+          ..write('defaultHaikuModel: $defaultHaikuModel, ')
+          ..write('defaultSonnetModel: $defaultSonnetModel, ')
+          ..write('defaultOpusModel: $defaultOpusModel, ')
           ..write('configContent: $configContent, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -1087,6 +1261,9 @@ typedef $$ProviderProfilesTableCreateCompanionBuilder =
       Value<String?> personality,
       Value<String?> oauthData,
       Value<String?> vscodeModel,
+      Value<String?> defaultHaikuModel,
+      Value<String?> defaultSonnetModel,
+      Value<String?> defaultOpusModel,
       Value<String?> configContent,
       required DateTime createdAt,
       required DateTime updatedAt,
@@ -1109,6 +1286,9 @@ typedef $$ProviderProfilesTableUpdateCompanionBuilder =
       Value<String?> personality,
       Value<String?> oauthData,
       Value<String?> vscodeModel,
+      Value<String?> defaultHaikuModel,
+      Value<String?> defaultSonnetModel,
+      Value<String?> defaultOpusModel,
       Value<String?> configContent,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -1196,6 +1376,21 @@ class $$ProviderProfilesTableFilterComposer
 
   ColumnFilters<String> get vscodeModel => $composableBuilder(
     column: $table.vscodeModel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get defaultHaikuModel => $composableBuilder(
+    column: $table.defaultHaikuModel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get defaultSonnetModel => $composableBuilder(
+    column: $table.defaultSonnetModel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get defaultOpusModel => $composableBuilder(
+    column: $table.defaultOpusModel,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1299,6 +1494,21 @@ class $$ProviderProfilesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get defaultHaikuModel => $composableBuilder(
+    column: $table.defaultHaikuModel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get defaultSonnetModel => $composableBuilder(
+    column: $table.defaultSonnetModel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get defaultOpusModel => $composableBuilder(
+    column: $table.defaultOpusModel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get configContent => $composableBuilder(
     column: $table.configContent,
     builder: (column) => ColumnOrderings(column),
@@ -1383,6 +1593,21 @@ class $$ProviderProfilesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get defaultHaikuModel => $composableBuilder(
+    column: $table.defaultHaikuModel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get defaultSonnetModel => $composableBuilder(
+    column: $table.defaultSonnetModel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get defaultOpusModel => $composableBuilder(
+    column: $table.defaultOpusModel,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get configContent => $composableBuilder(
     column: $table.configContent,
     builder: (column) => column,
@@ -1447,6 +1672,9 @@ class $$ProviderProfilesTableTableManager
                 Value<String?> personality = const Value.absent(),
                 Value<String?> oauthData = const Value.absent(),
                 Value<String?> vscodeModel = const Value.absent(),
+                Value<String?> defaultHaikuModel = const Value.absent(),
+                Value<String?> defaultSonnetModel = const Value.absent(),
+                Value<String?> defaultOpusModel = const Value.absent(),
                 Value<String?> configContent = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -1467,6 +1695,9 @@ class $$ProviderProfilesTableTableManager
                 personality: personality,
                 oauthData: oauthData,
                 vscodeModel: vscodeModel,
+                defaultHaikuModel: defaultHaikuModel,
+                defaultSonnetModel: defaultSonnetModel,
+                defaultOpusModel: defaultOpusModel,
                 configContent: configContent,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -1489,6 +1720,9 @@ class $$ProviderProfilesTableTableManager
                 Value<String?> personality = const Value.absent(),
                 Value<String?> oauthData = const Value.absent(),
                 Value<String?> vscodeModel = const Value.absent(),
+                Value<String?> defaultHaikuModel = const Value.absent(),
+                Value<String?> defaultSonnetModel = const Value.absent(),
+                Value<String?> defaultOpusModel = const Value.absent(),
                 Value<String?> configContent = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
@@ -1509,6 +1743,9 @@ class $$ProviderProfilesTableTableManager
                 personality: personality,
                 oauthData: oauthData,
                 vscodeModel: vscodeModel,
+                defaultHaikuModel: defaultHaikuModel,
+                defaultSonnetModel: defaultSonnetModel,
+                defaultOpusModel: defaultOpusModel,
                 configContent: configContent,
                 createdAt: createdAt,
                 updatedAt: updatedAt,

@@ -78,6 +78,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   String? _selectedReasoningEffort;
   @override
   String? _selectedPersonality;
+  @override
   String? _selectedPresetName;
   @override
   String _codexExistingConfigContent = '';
@@ -93,6 +94,12 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   Map<String, dynamic> _claudeBaseConfig = {};
   @override
   TextEditingController? _cliModelController;
+  @override
+  late TextEditingController _defaultHaikuModelController;
+  @override
+  late TextEditingController _defaultSonnetModelController;
+  @override
+  late TextEditingController _defaultOpusModelController;
   @override
   bool _isSpeedTesting = false;
   @override
@@ -162,7 +169,16 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
     _maxThinkingTokensController = TextEditingController(
       text: p?.maxThinkingTokens ?? '',
     );
-    _selectedModel = p?.model;
+    _defaultHaikuModelController = TextEditingController(
+      text: p?.defaultHaikuModel ?? '',
+    );
+    _defaultSonnetModelController = TextEditingController(
+      text: p?.defaultSonnetModel ?? '',
+    );
+    _defaultOpusModelController = TextEditingController(
+      text: p?.defaultOpusModel ?? '',
+    );
+    _selectedModel = p?.model ?? (_isClaude ? 'default' : null);
     _selectedVscodeModel = _isClaude ? p?.vscodeModel : null;
     _selectedReasoningEffort = p?.modelReasoningEffort ?? 'high';
     _selectedPersonality = p?.personality ?? 'pragmatic';
@@ -176,6 +192,9 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       _websiteController,
       _maxOutputTokensController,
       _maxThinkingTokensController,
+      _defaultHaikuModelController,
+      _defaultSonnetModelController,
+      _defaultOpusModelController,
     ];
     for (final c in previewControllers) {
       c.addListener(_onFieldChanged);
@@ -486,6 +505,9 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       'maxThinkingTokens': _maxThinkingTokensController.text.trim(),
       'model': _selectedModel?.trim(),
       'vscodeModel': _selectedVscodeModel?.trim(),
+      'defaultHaikuModel': _defaultHaikuModelController.text.trim(),
+      'defaultSonnetModel': _defaultSonnetModelController.text.trim(),
+      'defaultOpusModel': _defaultOpusModelController.text.trim(),
       'reasoningEffort': _selectedReasoningEffort,
       'personality': _selectedPersonality,
       'editedConfig': _isClaude && _claudeBaseConfig.isNotEmpty
@@ -534,6 +556,9 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
     _websiteController.dispose();
     _maxOutputTokensController.dispose();
     _maxThinkingTokensController.dispose();
+    _defaultHaikuModelController.dispose();
+    _defaultSonnetModelController.dispose();
+    _defaultOpusModelController.dispose();
     _pageScrollController.dispose();
     super.dispose();
   }
@@ -607,6 +632,8 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
                         if (_isClaude) ...[
                           const SizedBox(height: 16),
                           _buildTokenFields(isDark),
+                          const SizedBox(height: 16),
+                          _buildDefaultModelsFields(isDark),
                         ],
                         if (!_isClaude && !_isGemini) ...[
                           const SizedBox(height: 16),
@@ -763,6 +790,16 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       _descriptionController.text = preset.description;
       _baseUrlController.text = preset.baseUrl;
       _websiteController.text = preset.website ?? '';
+
+      if (preset.id == 'zhipu') {
+        _defaultHaikuModelController.text = 'glm-4.5-air';
+        _defaultSonnetModelController.text = 'glm-4.7';
+        _defaultOpusModelController.text = 'glm-4.7';
+      } else {
+        _defaultHaikuModelController.text = '';
+        _defaultSonnetModelController.text = '';
+        _defaultOpusModelController.text = '';
+      }
     });
   }
 
@@ -847,6 +884,18 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
         : _websiteController.text.trim();
 
     final configContent = _buildConfigContentForSave();
+    final defaultHaikuModel =
+        _defaultHaikuModelController.text.trim().isEmpty
+            ? null
+            : _defaultHaikuModelController.text.trim();
+    final defaultSonnetModel =
+        _defaultSonnetModelController.text.trim().isEmpty
+            ? null
+            : _defaultSonnetModelController.text.trim();
+    final defaultOpusModel =
+        _defaultOpusModelController.text.trim().isEmpty
+            ? null
+            : _defaultOpusModelController.text.trim();
 
     if (_isEditMode) {
       await service.updateProfile(
@@ -864,6 +913,9 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
         website: website,
         configContent: configContent,
         vscodeModel: _selectedVscodeModel,
+        defaultHaikuModel: defaultHaikuModel,
+        defaultSonnetModel: defaultSonnetModel,
+        defaultOpusModel: defaultOpusModel,
       );
     } else {
       await service.addProfile(
@@ -880,6 +932,9 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
         website: website,
         configContent: configContent,
         vscodeModel: _selectedVscodeModel,
+        defaultHaikuModel: defaultHaikuModel,
+        defaultSonnetModel: defaultSonnetModel,
+        defaultOpusModel: defaultOpusModel,
       );
     }
 
@@ -933,6 +988,15 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       personality: _selectedPersonality,
       website: _websiteController.text.isEmpty ? null : _websiteController.text,
       vscodeModel: _selectedVscodeModel,
+      defaultHaikuModel: _defaultHaikuModelController.text.trim().isEmpty
+          ? null
+          : _defaultHaikuModelController.text.trim(),
+      defaultSonnetModel: _defaultSonnetModelController.text.trim().isEmpty
+          ? null
+          : _defaultSonnetModelController.text.trim(),
+      defaultOpusModel: _defaultOpusModelController.text.trim().isEmpty
+          ? null
+          : _defaultOpusModelController.text.trim(),
       createdAt: widget.profile?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
     );

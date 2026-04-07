@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'dart:convert';
 import '../../../l10n/s.dart';
+import '../../../services/terminal_service.dart';
 import '../../../models/editor_type.dart';
 import '../../../services/codex_skills_service.dart';
 import '../../../services/codex_plugins_service.dart';
@@ -14,6 +16,7 @@ import '../../../models/codex_skill.dart';
 import '../../../models/codex_plugin.dart';
 import '../../components/custom_toast.dart';
 import '../../components/custom_dialog.dart';
+import '../../components/hover_card.dart';
 import '../../components/skills_editor_switcher.dart';
 import 'claude_code_skills_screen.dart';
 import 'gemini_skills_screen.dart';
@@ -40,25 +43,49 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
   List<CodexSkill> _localSkills = [];
   List<CodexSkill> _agentsSkills = [];
   List<CuratedCodexSkill> _curatedSkills = [];
-  List<CodexPlugin> _marketplacePlugins = [];
+  Map<String, List<CodexPlugin>> _groupedPlugins = {};
   bool _loadingLocal = true;
   bool _loadingAgents = true;
   bool _loadingCurated = true;
   bool _loadingPlugins = true;
+  bool _checkingCommand = false;
+  bool? _commandInstalled;
 
   late TabController _tabController;
+  bool _wasTerminalOpen = false;
+  TerminalService? _terminalService;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadData();
+    _setupTerminalListener();
   }
 
   @override
   void dispose() {
+    _terminalService?.removeListener(_onTerminalStateChanged);
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _setupTerminalListener() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _terminalService = context.read<TerminalService>();
+      _terminalService!.addListener(_onTerminalStateChanged);
+      _wasTerminalOpen = _terminalService!.isTerminalPanelOpen;
+    });
+  }
+
+  void _onTerminalStateChanged() {
+    if (!mounted || _terminalService == null) return;
+    final isOpen = _terminalService!.isTerminalPanelOpen;
+    if (_wasTerminalOpen && !isOpen) {
+      _loadData();
+    }
+    _wasTerminalOpen = isOpen;
   }
 
   Future<void> _loadData() async {
@@ -66,17 +93,21 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
     _loadAgentsSkills();
     _loadMarketplacePlugins();
     _loadCuratedSkills();
+    _checkCliInstalled(silent: true);
   }
 
   Future<void> _loadLocalSkills() async {
+    if (!mounted) return;
     setState(() => _loadingLocal = true);
     try {
       final skills = await _skillsService.loadLocalSkills();
+      if (!mounted) return;
       setState(() {
         _localSkills = skills;
         _loadingLocal = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _localSkills = [];
         _loadingLocal = false;
@@ -85,14 +116,17 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
   }
 
   Future<void> _loadAgentsSkills() async {
+    if (!mounted) return;
     setState(() => _loadingAgents = true);
     try {
       final skills = await _skillsService.loadAgentsSkills();
+      if (!mounted) return;
       setState(() {
         _agentsSkills = skills;
         _loadingAgents = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _agentsSkills = [];
         _loadingAgents = false;
@@ -101,32 +135,80 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
   }
 
   Future<void> _loadMarketplacePlugins() async {
+    if (!mounted) return;
     setState(() => _loadingPlugins = true);
     try {
-      final plugins = await _pluginsService.loadMarketplacePlugins();
+      final grouped = await _pluginsService.loadGroupedPlugins();
+      if (!mounted) return;
       setState(() {
-        _marketplacePlugins = plugins;
+        _groupedPlugins = grouped;
         _loadingPlugins = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _marketplacePlugins = [];
+        _groupedPlugins = {};
         _loadingPlugins = false;
       });
     }
   }
 
+  static const _cliCommand = 'openskills';
+  static const _cliInstallCommand =
+      'brew install lovelyJason/openskills/openskills';
+
+  Future<void> _checkCliInstalled({bool silent = false}) async {
+    if (!mounted) return;
+    setState(() => _checkingCommand = true);
+    try {
+      final result = await PlatformUtils.runCommand('which $_cliCommand');
+      final path = (result.stdout as String).trim();
+      final installed = result.exitCode == 0 && path.isNotEmpty;
+      if (!mounted) return;
+      setState(() {
+        _commandInstalled = installed;
+        _checkingCommand = false;
+      });
+      if (silent || !mounted) return;
+      Toast.show(
+        context,
+        message: installed
+            ? '${S.get('codex_cli_installed').replaceAll('{cmd}', _cliCommand)}\n${S.get('codex_cli_path').replaceAll('{path}', path)}'
+            : S.get('codex_cli_not_installed').replaceAll('{cmd}', _cliCommand),
+        type: installed ? ToastType.success : ToastType.warning,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _commandInstalled = false;
+        _checkingCommand = false;
+      });
+      if (!silent) {
+        Toast.show(
+          context,
+          message: S
+              .get('codex_cli_not_installed')
+              .replaceAll('{cmd}', _cliCommand),
+          type: ToastType.warning,
+        );
+      }
+    }
+  }
+
   Future<void> _loadCuratedSkills({bool forceRefresh = false}) async {
+    if (!mounted) return;
     setState(() => _loadingCurated = true);
     try {
       final skills = await _skillsService.loadCuratedSkills(
         forceRefresh: forceRefresh,
       );
+      if (!mounted) return;
       setState(() {
         _curatedSkills = skills;
         _loadingCurated = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _curatedSkills = [];
         _loadingCurated = false;
@@ -307,6 +389,8 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
             onSwitch: _switchToEditor,
           ),
           const Spacer(),
+          _buildCliCheckButton(),
+          const SizedBox(width: 4),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
@@ -370,33 +454,24 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
 
     return SizedBox(
       width: cardWidth,
-      child: InkWell(
+      child: HoverCard(
         onTap: () => _showSkillDetailDialog(skill),
-        borderRadius: BorderRadius.circular(10),
-        child: Card(
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: BorderSide(
-              color: accentColor.withValues(alpha: 0.3),
-              width: 1,
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: accentColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Icon(
-                        skill.isSystem ? Icons.settings : Icons.folder_special,
+        borderColor: accentColor.withValues(alpha: 0.3),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: accentColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(
+                      skill.isSystem ? Icons.settings : Icons.folder_special,
                         size: 16,
                         color: accentColor,
                       ),
@@ -501,7 +576,6 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
             ),
           ),
         ),
-      ),
     );
   }
 
@@ -565,15 +639,8 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
 
     return SizedBox(
       width: cardWidth,
-      child: Card(
-        margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: BorderSide(
-            color: accentColor.withValues(alpha: 0.3),
-            width: 1,
-          ),
-        ),
+      child: HoverCard(
+        borderColor: accentColor.withValues(alpha: 0.3),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -800,31 +867,24 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
 
     return SizedBox(
       width: cardWidth,
-      child: InkWell(
+      child: HoverCard(
         onTap: () => _copyInstallCommand(skill),
-        borderRadius: BorderRadius.circular(10),
-        child: Card(
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: BorderSide(color: tagColor.withValues(alpha: 0.3), width: 1),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 图标和名称
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: tagColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Icon(
-                        skill.isCurated ? Icons.star : Icons.science,
+        borderColor: tagColor.withValues(alpha: 0.3),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: tagColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(
+                      skill.isCurated ? Icons.star : Icons.science,
                         size: 16,
                         color: tagColor,
                       ),
@@ -902,7 +962,6 @@ class _CodexSkillsScreenState extends State<CodexSkillsScreen> with SingleTicker
               ],
             ),
           ),
-        ),
       ),
     );
   }

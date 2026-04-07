@@ -25,6 +25,7 @@ import '../../../models/skills/slash_command.dart';
 import '../../components/custom_toast.dart';
 import '../../components/custom_dialog.dart';
 import '../../components/skills_editor_switcher.dart';
+import '../../components/hover_card.dart';
 import 'claude_code_skills/components/hover_popover.dart';
 import 'codex_skills_screen.dart';
 import 'gemini_skills_screen.dart';
@@ -39,10 +40,14 @@ part 'claude_code_skills/dialogs/skill_content_dialog.dart';
 part 'claude_code_skills/dialogs/community_skill_detail_dialog.dart';
 part 'claude_code_skills/dialogs/custom_skill_install_dialog.dart';
 part 'claude_code_skills/dialogs/slash_command_search_dialog.dart';
-
 part 'claude_code_skills/dialogs/skill_usage_dialog.dart';
 part 'claude_code_skills/dialogs/skills_export_dialog.dart';
 part 'claude_code_skills/dialogs/skills_import_dialog.dart';
+
+// Part 文件 - Sections
+part 'claude_code_skills/sections/plugins_section.dart';
+part 'claude_code_skills/sections/community_skills_section.dart';
+part 'claude_code_skills/sections/marketplace_section.dart';
 
 /// Skills 管理页面
 class SkillsScreen extends StatefulWidget {
@@ -65,7 +70,6 @@ class _SkillsScreenState extends State<SkillsScreen> {
   bool _wasTerminalOpen = false;
   TerminalService? _terminalService;
 
-  // 高亮的 marketplace 名称
   String? _highlightedMarketplace;
 
   @override
@@ -95,7 +99,6 @@ class _SkillsScreenState extends State<SkillsScreen> {
     if (!mounted || _terminalService == null) return;
 
     final isOpen = _terminalService!.isTerminalPanelOpen;
-    // 当终端从打开变成关闭时，刷新数据
     if (_wasTerminalOpen && !isOpen) {
       _loadData();
     }
@@ -131,6 +134,8 @@ class _SkillsScreenState extends State<SkillsScreen> {
     }
   }
 
+  // ─── Dialog launchers ────────────────────────────────────────────────────────
+
   Future<void> _showAddMarketplaceDialog() async {
     await showDialog<void>(
       context: context,
@@ -157,11 +162,9 @@ class _SkillsScreenState extends State<SkillsScreen> {
       builder: (context) => _PluginDetailDialog(plugin: plugin),
     );
 
-    // 处理市场安装结果
     if (result != null && result['action'] == 'marketplace_installed' && mounted) {
       final repo = result['repo'] as String?;
       if (repo != null) {
-        // 显示提示
         Toast.show(
           context,
           message: S.get('marketplace_install_started'),
@@ -169,14 +172,10 @@ class _SkillsScreenState extends State<SkillsScreen> {
           duration: const Duration(seconds: 4),
         );
 
-        // 从 repo 提取 marketplace 名称（最后一个路径段）
         final marketplaceName = repo.split('/').last;
         setState(() => _highlightedMarketplace = marketplaceName);
-
-        // 滚动到市场区域
         _scrollToMarketplaceSection();
 
-        // 3 秒后取消高亮
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted) {
             setState(() => _highlightedMarketplace = null);
@@ -186,7 +185,6 @@ class _SkillsScreenState extends State<SkillsScreen> {
     }
   }
 
-  /// 滚动到已添加市场区域
   void _scrollToMarketplaceSection() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final keyContext = _marketplaceSectionKey.currentContext;
@@ -219,7 +217,6 @@ class _SkillsScreenState extends State<SkillsScreen> {
   }
 
   Future<void> _showSlashCommandSearchDialog() async {
-    // 扫描所有斜线指令
     final commands = await _skillsService.scanSlashCommands(_plugins);
     if (!mounted) return;
 
@@ -250,7 +247,6 @@ class _SkillsScreenState extends State<SkillsScreen> {
     terminalService.sendCommand('claude plugin marketplace update $marketplaceName');
   }
 
-  // 市场提示信息映射
   String? _getMarketplaceHint(String name) {
     final hints = {
       'claude-code-plugins': 'marketplace_hint_claude_code',
@@ -262,6 +258,8 @@ class _SkillsScreenState extends State<SkillsScreen> {
     return key != null ? S.get(key) : null;
   }
 
+  // ─── Build ───────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -270,11 +268,8 @@ class _SkillsScreenState extends State<SkillsScreen> {
       backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
       body: Column(
         children: [
-          // 红绿灯占位区域
           const SizedBox(height: 38),
-          // 自定义 AppBar
           _buildAppBar(isDark),
-          // 内容区域
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -285,11 +280,11 @@ class _SkillsScreenState extends State<SkillsScreen> {
                       child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildPluginsSection(isDark),
+                        buildPluginsSection(isDark),
                         const SizedBox(height: 16),
-                        _buildCommunitySkillsSection(isDark),
+                        buildCommunitySkillsSection(isDark),
                         const SizedBox(height: 16),
-                        _buildMarketplacesSection(isDark),
+                        buildMarketplacesSection(isDark),
                       ],
                     ),
                   ),
@@ -326,7 +321,6 @@ class _SkillsScreenState extends State<SkillsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          // 带圆角背景的返回按钮
           Container(
             width: 36,
             height: 36,
@@ -347,20 +341,17 @@ class _SkillsScreenState extends State<SkillsScreen> {
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(width: 8),
-          // 编辑器切换下拉按钮
           SkillsEditorSwitcher(
             currentEditor: EditorType.claude,
             onSwitch: _switchToEditor,
           ),
           const Spacer(),
-          // Skill 调用记录按钮
           if (_skillUsageItems.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.bar_chart_rounded, color: Color(0xFFD97757)),
               onPressed: _showSkillUsageDialog,
               tooltip: S.get('skill_usage_title'),
             ),
-          // 搜索斜线指令按钮
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: _showSlashCommandSearchDialog,
@@ -376,933 +367,9 @@ class _SkillsScreenState extends State<SkillsScreen> {
     );
   }
 
-  // ============ 本地插件区域 ============
-  Widget _buildPluginsSection(bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitleWithAction(
-          S.get('local_plugins'),
-          Icons.extension,
-          Colors.blue,
-          actionIcon: Icons.build_outlined,
-          actionTooltip: S.get('fix_enabled_plugins'),
-          onAction: _fixEnabledPlugins,
-        ),
-        const SizedBox(height: 12),
-        if (_plugins.isEmpty)
-          _buildEmptyCard(S.get('no_skills'))
-        else
-          _buildPluginCards(isDark),
-      ],
-    );
-  }
-
-  Future<void> _fixEnabledPlugins() async {
-    final fixedCount = await _skillsService.fixEnabledPlugins();
-    if (!mounted) return;
-    if (fixedCount > 0) {
-      Toast.show(
-        context,
-        message: S.get('fix_enabled_plugins_success').replaceAll('{count}', '$fixedCount'),
-        type: ToastType.success,
-        duration: const Duration(seconds: 4),
-      );
-      await _loadData();
-    } else {
-      Toast.show(
-        context,
-        message: S.get('fix_enabled_plugins_ok'),
-        type: ToastType.info,
-      );
-    }
-  }
-
-  Widget _buildPluginCards(bool isDark) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const spacing = 12.0;
-        const cardsPerRow = 3;
-        final cardWidth = (constraints.maxWidth - (spacing * (cardsPerRow - 1))) / cardsPerRow;
-
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: _plugins.map((plugin) => _buildPluginCard(plugin, isDark, cardWidth)).toList(),
-        );
-      },
-    );
-  }
-
-  Widget _buildPluginCard(InstalledPlugin plugin, bool isDark, double cardWidth) {
-    final parts = plugin.name.split('@');
-    final pluginName = parts[0];
-    final marketplace = parts.length > 1 ? parts[1] : '';
-    final isEnabled = plugin.isEnabled;
-    final isDeprecated = plugin.isDeprecated;
-
-    return SizedBox(
-      width: cardWidth,
-      child: Opacity(
-        opacity: isEnabled ? 1.0 : 0.5,
-        child: Card(
-          margin: EdgeInsets.zero,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: BorderSide(
-              color: isDeprecated
-                  ? Colors.red.withValues(alpha: 0.5)
-                  : isEnabled
-                      ? Colors.grey.withValues(alpha: 0.2)
-                      : Colors.grey.withValues(alpha: 0.3),
-              width: isDeprecated ? 1.5 : 1,
-            ),
-          ),
-          child: InkWell(
-            onTap: () => _showPluginDetailDialog(plugin),
-            borderRadius: BorderRadius.circular(10),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 图标和名称
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: isDeprecated
-                              ? Colors.red.withValues(alpha: 0.1)
-                              : Colors.blue.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Icon(
-                          Icons.extension,
-                          size: 16,
-                          color: isDeprecated ? Colors.red : Colors.blue,
-                        ),
-                      ),
-                      // 废弃警告图标
-                      if (isDeprecated) ...[
-                        const SizedBox(width: 4),
-                        Tooltip(
-                          message: S.get('plugin_deprecated_tip'),
-                          preferBelow: false,
-                          verticalOffset: 14,
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade700,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          textStyle: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            height: 1.4,
-                          ),
-                          child: Icon(
-                            Icons.warning_amber_rounded,
-                            size: 16,
-                            color: Colors.red.shade600,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          pluginName,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            color: isDeprecated ? Colors.red.shade700 : null,
-                            decoration: isDeprecated ? TextDecoration.lineThrough : null,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withValues(alpha: isDark ? 0.2 : 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          marketplace,
-                          style: const TextStyle(
-                            fontSize: 9,
-                            color: Colors.blue,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  // 版本、scope 和日期
-                  Row(
-                    children: [
-                      Icon(Icons.tag, size: 11, color: Colors.grey.withValues(alpha: 0.7)),
-                      const SizedBox(width: 3),
-                      Text(
-                        plugin.version.length > 10
-                            ? '${plugin.version.substring(0, 10)}...'
-                            : plugin.version,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey.withValues(alpha: 0.8),
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                      // Scope 标识（仅 project 显示，悬浮显示 projectPath，点击可转 user）
-                      if (plugin.scope == 'project') ...[
-                        const SizedBox(width: 6),
-                        Tooltip(
-                          message: '${plugin.projectPath ?? 'Unknown'}\n${S.get('click_to_convert_user')}',
-                          preferBelow: false,
-                          verticalOffset: 14,
-                          child: InkWell(
-                            onTap: () => _convertToUserScope(plugin),
-                            borderRadius: BorderRadius.circular(3),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.withValues(alpha: isDark ? 0.2 : 0.1),
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                              child: const Text(
-                                'project',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  color: Colors.orange,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(width: 6),
-                      Icon(Icons.calendar_today, size: 11, color: Colors.grey.withValues(alpha: 0.7)),
-                      const SizedBox(width: 3),
-                      Text(
-                        _skillsService.formatDate(plugin.installedAt),
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey.withValues(alpha: 0.8),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  // 操作按钮行
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      // 禁用/启用开关
-                      InkWell(
-                        onTap: () => _togglePluginEnabled(plugin),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: Icon(
-                            isEnabled ? Icons.toggle_on : Icons.toggle_off,
-                            size: 22,
-                            color: isEnabled
-                                ? Colors.green.withValues(alpha: 0.8)
-                                : Colors.grey.withValues(alpha: 0.6),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      // 更新按钮（废弃插件不显示）
-                      if (!isDeprecated)
-                        InkWell(
-                          onTap: () => _updatePlugin(plugin),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: Icon(
-                              Icons.sync,
-                              size: 16,
-                              color: Colors.blue.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ),
-                      if (!isDeprecated) const SizedBox(width: 4),
-                      // 删除按钮
-                      InkWell(
-                        onTap: () => _confirmUninstallPlugin(plugin),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: Icon(
-                            Icons.delete_outline,
-                            size: 18,
-                            color: Colors.red.withValues(alpha: 0.7),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 更新插件
-  Future<void> _updatePlugin(InstalledPlugin plugin) async {
-    final terminalService = context.read<TerminalService>();
-    terminalService.setFloatingTerminal(true);
-    terminalService.openTerminalPanel();
-    await Future.delayed(const Duration(milliseconds: 500));
-    // 需要根据插件的 scope 来指定更新范围
-    final scopeArg = plugin.scope.isNotEmpty ? '--scope ${plugin.scope}' : '';
-    terminalService.sendCommand('claude plugin update ${plugin.name} $scopeArg'.trim());
-  }
-
-  /// 切换插件启用状态
-  Future<void> _togglePluginEnabled(InstalledPlugin plugin) async {
-    final terminalService = context.read<TerminalService>();
-    final command = plugin.isEnabled
-        ? 'claude plugin disable ${plugin.name}'
-        : 'claude plugin enable ${plugin.name}';
-
-    terminalService.setFloatingTerminal(true);
-    terminalService.openTerminalPanel();
-    await Future.delayed(const Duration(milliseconds: 500));
-    terminalService.sendCommand(command);
-  }
-
-  /// 确认卸载插件
-  Future<void> _confirmUninstallPlugin(InstalledPlugin plugin) async {
-    final parts = plugin.name.split('@');
-    final pluginName = parts[0];
-
-    // 废弃插件使用特殊弹窗
-    if (plugin.isDeprecated) {
-      await _confirmForceDeleteDeprecatedPlugin(plugin, pluginName);
-      return;
-    }
-
-    final confirmed = await CustomConfirmDialog.show(
-      context,
-      title: S.get('confirm_uninstall_title'),
-      content: S.get('confirm_uninstall_content').replaceAll('{name}', pluginName),
-      confirmText: S.get('uninstall'),
-      cancelText: S.get('cancel'),
-      confirmColor: Colors.red,
-    );
-
-    if (confirmed == true && mounted) {
-      final terminalService = context.read<TerminalService>();
-      terminalService.setFloatingTerminal(true);
-      terminalService.openTerminalPanel();
-      await Future.delayed(const Duration(milliseconds: 500));
-      terminalService.sendCommand('claude plugin uninstall ${plugin.name}');
-    }
-  }
-
-  /// 废弃插件强力删除确认弹窗
-  Future<void> _confirmForceDeleteDeprecatedPlugin(InstalledPlugin plugin, String pluginName) async {
-    final confirmed = await CustomConfirmDialog.show(
-      context,
-      title: S.get('deprecated_plugin_title'),
-      content: S.get('deprecated_plugin_content').replaceAll('{name}', pluginName),
-      confirmText: S.get('force_delete'),
-      cancelText: S.get('cancel'),
-      confirmColor: Colors.red,
-    );
-
-    if (confirmed == true && mounted) {
-      final (success, errorCode) = await _skillsService.forceDeleteDeprecatedPlugin(plugin);
-      if (mounted) {
-        if (success) {
-          Toast.show(
-            context,
-            message: S.get('plugin_force_deleted'),
-            type: ToastType.success,
-          );
-          _loadData();
-        } else if (errorCode == 'claude_cli_conflict') {
-          // Claude CLI 正在运行，会重写 JSON 文件
-          Toast.show(
-            context,
-            message: S.get('plugin_delete_cli_conflict'),
-            type: ToastType.warning,
-            duration: const Duration(seconds: 5),
-          );
-        } else {
-          Toast.show(
-            context,
-            message: S.get('plugin_force_delete_failed'),
-            type: ToastType.error,
-          );
-        }
-      }
-    }
-  }
-
-  /// 将插件从 project scope 转换为 user scope
-  Future<void> _convertToUserScope(InstalledPlugin plugin) async {
-    final confirmed = await CustomConfirmDialog.show(
-      context,
-      title: S.get('convert_to_user_scope_title'),
-      content: S.get('convert_to_user_scope_content').replaceAll('{name}', plugin.name.split('@').first),
-      confirmText: S.get('convert'),
-      cancelText: S.get('cancel'),
-      confirmColor: Colors.deepPurple,
-    );
-
-    if (confirmed == true && mounted) {
-      final success = await _skillsService.convertPluginToUserScope(plugin);
-      if (mounted) {
-        if (success) {
-          Toast.show(
-            context,
-            message: S.get('convert_to_user_scope_success'),
-            type: ToastType.success,
-          );
-          _loadData();
-        } else {
-          Toast.show(
-            context,
-            message: S.get('convert_to_user_scope_failed'),
-            type: ToastType.error,
-          );
-        }
-      }
-    }
-  }
-
-  // ============ 社区 Skills 区域 ============
-  Widget _buildCommunitySkillsSection(bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 标题行：带多个 action 按钮
-        Row(
-          children: [
-            const Icon(Icons.folder_special, size: 20, color: Colors.teal),
-            const SizedBox(width: 8),
-            Text(
-              S.get('community_skills'),
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context).textTheme.titleMedium?.color,
-              ),
-            ),
-            const Spacer(),
-            // 导入按钮
-            IconButton(
-              icon: const Icon(Icons.download_rounded, size: 20, color: Colors.teal),
-              onPressed: _importSkills,
-              tooltip: S.get('import_skills'),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            ),
-            // 导出按钮
-            IconButton(
-              icon: Icon(
-                Icons.upload_rounded,
-                size: 20,
-                color: _communitySkills.isEmpty ? Colors.grey : Colors.teal,
-              ),
-              onPressed: _communitySkills.isEmpty ? null : _showExportSkillsDialog,
-              tooltip: S.get('export_skills'),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            ),
-            // 添加按钮
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline, size: 20, color: Colors.teal),
-              onPressed: _showCustomSkillInstallDialog,
-              tooltip: S.get('custom_skill_install'),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Padding(
-          padding: const EdgeInsets.only(left: 28),
-          child: Text(
-            S.get('community_skills_hint'),
-            style: TextStyle(fontSize: 12, color: Colors.grey.withValues(alpha: 0.7)),
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (_communitySkills.isEmpty)
-          _buildEmptyCard(S.get('no_community_skills'))
-        else
-          _buildCommunitySkillCards(isDark),
-      ],
-    );
-  }
-
-  Future<void> _showCustomSkillInstallDialog() async {
-    await showDialog<void>(
-      context: context,
-      builder: (context) => _CustomSkillInstallDialog(
-        onInstalled: _loadData,
-      ),
-    );
-  }
-
-  /// 导出 Skills
-  Future<void> _showExportSkillsDialog() async {
-    if (_communitySkills.isEmpty) {
-      Toast.show(context, message: S.get('no_skills_to_export'), type: ToastType.info);
-      return;
-    }
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => _SkillsExportDialog(skills: _communitySkills),
-    );
-
-    if (result == true) {
-      _loadData();
-    }
-  }
-
-  /// 导入 Skills
-  Future<void> _importSkills() async {
-    final result = await FilePicker.platform.pickFiles(
-      dialogTitle: S.get('select_import_file'),
-      type: FileType.custom,
-      allowedExtensions: ['zip'],
-    );
-
-    if (result == null || result.files.isEmpty) return;
-    if (!mounted) return;
-
-    final filePath = result.files.first.path;
-    if (filePath == null) return;
-
-    final imported = await showDialog<bool>(
-      context: context,
-      builder: (context) => _SkillsImportDialog(zipPath: filePath),
-    );
-
-    if (imported == true && mounted) {
-      _loadData();
-    }
-  }
-
-  Widget _buildCommunitySkillCards(bool isDark) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const spacing = 12.0;
-        const cardsPerRow = 3;
-        final cardWidth = (constraints.maxWidth - (spacing * (cardsPerRow - 1))) / cardsPerRow;
-
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children:
-              _communitySkills.map((skill) => _buildCommunitySkillCard(skill, isDark, cardWidth)).toList(),
-        );
-      },
-    );
-  }
-
-  Widget _buildCommunitySkillCard(CommunitySkill skill, bool isDark, double cardWidth) {
-    return SizedBox(
-      width: cardWidth,
-      child: InkWell(
-        onTap: () => _showCommunitySkillDetailDialog(skill),
-        borderRadius: BorderRadius.circular(10),
-        child: Card(
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: BorderSide(color: Colors.teal.withValues(alpha: 0.3), width: 1),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 图标和名称
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.teal.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Icon(Icons.folder_special, size: 16, color: Colors.teal),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        skill.name,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (skill.hasSkillMd)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withValues(alpha: isDark ? 0.2 : 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Icon(Icons.check, size: 10, color: Colors.green),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // 描述
-                Text(
-                  skill.description ?? S.get('no_description'),
-                  style: TextStyle(fontSize: 11, color: Colors.grey.withValues(alpha: 0.8)),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                // 操作按钮行
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    // 复制按钮
-                    InkWell(
-                      onTap: () => _copyCommunitySkillCommand(skill.name),
-                      borderRadius: BorderRadius.circular(4),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.copy,
-                          size: 16,
-                          color: Colors.teal.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    // 删除按钮
-                    InkWell(
-                      onTap: () => _confirmDeleteCommunitySkill(skill),
-                      borderRadius: BorderRadius.circular(4),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.delete_outline,
-                          size: 18,
-                          color: Colors.red.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 复制社区 Skill 命令
-  void _copyCommunitySkillCommand(String skillName) {
-    final command = '/$skillName';
-    Clipboard.setData(ClipboardData(text: command));
-    Toast.show(
-      context,
-      message: S.get('skill_copied_hint'),
-      type: ToastType.success,
-    );
-  }
-
-  /// 确认删除社区 Skill
-  Future<void> _confirmDeleteCommunitySkill(CommunitySkill skill) async {
-    final confirmed = await CustomConfirmDialog.show(
-      context,
-      title: S.get('confirm_delete_title'),
-      content: S.get('confirm_delete_skill_content').replaceAll('{name}', skill.name),
-      confirmText: S.get('delete'),
-      cancelText: S.get('cancel'),
-      confirmColor: Colors.red,
-    );
-
-    if (confirmed == true && mounted) {
-      try {
-        final dir = Directory(skill.path);
-        if (await dir.exists()) {
-          await dir.delete(recursive: true);
-          _loadData();
-          if (mounted) {
-            Toast.show(context, message: S.get('skill_deleted'), type: ToastType.success);
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          Toast.show(context, message: S.get('skill_delete_failed'), type: ToastType.error);
-        }
-      }
-    }
-  }
-
-  // ============ 市场区域 ============
-  Widget _buildMarketplacesSection(bool isDark) {
-    return Column(
-      key: _marketplaceSectionKey,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitleWithAction(
-          S.get('marketplaces'),
-          Icons.store,
-          Colors.orange,
-          actionIcon: Icons.add_circle_outline,
-          actionTooltip: S.get('add_marketplace'),
-          onAction: _showAddMarketplaceDialog,
-        ),
-        const SizedBox(height: 12),
-        if (_marketplaces.isEmpty)
-          _buildEmptyCard(S.get('no_marketplaces'))
-        else
-          _buildMarketplaceCards(isDark),
-      ],
-    );
-  }
-
-  Widget _buildMarketplaceCards(bool isDark) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const spacing = 12.0;
-        const cardsPerRow = 3;
-        final cardWidth = (constraints.maxWidth - (spacing * (cardsPerRow - 1))) / cardsPerRow;
-
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children:
-              _marketplaces.map((marketplace) => _buildMarketplaceCard(marketplace, isDark, cardWidth)).toList(),
-        );
-      },
-    );
-  }
-
-  Widget _buildMarketplaceCard(InstalledMarketplace marketplace, bool isDark, double cardWidth) {
-    final isOfficial = marketplace.isOfficial;
-    final isAuthor = presetMarketplaces.any((p) => p.name == marketplace.name && p.isAuthor);
-    final Color tagColor;
-    final IconData tagIcon;
-    final String tagText;
-    if (isOfficial) {
-      tagColor = Colors.blue;
-      tagIcon = Icons.verified;
-      tagText = S.get('official');
-    } else if (isAuthor) {
-      tagColor = Colors.deepOrange;
-      tagIcon = Icons.favorite;
-      tagText = S.get('author_tag');
-    } else {
-      tagColor = Colors.purple;
-      tagIcon = Icons.groups;
-      tagText = S.get('community');
-    }
-    final hint = _getMarketplaceHint(marketplace.name);
-    final isHighlighted = _highlightedMarketplace != null &&
-        marketplace.name.toLowerCase().contains(_highlightedMarketplace!.toLowerCase());
-
-    return SizedBox(
-      width: cardWidth,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        decoration: isHighlighted
-            ? BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.deepPurple.withValues(alpha: 0.4),
-                    blurRadius: 12,
-                    spreadRadius: 2,
-                  ),
-                ],
-              )
-            : null,
-        child: InkWell(
-          onTap: () => _showMarketplaceDetailDialog(marketplace),
-          borderRadius: BorderRadius.circular(10),
-          child: Card(
-            margin: EdgeInsets.zero,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: BorderSide(
-                color: isHighlighted ? Colors.deepPurple : Colors.grey.withValues(alpha: 0.2),
-                width: isHighlighted ? 2 : 1,
-              ),
-            ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 图标和标签
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: tagColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Icon(tagIcon, size: 16, color: tagColor),
-                    ),
-                    // 有提示信息时显示问号
-                    if (hint != null) HoverPopover(message: hint, isDark: isDark),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        marketplace.name,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: tagColor.withValues(alpha: isDark ? 0.2 : 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        tagText,
-                        style: TextStyle(
-                          fontSize: 9,
-                          color: tagColor,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                // Repo 信息
-                Row(
-                  children: [
-                    Icon(Icons.link, size: 12, color: Colors.grey.withValues(alpha: 0.7)),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        marketplace.repo,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.withValues(alpha: 0.8),
-                          fontFamily: 'monospace',
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                // 更新时间和操作按钮
-                Row(
-                  children: [
-                    Icon(Icons.update, size: 12, color: Colors.grey.withValues(alpha: 0.7)),
-                    const SizedBox(width: 4),
-                    Text(
-                      _skillsService.formatDate(marketplace.lastUpdated),
-                      style: TextStyle(fontSize: 11, color: Colors.grey.withValues(alpha: 0.8)),
-                    ),
-                    const Spacer(),
-                    // 更新市场按钮
-                    InkWell(
-                      onTap: () => _updateMarketplace(marketplace.name),
-                      borderRadius: BorderRadius.circular(4),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.sync,
-                          size: 16,
-                          color: Colors.blue.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ),
-                    // README 查看按钮
-                    if (marketplace.hasReadme)
-                      InkWell(
-                        onTap: () => _showReadmeDialog(marketplace),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: Icon(
-                            Icons.description_outlined,
-                            size: 16,
-                            color: Colors.orange.withValues(alpha: 0.8),
-                          ),
-                        ),
-                      ),
-                    // 打开文件夹按钮
-                    InkWell(
-                      onTap: () => _openInFinder(marketplace.name),
-                      borderRadius: BorderRadius.circular(4),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.folder_open_outlined,
-                          size: 16,
-                          color: Colors.grey.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ),
-                    // 删除市场按钮
-                    InkWell(
-                      onTap: () => _confirmRemoveMarketplace(marketplace),
-                      borderRadius: BorderRadius.circular(4),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.delete_outline,
-                          size: 16,
-                          color: Colors.red.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        ),
-      ),
-    );
-  }
-
-  /// 确认移除市场
-  Future<void> _confirmRemoveMarketplace(InstalledMarketplace marketplace) async {
-    final confirmed = await CustomConfirmDialog.show(
-      context,
-      title: S.get('confirm_remove_marketplace_title'),
-      content: S.get('confirm_remove_marketplace_content').replaceAll('{name}', marketplace.name),
-      confirmText: S.get('delete'),
-      cancelText: S.get('cancel'),
-      confirmColor: Colors.red,
-    );
-
-    if (confirmed == true && mounted) {
-      final terminalService = context.read<TerminalService>();
-      terminalService.setFloatingTerminal(true);
-      terminalService.openTerminalPanel();
-      await Future.delayed(const Duration(milliseconds: 500));
-      terminalService.sendCommand('claude plugin marketplace remove ${marketplace.name}');
-    }
-  }
-
   // ============ 公共组件 ============
-  Widget _buildSectionTitleWithAction(
+
+  Widget buildSectionTitleWithAction(
     String title,
     IconData icon,
     Color color, {
@@ -1334,7 +401,7 @@ class _SkillsScreenState extends State<SkillsScreen> {
     );
   }
 
-  Widget _buildEmptyCard(String text) {
+  Widget buildEmptyCard(String text) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(24),

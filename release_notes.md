@@ -1,3 +1,24 @@
+## v1.10.0
+
+### ✨ 新增特性
+
+- **Codex 插件安装功能**：Marketplace Plugins 卡片新增下载按钮，第三方插件一键通过侧边终端执行 `osk plugin install` 安装；官方 OpenAI Curated 插件提示前往 Codex REPL 环境安装
+- **Codex Plugins / Agents Skills 展示**：新增 Codex Marketplace Plugins 分组展示区域，支持按 marketplace 源分组浏览插件及安装状态；新增 Agents Skills（`~/.agents/skills/`）扫描与展示
+- **供应商默认模型配置**：Provider 配置新增 Haiku / Sonnet / Opus 默认模型字段，支持为不同供应商预设模型偏好
+- **SQLite MCP 预设**：MCP 预设列表新增 SQLite 数据库工具配置
+
+### 🚀 优化改进
+
+- **Claude 插件页面拆分**：将 `claude_code_skills_screen.dart`（1342 行）按职责拆分为本地插件、社区 Skills、Marketplace 三个独立 section 文件，主文件缩减至 418 行
+- **插件安装状态自动刷新**：Codex 插件页面监听侧边终端关闭事件，安装完成后自动刷新卡片状态，无需手动刷新
+- **卡片悬浮效果**：新增通用 HoverCard 组件，为 Claude 和 Codex 页面所有卡片添加统一的悬浮阴影和微上浮动画
+
+### 📄 文档
+
+- 新增 Codex 插件发现机制文档（数据源、解析流程、状态匹配）
+- 新增 Codex 插件安装原理文档（REPL 安装流程、App Server RPC、config.toml 写入机制）
+
+
 ## v1.9.1
 
 ### ✨ 新增特性

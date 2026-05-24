@@ -76,11 +76,15 @@ jobs:
         shell: pwsh
 
       # 8. Upload Installer (with version)
+      # retention-days: 7 — 正式版本已经走 step 11 上传到 GitHub Release 永久保留；
+      # 这里 artifact 仅作 CI 调试 / 临时下载用，7 天自动过期回收账号级 actions storage 配额，
+      # 防止历史版本累积撑爆 Free 计划 500MB 上限（曾导致其他仓库 upload 被全局拒绝）。
       - name: Upload Installer
         uses: actions/upload-artifact@v4
         with:
           name: MCP_Switch_windows_setup_v${{ steps.version.outputs.VERSION }}
           path: build/installer/*.exe
+          retention-days: 7
 
       # 9. Upload Raw Build (with version, for debugging)
       - name: Upload Raw Build
@@ -88,6 +92,7 @@ jobs:
         with:
           name: MCP_Switch_windows_raw_v${{ steps.version.outputs.VERSION }}
           path: build/windows/x64/runner/Release/
+          retention-days: 7
 
       # 10. Zip Artifacts for Release
       - name: Zip Artifacts

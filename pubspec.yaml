@@ -53,7 +53,7 @@ dependencies:
   flutter_pty: ^0.4.2
   image: ^4.6.0
   logger: ^2.6.2
-  font_awesome_flutter: ^10.8.0
+  font_awesome_flutter: ^11.0.0
   anthropic_sdk_dart: ^0.1.0  # Claude API SDK for AI Chatbot
   yaml: ^3.1.2  # YAML parser for platform config
   path: ^1.9.0  # Path manipulation utilities

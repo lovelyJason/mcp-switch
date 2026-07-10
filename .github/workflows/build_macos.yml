@@ -1,0 +1,66 @@
+name: Build macOS App
+
+# 触发条件：打标签时触发，或者手动触发
+on:
+  push:
+    tags:
+      - 'v*'  # 匹配 v1.0.0, v1.0.3 等格式的标签
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. 安装 Flutter（带缓存加速）
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      # 2. 从 pubspec.yaml 提取版本号
+      - name: Extract Version
+        id: version
+        run: |
+          version=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1)
+          echo "VERSION=$version" >> $GITHUB_OUTPUT
+          echo "Extracted version: $version"
+
+      # 3. 获取依赖
+      - name: Install Dependencies
+        run: flutter pub get
+
+      # 4. Build macOS Release（项目已配置 ad-hoc 签名，无需 Apple 证书）
+      - name: Build macOS Release
+        run: flutter build macos --release
+
+      # 5. 打包 .app 为 zip
+      - name: Zip App Bundle
+        id: zip
+        run: |
+          version="${{ steps.version.outputs.VERSION }}"
+          zip_dir="build/macos/Build/Products/Release"
+          zip_name="MCP_Switch_macOS_v${version}.zip"
+          cd "$zip_dir"
+          zip -r "$zip_name" "MCP Switch.app"
+          echo "zip_path=${zip_dir}/${zip_name}" >> "$GITHUB_OUTPUT"
+
+      # 6. Upload Artifact（7 天过期，正式包走 Release 永久保留）
+      - name: Upload macOS Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: MCP_Switch_macOS_v${{ steps.version.outputs.VERSION }}
+          path: ${{ steps.zip.outputs.zip_path }}
+          retention-days: 7
+
+      # 7. Upload to Release
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: ${{ steps.zip.outputs.zip_path }}

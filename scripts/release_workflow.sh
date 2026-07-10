@@ -98,27 +98,17 @@ git tag -a "v$version" -m "Release v$version"
 git push
 git push --tags
 
-# Build
-echo "Building macOS app..."
-flutter clean && flutter build macos --release
-
-# Zip
-echo "Creating ZIP archive..."
-cd build/macos/Build/Products/Release
-rm -f *.zip
-# Re-read version to be safe or reuse variable
-zip_name="MCP_Switch_macOS_v${version}.zip"
-zip -r "$zip_name" "MCP Switch.app"
-cd -
-
-# Publish
-echo "Publishing to GitHub..."
-zip_path="build/macos/Build/Products/Release/MCP_Switch_macOS_v${version}.zip"
-
+# Publish release shell; macOS/Windows builds are attached by GitHub Actions
+echo "Publishing release to GitHub (CI will attach macOS and Windows builds)..."
 if [ -f "RELEASE_DRAFT.md" ]; then
-  gh release create "v$version" "$zip_path" --title "v$version" --notes-file RELEASE_DRAFT.md
+  if gh release view "v$version" >/dev/null 2>&1; then
+    gh release edit "v$version" --title "v$version" --notes-file RELEASE_DRAFT.md
+  else
+    gh release create "v$version" --title "v$version" --notes-file RELEASE_DRAFT.md
+  fi
   rm RELEASE_DRAFT.md
-  echo "Release published successfully!"
+  echo "Release published. Check Actions for build progress:"
+  echo "  https://github.com/lovelyJason/mcp-switch/actions"
 else
   echo "❌ Error: RELEASE_DRAFT.md missing at publish stage."
   exit 1

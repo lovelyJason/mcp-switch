@@ -27,11 +27,17 @@ class ProviderProfiles extends Table {
   TextColumn get personality => text().nullable()();
   TextColumn get oauthData => text().nullable()(); // Codex OAuth tokens JSON
   TextColumn get vscodeModel => text().nullable()();
+  /// VSCode 插件模型写入位置：'legacy'（VSCode settings.json -> claudeCode.selectedModel）
+  /// 或 'modern'（~/.claude/settings.json -> model）。null 视为 legacy。
+  TextColumn get vscodeModelMode => text().nullable()();
   TextColumn get defaultHaikuModel => text().nullable()();
   TextColumn get defaultSonnetModel => text().nullable()();
   TextColumn get defaultOpusModel => text().nullable()();
   // 完整配置内容 (JSON/TOML/ENV)
   TextColumn get configContent => text().nullable()();
+  /// 是否为官方供应商（通过 OAuth 登录，不需要 apiToken/baseUrl）
+  BoolColumn get isOfficialProvider =>
+      boolean().withDefault(const Constant(false))();
   // 通用
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -40,7 +46,29 @@ class ProviderProfiles extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [ProviderProfiles])
+/// Cursor 账号切换配置（认证 token + 设备指纹）
+class CursorAccounts extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get email => text().nullable()();
+  TextColumn get accessToken => text().nullable()();
+  TextColumn get refreshToken => text().nullable()();
+  TextColumn get membershipType => text().nullable()();
+  TextColumn get signUpType => text().nullable()();
+  TextColumn get machineId => text().nullable()();
+  TextColumn get macMachineId => text().nullable()();
+  TextColumn get devDeviceId => text().nullable()();
+  TextColumn get sqmId => text().nullable()();
+  BoolColumn get isActive =>
+      boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DriftDatabase(tables: [ProviderProfiles, CursorAccounts])
 class AppDatabase extends _$AppDatabase {
   AppDatabase._internal(super.e);
 
@@ -51,8 +79,10 @@ class AppDatabase extends _$AppDatabase {
     return _instance!;
   }
 
+  AppDatabase.forTesting(super.e);
+
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration {
@@ -82,6 +112,22 @@ class AppDatabase extends _$AppDatabase {
               m, providerProfiles, providerProfiles.defaultSonnetModel);
           await _safeAddColumn(
               m, providerProfiles, providerProfiles.defaultOpusModel);
+        }
+        if (from < 7) {
+          await _safeAddColumn(
+              m, providerProfiles, providerProfiles.isOfficialProvider);
+          // 迁移：已有的官方种子 profile 标记为 isOfficialProvider = true
+          await customStatement(
+            "UPDATE provider_profiles SET is_official_provider = 1 "
+            "WHERE id LIKE 'official-%'",
+          );
+        }
+        if (from < 8) {
+          await _safeAddColumn(
+              m, providerProfiles, providerProfiles.vscodeModelMode);
+        }
+        if (from < 9) {
+          await m.createTable(cursorAccounts);
         }
       },
     );
@@ -185,6 +231,51 @@ class AppDatabase extends _$AppDatabase {
   /// 导出所有数据（JSON 格式）
   Future<List<ProviderProfile>> getAllProfiles() {
     return select(providerProfiles).get();
+  }
+
+  // --- Cursor Accounts ---
+
+  Future<List<CursorAccount>> getAllCursorAccounts() {
+    return (select(cursorAccounts)
+          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
+        .get();
+  }
+
+  Future<CursorAccount?> getCursorAccountById(String id) {
+    return (select(cursorAccounts)..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+  }
+
+  Future<CursorAccount?> getActiveCursorAccount() {
+    return (select(cursorAccounts)..where((t) => t.isActive.equals(true)))
+        .getSingleOrNull();
+  }
+
+  Future<int> insertCursorAccount(CursorAccountsCompanion entry) {
+    return into(cursorAccounts).insert(entry);
+  }
+
+  Future<bool> updateCursorAccount(CursorAccountsCompanion entry) {
+    return (update(cursorAccounts)..where((t) => t.id.equals(entry.id.value)))
+        .write(entry)
+        .then((rows) => rows > 0);
+  }
+
+  Future<int> deleteCursorAccount(String id) {
+    return (delete(cursorAccounts)..where((t) => t.id.equals(id))).go();
+  }
+
+  Future<int> deactivateAllCursorAccounts() {
+    return (update(cursorAccounts)..where((t) => t.isActive.equals(true)))
+        .write(const CursorAccountsCompanion(isActive: Value(false)));
+  }
+
+  Future<void> activateCursorAccount(String accountId) async {
+    await transaction(() async {
+      await deactivateAllCursorAccounts();
+      await (update(cursorAccounts)..where((t) => t.id.equals(accountId)))
+          .write(const CursorAccountsCompanion(isActive: Value(true)));
+    });
   }
 
   /// 获取数据库文件路径

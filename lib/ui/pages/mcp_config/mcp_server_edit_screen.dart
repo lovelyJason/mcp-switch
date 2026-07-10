@@ -15,6 +15,7 @@ import '../../../l10n/s.dart';
 import '../../../services/mcp_oauth_automation_service.dart';
 import '../../../utils/ansi_parser.dart';
 import '../../../utils/global_keys.dart';
+import '../../../utils/node_env_detector.dart';
 import '../../components/custom_dialog.dart';
 import '../../components/custom_toast.dart';
 import 'edit/mcp_edit_widgets.dart';
@@ -59,6 +60,11 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
 
   // Claude 保存方式
   String _claudeSaveMode = 'cli';
+
+  // 全局安装相关状态
+  bool _useGlobalInstall = false;
+  bool _detectingNodeEnv = false;
+  NodeEnvInfo? _nodeEnvInfo;
 
   // 当前选择的编辑器类型（支持切换）
   late EditorType _currentEditorType;
@@ -396,6 +402,8 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
   void _onPresetSelected(McpPreset preset) {
     _jsonController.clear();
     _selectedPresetId = preset.id;
+    _useGlobalInstall = false;
+    _nodeEnvInfo = null;
 
     if (!preset.isCustom) _clearDraft();
 
@@ -427,6 +435,8 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
 
   void _onConnectionTypeChanged(McpPreset preset, String connectionType) {
     _selectedConnectionType = connectionType;
+    _useGlobalInstall = false;
+    _nodeEnvInfo = null;
 
     // 查找对应的连接配置
     final connectionConfig = preset.connectionTypes.firstWhere(
@@ -926,6 +936,13 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
       return const SizedBox.shrink();
     }
 
+    // 当前选中的连接配置
+    final currentConnType = preset.connectionTypes.firstWhere(
+      (c) => c.type == _selectedConnectionType,
+      orElse: () => preset.connectionTypes.first,
+    );
+    final hasGlobalInstall = currentConnType.globalInstall != null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -933,19 +950,229 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
         FieldLabel(label: S.get('connection_type')),
         const SizedBox(height: 8),
         Row(
-          children: preset.connectionTypes
-              .map(
-                (connType) => ConnectionTypeRadio(
-                  connType: connType,
-                  groupValue: _selectedConnectionType,
-                  def: connectionDefs[connType.type],
-                  onChanged: (type) => _onConnectionTypeChanged(preset, type),
+          children: [
+            ...preset.connectionTypes
+                .map(
+                  (connType) => ConnectionTypeRadio(
+                    connType: connType,
+                    groupValue: _selectedConnectionType,
+                    def: connectionDefs[connType.type],
+                    onChanged: (type) =>
+                        _onConnectionTypeChanged(preset, type),
+                  ),
                 ),
-              )
-              .toList(),
+            if (hasGlobalInstall) ...[
+              const SizedBox(width: 12),
+              _buildGlobalInstallToggle(),
+            ],
+          ],
+        ),
+        if (_useGlobalInstall && hasGlobalInstall)
+          _buildNodeEnvDetectionField(),
+      ],
+    );
+  }
+
+  Widget _buildGlobalInstallToggle() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: 24,
+          width: 24,
+          child: Checkbox(
+            value: _useGlobalInstall,
+            onChanged: (v) => _onGlobalInstallChanged(v ?? false),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+        const SizedBox(width: 4),
+        GestureDetector(
+          onTap: () => _onGlobalInstallChanged(!_useGlobalInstall),
+          child: Text(
+            S.get('global_install'),
+            style: const TextStyle(fontSize: 13),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Tooltip(
+          message: S.get('global_install_tooltip'),
+          child: Icon(
+            Icons.help_outline,
+            size: 15,
+            color: Colors.grey.shade500,
+          ),
         ),
       ],
     );
+  }
+
+  Widget _buildNodeEnvDetectionField() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? Colors.grey.shade900 : Colors.grey.shade50;
+    final borderColor = isDark ? Colors.grey.shade700 : Colors.grey.shade300;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: borderColor),
+        ),
+        child: _detectingNodeEnv
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    S.get('node_env_detecting'),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              )
+            : _nodeEnvInfo == null || !_nodeEnvInfo!.isAvailable
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 15,
+                        color: Colors.red.shade400,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        S.get('node_env_not_found'),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.red.shade400,
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                            size: 15,
+                            color: Colors.green.shade600,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _nodeEnvInfo!.nodeVersion != null
+                                ? S.get('node_env_detected')
+                                    .replaceAll(
+                                      '{manager}', _nodeEnvInfo!.managerName)
+                                    .replaceAll(
+                                      '{version}',
+                                      _nodeEnvInfo!.nodeVersion!)
+                                : S.get('node_env_detected_simple')
+                                    .replaceAll(
+                                      '{manager}', _nodeEnvInfo!.managerName),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.green.shade600,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_nodeEnvInfo!.binDir != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          S.get('global_bin_path')
+                              .replaceAll('{path}', _nodeEnvInfo!.binDir!),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+      ),
+    );
+  }
+
+  void _onGlobalInstallChanged(bool value) {
+    setState(() {
+      _useGlobalInstall = value;
+    });
+
+    if (value) {
+      _detectNodeEnvironment();
+    } else {
+      // 切回 npx 模式，恢复原配置
+      _nodeEnvInfo = null;
+      final preset = McpPresetsConfig.getPresetById(_selectedPresetId);
+      if (preset != null) {
+        final connType = preset.connectionTypes.firstWhere(
+          (c) => c.type == _selectedConnectionType,
+          orElse: () => preset.connectionTypes.first,
+        );
+        _applyConnectionTypeConfig(preset, connType);
+        setState(() {});
+      }
+    }
+  }
+
+  Future<void> _detectNodeEnvironment() async {
+    setState(() => _detectingNodeEnv = true);
+
+    try {
+      final info = await NodeEnvDetector.detect();
+      if (!mounted) return;
+
+      setState(() {
+        _detectingNodeEnv = false;
+        _nodeEnvInfo = info;
+      });
+
+      if (info.isAvailable) {
+        _applyGlobalInstallConfig();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _detectingNodeEnv = false;
+        _nodeEnvInfo = NodeEnvInfo.unavailable;
+      });
+    }
+  }
+
+  /// 应用全局安装配置到 command/args 和预览
+  void _applyGlobalInstallConfig() {
+    final preset = McpPresetsConfig.getPresetById(_selectedPresetId);
+    if (preset == null || _nodeEnvInfo == null || !_nodeEnvInfo!.isAvailable) {
+      return;
+    }
+
+    final connType = preset.connectionTypes.firstWhere(
+      (c) => c.type == _selectedConnectionType,
+      orElse: () => preset.connectionTypes.first,
+    );
+    final globalInstall = connType.globalInstall;
+    if (globalInstall == null) return;
+
+    final binPath = _nodeEnvInfo!.resolveGlobalBinPath(globalInstall.binName);
+    if (binPath == null) return;
+
+    _commandController.text = binPath;
+    _argsController.clear();
+    _updateJsonFromForm();
   }
 
   /// 自定义模式切换连接类型
@@ -1252,11 +1479,48 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // 全局安装
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Future<void> _runGlobalInstallInTerminal(String npmPackage) async {
+    final terminalService = Provider.of<TerminalService>(context, listen: false);
+    terminalService.setFloatingTerminal(true);
+    terminalService.openTerminalPanel();
+
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
+
+    final cmd = 'npm install -g $npmPackage';
+    terminalService.sendCommand(cmd);
+
+    if (mounted) {
+      Toast.show(
+        context,
+        message: S.get('global_install_running'),
+        type: ToastType.info,
+      );
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // 保存逻辑
   // ═══════════════════════════════════════════════════════════════════════════
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // 全局安装：先执行 npm install -g
+    if (_useGlobalInstall) {
+      final preset = McpPresetsConfig.getPresetById(_selectedPresetId);
+      final connType = preset?.connectionTypes.firstWhere(
+        (c) => c.type == _selectedConnectionType,
+        orElse: () => preset.connectionTypes.first,
+      );
+      final globalInstall = connType?.globalInstall;
+      if (globalInstall != null && _nodeEnvInfo?.isAvailable == true) {
+        await _runGlobalInstallInTerminal(globalInstall.npmPackage);
+      }
+    }
 
     try {
       final name = _nameController.text.trim();
@@ -1514,6 +1778,12 @@ class _McpServerEditScreenState extends State<McpServerEditScreen> {
 
   /// 生成 CLI 命令字符串
   String _buildCliCommand(String name, Map<String, dynamic> serverConfig) {
+    // 全局安装模式：直接使用绝对路径的 command
+    if (_useGlobalInstall && _nodeEnvInfo?.isAvailable == true) {
+      final command = serverConfig['command'] ?? _commandController.text;
+      return 'claude mcp add --scope user "$name" -- "$command"';
+    }
+
     final preset = McpPresetsConfig.getPresetById(_selectedPresetId);
     if (preset != null && !preset.isCustom) {
       final connectionConfig = preset.connectionTypes.firstWhere(

@@ -173,6 +173,17 @@ class $ProviderProfilesTable extends ProviderProfiles
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _vscodeModelModeMeta = const VerificationMeta(
+    'vscodeModelMode',
+  );
+  @override
+  late final GeneratedColumn<String> vscodeModelMode = GeneratedColumn<String>(
+    'vscode_model_mode',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _defaultHaikuModelMeta = const VerificationMeta(
     'defaultHaikuModel',
   );
@@ -218,6 +229,20 @@ class $ProviderProfilesTable extends ProviderProfiles
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _isOfficialProviderMeta =
+      const VerificationMeta('isOfficialProvider');
+  @override
+  late final GeneratedColumn<bool> isOfficialProvider = GeneratedColumn<bool>(
+    'is_official_provider',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_official_provider" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -257,10 +282,12 @@ class $ProviderProfilesTable extends ProviderProfiles
     personality,
     oauthData,
     vscodeModel,
+    vscodeModelMode,
     defaultHaikuModel,
     defaultSonnetModel,
     defaultOpusModel,
     configContent,
+    isOfficialProvider,
     createdAt,
     updatedAt,
   ];
@@ -387,6 +414,15 @@ class $ProviderProfilesTable extends ProviderProfiles
         ),
       );
     }
+    if (data.containsKey('vscode_model_mode')) {
+      context.handle(
+        _vscodeModelModeMeta,
+        vscodeModelMode.isAcceptableOrUnknown(
+          data['vscode_model_mode']!,
+          _vscodeModelModeMeta,
+        ),
+      );
+    }
     if (data.containsKey('default_haiku_model')) {
       context.handle(
         _defaultHaikuModelMeta,
@@ -420,6 +456,15 @@ class $ProviderProfilesTable extends ProviderProfiles
         configContent.isAcceptableOrUnknown(
           data['config_content']!,
           _configContentMeta,
+        ),
+      );
+    }
+    if (data.containsKey('is_official_provider')) {
+      context.handle(
+        _isOfficialProviderMeta,
+        isOfficialProvider.isAcceptableOrUnknown(
+          data['is_official_provider']!,
+          _isOfficialProviderMeta,
         ),
       );
     }
@@ -508,6 +553,10 @@ class $ProviderProfilesTable extends ProviderProfiles
         DriftSqlType.string,
         data['${effectivePrefix}vscode_model'],
       ),
+      vscodeModelMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}vscode_model_mode'],
+      ),
       defaultHaikuModel: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}default_haiku_model'],
@@ -524,6 +573,10 @@ class $ProviderProfilesTable extends ProviderProfiles
         DriftSqlType.string,
         data['${effectivePrefix}config_content'],
       ),
+      isOfficialProvider: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_official_provider'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -557,10 +610,17 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
   final String? personality;
   final String? oauthData;
   final String? vscodeModel;
+
+  /// VSCode 插件模型写入位置：'legacy'（VSCode settings.json -> claudeCode.selectedModel）
+  /// 或 'modern'（~/.claude/settings.json -> model）。null 视为 legacy。
+  final String? vscodeModelMode;
   final String? defaultHaikuModel;
   final String? defaultSonnetModel;
   final String? defaultOpusModel;
   final String? configContent;
+
+  /// 是否为官方供应商（通过 OAuth 登录，不需要 apiToken/baseUrl）
+  final bool isOfficialProvider;
   final DateTime createdAt;
   final DateTime updatedAt;
   const ProviderProfile({
@@ -579,10 +639,12 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     this.personality,
     this.oauthData,
     this.vscodeModel,
+    this.vscodeModelMode,
     this.defaultHaikuModel,
     this.defaultSonnetModel,
     this.defaultOpusModel,
     this.configContent,
+    required this.isOfficialProvider,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -626,6 +688,9 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     if (!nullToAbsent || vscodeModel != null) {
       map['vscode_model'] = Variable<String>(vscodeModel);
     }
+    if (!nullToAbsent || vscodeModelMode != null) {
+      map['vscode_model_mode'] = Variable<String>(vscodeModelMode);
+    }
     if (!nullToAbsent || defaultHaikuModel != null) {
       map['default_haiku_model'] = Variable<String>(defaultHaikuModel);
     }
@@ -638,6 +703,7 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     if (!nullToAbsent || configContent != null) {
       map['config_content'] = Variable<String>(configContent);
     }
+    map['is_official_provider'] = Variable<bool>(isOfficialProvider);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -682,6 +748,9 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
       vscodeModel: vscodeModel == null && nullToAbsent
           ? const Value.absent()
           : Value(vscodeModel),
+      vscodeModelMode: vscodeModelMode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(vscodeModelMode),
       defaultHaikuModel: defaultHaikuModel == null && nullToAbsent
           ? const Value.absent()
           : Value(defaultHaikuModel),
@@ -694,6 +763,7 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
       configContent: configContent == null && nullToAbsent
           ? const Value.absent()
           : Value(configContent),
+      isOfficialProvider: Value(isOfficialProvider),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -724,6 +794,7 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
       personality: serializer.fromJson<String?>(json['personality']),
       oauthData: serializer.fromJson<String?>(json['oauthData']),
       vscodeModel: serializer.fromJson<String?>(json['vscodeModel']),
+      vscodeModelMode: serializer.fromJson<String?>(json['vscodeModelMode']),
       defaultHaikuModel: serializer.fromJson<String?>(
         json['defaultHaikuModel'],
       ),
@@ -732,6 +803,7 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
       ),
       defaultOpusModel: serializer.fromJson<String?>(json['defaultOpusModel']),
       configContent: serializer.fromJson<String?>(json['configContent']),
+      isOfficialProvider: serializer.fromJson<bool>(json['isOfficialProvider']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -755,10 +827,12 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
       'personality': serializer.toJson<String?>(personality),
       'oauthData': serializer.toJson<String?>(oauthData),
       'vscodeModel': serializer.toJson<String?>(vscodeModel),
+      'vscodeModelMode': serializer.toJson<String?>(vscodeModelMode),
       'defaultHaikuModel': serializer.toJson<String?>(defaultHaikuModel),
       'defaultSonnetModel': serializer.toJson<String?>(defaultSonnetModel),
       'defaultOpusModel': serializer.toJson<String?>(defaultOpusModel),
       'configContent': serializer.toJson<String?>(configContent),
+      'isOfficialProvider': serializer.toJson<bool>(isOfficialProvider),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -780,10 +854,12 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     Value<String?> personality = const Value.absent(),
     Value<String?> oauthData = const Value.absent(),
     Value<String?> vscodeModel = const Value.absent(),
+    Value<String?> vscodeModelMode = const Value.absent(),
     Value<String?> defaultHaikuModel = const Value.absent(),
     Value<String?> defaultSonnetModel = const Value.absent(),
     Value<String?> defaultOpusModel = const Value.absent(),
     Value<String?> configContent = const Value.absent(),
+    bool? isOfficialProvider,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => ProviderProfile(
@@ -808,6 +884,9 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     personality: personality.present ? personality.value : this.personality,
     oauthData: oauthData.present ? oauthData.value : this.oauthData,
     vscodeModel: vscodeModel.present ? vscodeModel.value : this.vscodeModel,
+    vscodeModelMode: vscodeModelMode.present
+        ? vscodeModelMode.value
+        : this.vscodeModelMode,
     defaultHaikuModel: defaultHaikuModel.present
         ? defaultHaikuModel.value
         : this.defaultHaikuModel,
@@ -820,6 +899,7 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     configContent: configContent.present
         ? configContent.value
         : this.configContent,
+    isOfficialProvider: isOfficialProvider ?? this.isOfficialProvider,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -854,6 +934,9 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
       vscodeModel: data.vscodeModel.present
           ? data.vscodeModel.value
           : this.vscodeModel,
+      vscodeModelMode: data.vscodeModelMode.present
+          ? data.vscodeModelMode.value
+          : this.vscodeModelMode,
       defaultHaikuModel: data.defaultHaikuModel.present
           ? data.defaultHaikuModel.value
           : this.defaultHaikuModel,
@@ -866,6 +949,9 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
       configContent: data.configContent.present
           ? data.configContent.value
           : this.configContent,
+      isOfficialProvider: data.isOfficialProvider.present
+          ? data.isOfficialProvider.value
+          : this.isOfficialProvider,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -889,10 +975,12 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
           ..write('personality: $personality, ')
           ..write('oauthData: $oauthData, ')
           ..write('vscodeModel: $vscodeModel, ')
+          ..write('vscodeModelMode: $vscodeModelMode, ')
           ..write('defaultHaikuModel: $defaultHaikuModel, ')
           ..write('defaultSonnetModel: $defaultSonnetModel, ')
           ..write('defaultOpusModel: $defaultOpusModel, ')
           ..write('configContent: $configContent, ')
+          ..write('isOfficialProvider: $isOfficialProvider, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -916,10 +1004,12 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
     personality,
     oauthData,
     vscodeModel,
+    vscodeModelMode,
     defaultHaikuModel,
     defaultSonnetModel,
     defaultOpusModel,
     configContent,
+    isOfficialProvider,
     createdAt,
     updatedAt,
   ]);
@@ -942,10 +1032,12 @@ class ProviderProfile extends DataClass implements Insertable<ProviderProfile> {
           other.personality == this.personality &&
           other.oauthData == this.oauthData &&
           other.vscodeModel == this.vscodeModel &&
+          other.vscodeModelMode == this.vscodeModelMode &&
           other.defaultHaikuModel == this.defaultHaikuModel &&
           other.defaultSonnetModel == this.defaultSonnetModel &&
           other.defaultOpusModel == this.defaultOpusModel &&
           other.configContent == this.configContent &&
+          other.isOfficialProvider == this.isOfficialProvider &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -966,10 +1058,12 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
   final Value<String?> personality;
   final Value<String?> oauthData;
   final Value<String?> vscodeModel;
+  final Value<String?> vscodeModelMode;
   final Value<String?> defaultHaikuModel;
   final Value<String?> defaultSonnetModel;
   final Value<String?> defaultOpusModel;
   final Value<String?> configContent;
+  final Value<bool> isOfficialProvider;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -989,10 +1083,12 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     this.personality = const Value.absent(),
     this.oauthData = const Value.absent(),
     this.vscodeModel = const Value.absent(),
+    this.vscodeModelMode = const Value.absent(),
     this.defaultHaikuModel = const Value.absent(),
     this.defaultSonnetModel = const Value.absent(),
     this.defaultOpusModel = const Value.absent(),
     this.configContent = const Value.absent(),
+    this.isOfficialProvider = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1013,10 +1109,12 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     this.personality = const Value.absent(),
     this.oauthData = const Value.absent(),
     this.vscodeModel = const Value.absent(),
+    this.vscodeModelMode = const Value.absent(),
     this.defaultHaikuModel = const Value.absent(),
     this.defaultSonnetModel = const Value.absent(),
     this.defaultOpusModel = const Value.absent(),
     this.configContent = const Value.absent(),
+    this.isOfficialProvider = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -1041,10 +1139,12 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     Expression<String>? personality,
     Expression<String>? oauthData,
     Expression<String>? vscodeModel,
+    Expression<String>? vscodeModelMode,
     Expression<String>? defaultHaikuModel,
     Expression<String>? defaultSonnetModel,
     Expression<String>? defaultOpusModel,
     Expression<String>? configContent,
+    Expression<bool>? isOfficialProvider,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -1066,11 +1166,14 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
       if (personality != null) 'personality': personality,
       if (oauthData != null) 'oauth_data': oauthData,
       if (vscodeModel != null) 'vscode_model': vscodeModel,
+      if (vscodeModelMode != null) 'vscode_model_mode': vscodeModelMode,
       if (defaultHaikuModel != null) 'default_haiku_model': defaultHaikuModel,
       if (defaultSonnetModel != null)
         'default_sonnet_model': defaultSonnetModel,
       if (defaultOpusModel != null) 'default_opus_model': defaultOpusModel,
       if (configContent != null) 'config_content': configContent,
+      if (isOfficialProvider != null)
+        'is_official_provider': isOfficialProvider,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -1093,10 +1196,12 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     Value<String?>? personality,
     Value<String?>? oauthData,
     Value<String?>? vscodeModel,
+    Value<String?>? vscodeModelMode,
     Value<String?>? defaultHaikuModel,
     Value<String?>? defaultSonnetModel,
     Value<String?>? defaultOpusModel,
     Value<String?>? configContent,
+    Value<bool>? isOfficialProvider,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -1117,10 +1222,12 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
       personality: personality ?? this.personality,
       oauthData: oauthData ?? this.oauthData,
       vscodeModel: vscodeModel ?? this.vscodeModel,
+      vscodeModelMode: vscodeModelMode ?? this.vscodeModelMode,
       defaultHaikuModel: defaultHaikuModel ?? this.defaultHaikuModel,
       defaultSonnetModel: defaultSonnetModel ?? this.defaultSonnetModel,
       defaultOpusModel: defaultOpusModel ?? this.defaultOpusModel,
       configContent: configContent ?? this.configContent,
+      isOfficialProvider: isOfficialProvider ?? this.isOfficialProvider,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -1177,6 +1284,9 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     if (vscodeModel.present) {
       map['vscode_model'] = Variable<String>(vscodeModel.value);
     }
+    if (vscodeModelMode.present) {
+      map['vscode_model_mode'] = Variable<String>(vscodeModelMode.value);
+    }
     if (defaultHaikuModel.present) {
       map['default_haiku_model'] = Variable<String>(defaultHaikuModel.value);
     }
@@ -1188,6 +1298,9 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
     }
     if (configContent.present) {
       map['config_content'] = Variable<String>(configContent.value);
+    }
+    if (isOfficialProvider.present) {
+      map['is_official_provider'] = Variable<bool>(isOfficialProvider.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -1219,10 +1332,848 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfile> {
           ..write('personality: $personality, ')
           ..write('oauthData: $oauthData, ')
           ..write('vscodeModel: $vscodeModel, ')
+          ..write('vscodeModelMode: $vscodeModelMode, ')
           ..write('defaultHaikuModel: $defaultHaikuModel, ')
           ..write('defaultSonnetModel: $defaultSonnetModel, ')
           ..write('defaultOpusModel: $defaultOpusModel, ')
           ..write('configContent: $configContent, ')
+          ..write('isOfficialProvider: $isOfficialProvider, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CursorAccountsTable extends CursorAccounts
+    with TableInfo<$CursorAccountsTable, CursorAccount> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CursorAccountsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _emailMeta = const VerificationMeta('email');
+  @override
+  late final GeneratedColumn<String> email = GeneratedColumn<String>(
+    'email',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _accessTokenMeta = const VerificationMeta(
+    'accessToken',
+  );
+  @override
+  late final GeneratedColumn<String> accessToken = GeneratedColumn<String>(
+    'access_token',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _refreshTokenMeta = const VerificationMeta(
+    'refreshToken',
+  );
+  @override
+  late final GeneratedColumn<String> refreshToken = GeneratedColumn<String>(
+    'refresh_token',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _membershipTypeMeta = const VerificationMeta(
+    'membershipType',
+  );
+  @override
+  late final GeneratedColumn<String> membershipType = GeneratedColumn<String>(
+    'membership_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _signUpTypeMeta = const VerificationMeta(
+    'signUpType',
+  );
+  @override
+  late final GeneratedColumn<String> signUpType = GeneratedColumn<String>(
+    'sign_up_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _machineIdMeta = const VerificationMeta(
+    'machineId',
+  );
+  @override
+  late final GeneratedColumn<String> machineId = GeneratedColumn<String>(
+    'machine_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _macMachineIdMeta = const VerificationMeta(
+    'macMachineId',
+  );
+  @override
+  late final GeneratedColumn<String> macMachineId = GeneratedColumn<String>(
+    'mac_machine_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _devDeviceIdMeta = const VerificationMeta(
+    'devDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> devDeviceId = GeneratedColumn<String>(
+    'dev_device_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sqmIdMeta = const VerificationMeta('sqmId');
+  @override
+  late final GeneratedColumn<String> sqmId = GeneratedColumn<String>(
+    'sqm_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isActiveMeta = const VerificationMeta(
+    'isActive',
+  );
+  @override
+  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_active" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    email,
+    accessToken,
+    refreshToken,
+    membershipType,
+    signUpType,
+    machineId,
+    macMachineId,
+    devDeviceId,
+    sqmId,
+    isActive,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cursor_accounts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CursorAccount> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('email')) {
+      context.handle(
+        _emailMeta,
+        email.isAcceptableOrUnknown(data['email']!, _emailMeta),
+      );
+    }
+    if (data.containsKey('access_token')) {
+      context.handle(
+        _accessTokenMeta,
+        accessToken.isAcceptableOrUnknown(
+          data['access_token']!,
+          _accessTokenMeta,
+        ),
+      );
+    }
+    if (data.containsKey('refresh_token')) {
+      context.handle(
+        _refreshTokenMeta,
+        refreshToken.isAcceptableOrUnknown(
+          data['refresh_token']!,
+          _refreshTokenMeta,
+        ),
+      );
+    }
+    if (data.containsKey('membership_type')) {
+      context.handle(
+        _membershipTypeMeta,
+        membershipType.isAcceptableOrUnknown(
+          data['membership_type']!,
+          _membershipTypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sign_up_type')) {
+      context.handle(
+        _signUpTypeMeta,
+        signUpType.isAcceptableOrUnknown(
+          data['sign_up_type']!,
+          _signUpTypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('machine_id')) {
+      context.handle(
+        _machineIdMeta,
+        machineId.isAcceptableOrUnknown(data['machine_id']!, _machineIdMeta),
+      );
+    }
+    if (data.containsKey('mac_machine_id')) {
+      context.handle(
+        _macMachineIdMeta,
+        macMachineId.isAcceptableOrUnknown(
+          data['mac_machine_id']!,
+          _macMachineIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dev_device_id')) {
+      context.handle(
+        _devDeviceIdMeta,
+        devDeviceId.isAcceptableOrUnknown(
+          data['dev_device_id']!,
+          _devDeviceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sqm_id')) {
+      context.handle(
+        _sqmIdMeta,
+        sqmId.isAcceptableOrUnknown(data['sqm_id']!, _sqmIdMeta),
+      );
+    }
+    if (data.containsKey('is_active')) {
+      context.handle(
+        _isActiveMeta,
+        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CursorAccount map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CursorAccount(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      email: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}email'],
+      ),
+      accessToken: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}access_token'],
+      ),
+      refreshToken: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}refresh_token'],
+      ),
+      membershipType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}membership_type'],
+      ),
+      signUpType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sign_up_type'],
+      ),
+      machineId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}machine_id'],
+      ),
+      macMachineId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mac_machine_id'],
+      ),
+      devDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}dev_device_id'],
+      ),
+      sqmId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sqm_id'],
+      ),
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_active'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CursorAccountsTable createAlias(String alias) {
+    return $CursorAccountsTable(attachedDatabase, alias);
+  }
+}
+
+class CursorAccount extends DataClass implements Insertable<CursorAccount> {
+  final String id;
+  final String name;
+  final String? email;
+  final String? accessToken;
+  final String? refreshToken;
+  final String? membershipType;
+  final String? signUpType;
+  final String? machineId;
+  final String? macMachineId;
+  final String? devDeviceId;
+  final String? sqmId;
+  final bool isActive;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const CursorAccount({
+    required this.id,
+    required this.name,
+    this.email,
+    this.accessToken,
+    this.refreshToken,
+    this.membershipType,
+    this.signUpType,
+    this.machineId,
+    this.macMachineId,
+    this.devDeviceId,
+    this.sqmId,
+    required this.isActive,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || email != null) {
+      map['email'] = Variable<String>(email);
+    }
+    if (!nullToAbsent || accessToken != null) {
+      map['access_token'] = Variable<String>(accessToken);
+    }
+    if (!nullToAbsent || refreshToken != null) {
+      map['refresh_token'] = Variable<String>(refreshToken);
+    }
+    if (!nullToAbsent || membershipType != null) {
+      map['membership_type'] = Variable<String>(membershipType);
+    }
+    if (!nullToAbsent || signUpType != null) {
+      map['sign_up_type'] = Variable<String>(signUpType);
+    }
+    if (!nullToAbsent || machineId != null) {
+      map['machine_id'] = Variable<String>(machineId);
+    }
+    if (!nullToAbsent || macMachineId != null) {
+      map['mac_machine_id'] = Variable<String>(macMachineId);
+    }
+    if (!nullToAbsent || devDeviceId != null) {
+      map['dev_device_id'] = Variable<String>(devDeviceId);
+    }
+    if (!nullToAbsent || sqmId != null) {
+      map['sqm_id'] = Variable<String>(sqmId);
+    }
+    map['is_active'] = Variable<bool>(isActive);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  CursorAccountsCompanion toCompanion(bool nullToAbsent) {
+    return CursorAccountsCompanion(
+      id: Value(id),
+      name: Value(name),
+      email: email == null && nullToAbsent
+          ? const Value.absent()
+          : Value(email),
+      accessToken: accessToken == null && nullToAbsent
+          ? const Value.absent()
+          : Value(accessToken),
+      refreshToken: refreshToken == null && nullToAbsent
+          ? const Value.absent()
+          : Value(refreshToken),
+      membershipType: membershipType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(membershipType),
+      signUpType: signUpType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(signUpType),
+      machineId: machineId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(machineId),
+      macMachineId: macMachineId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(macMachineId),
+      devDeviceId: devDeviceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(devDeviceId),
+      sqmId: sqmId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sqmId),
+      isActive: Value(isActive),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory CursorAccount.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CursorAccount(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      email: serializer.fromJson<String?>(json['email']),
+      accessToken: serializer.fromJson<String?>(json['accessToken']),
+      refreshToken: serializer.fromJson<String?>(json['refreshToken']),
+      membershipType: serializer.fromJson<String?>(json['membershipType']),
+      signUpType: serializer.fromJson<String?>(json['signUpType']),
+      machineId: serializer.fromJson<String?>(json['machineId']),
+      macMachineId: serializer.fromJson<String?>(json['macMachineId']),
+      devDeviceId: serializer.fromJson<String?>(json['devDeviceId']),
+      sqmId: serializer.fromJson<String?>(json['sqmId']),
+      isActive: serializer.fromJson<bool>(json['isActive']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'email': serializer.toJson<String?>(email),
+      'accessToken': serializer.toJson<String?>(accessToken),
+      'refreshToken': serializer.toJson<String?>(refreshToken),
+      'membershipType': serializer.toJson<String?>(membershipType),
+      'signUpType': serializer.toJson<String?>(signUpType),
+      'machineId': serializer.toJson<String?>(machineId),
+      'macMachineId': serializer.toJson<String?>(macMachineId),
+      'devDeviceId': serializer.toJson<String?>(devDeviceId),
+      'sqmId': serializer.toJson<String?>(sqmId),
+      'isActive': serializer.toJson<bool>(isActive),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  CursorAccount copyWith({
+    String? id,
+    String? name,
+    Value<String?> email = const Value.absent(),
+    Value<String?> accessToken = const Value.absent(),
+    Value<String?> refreshToken = const Value.absent(),
+    Value<String?> membershipType = const Value.absent(),
+    Value<String?> signUpType = const Value.absent(),
+    Value<String?> machineId = const Value.absent(),
+    Value<String?> macMachineId = const Value.absent(),
+    Value<String?> devDeviceId = const Value.absent(),
+    Value<String?> sqmId = const Value.absent(),
+    bool? isActive,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => CursorAccount(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    email: email.present ? email.value : this.email,
+    accessToken: accessToken.present ? accessToken.value : this.accessToken,
+    refreshToken: refreshToken.present ? refreshToken.value : this.refreshToken,
+    membershipType: membershipType.present
+        ? membershipType.value
+        : this.membershipType,
+    signUpType: signUpType.present ? signUpType.value : this.signUpType,
+    machineId: machineId.present ? machineId.value : this.machineId,
+    macMachineId: macMachineId.present ? macMachineId.value : this.macMachineId,
+    devDeviceId: devDeviceId.present ? devDeviceId.value : this.devDeviceId,
+    sqmId: sqmId.present ? sqmId.value : this.sqmId,
+    isActive: isActive ?? this.isActive,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  CursorAccount copyWithCompanion(CursorAccountsCompanion data) {
+    return CursorAccount(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      email: data.email.present ? data.email.value : this.email,
+      accessToken: data.accessToken.present
+          ? data.accessToken.value
+          : this.accessToken,
+      refreshToken: data.refreshToken.present
+          ? data.refreshToken.value
+          : this.refreshToken,
+      membershipType: data.membershipType.present
+          ? data.membershipType.value
+          : this.membershipType,
+      signUpType: data.signUpType.present
+          ? data.signUpType.value
+          : this.signUpType,
+      machineId: data.machineId.present ? data.machineId.value : this.machineId,
+      macMachineId: data.macMachineId.present
+          ? data.macMachineId.value
+          : this.macMachineId,
+      devDeviceId: data.devDeviceId.present
+          ? data.devDeviceId.value
+          : this.devDeviceId,
+      sqmId: data.sqmId.present ? data.sqmId.value : this.sqmId,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CursorAccount(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('email: $email, ')
+          ..write('accessToken: $accessToken, ')
+          ..write('refreshToken: $refreshToken, ')
+          ..write('membershipType: $membershipType, ')
+          ..write('signUpType: $signUpType, ')
+          ..write('machineId: $machineId, ')
+          ..write('macMachineId: $macMachineId, ')
+          ..write('devDeviceId: $devDeviceId, ')
+          ..write('sqmId: $sqmId, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    email,
+    accessToken,
+    refreshToken,
+    membershipType,
+    signUpType,
+    machineId,
+    macMachineId,
+    devDeviceId,
+    sqmId,
+    isActive,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CursorAccount &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.email == this.email &&
+          other.accessToken == this.accessToken &&
+          other.refreshToken == this.refreshToken &&
+          other.membershipType == this.membershipType &&
+          other.signUpType == this.signUpType &&
+          other.machineId == this.machineId &&
+          other.macMachineId == this.macMachineId &&
+          other.devDeviceId == this.devDeviceId &&
+          other.sqmId == this.sqmId &&
+          other.isActive == this.isActive &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CursorAccountsCompanion extends UpdateCompanion<CursorAccount> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String?> email;
+  final Value<String?> accessToken;
+  final Value<String?> refreshToken;
+  final Value<String?> membershipType;
+  final Value<String?> signUpType;
+  final Value<String?> machineId;
+  final Value<String?> macMachineId;
+  final Value<String?> devDeviceId;
+  final Value<String?> sqmId;
+  final Value<bool> isActive;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const CursorAccountsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.email = const Value.absent(),
+    this.accessToken = const Value.absent(),
+    this.refreshToken = const Value.absent(),
+    this.membershipType = const Value.absent(),
+    this.signUpType = const Value.absent(),
+    this.machineId = const Value.absent(),
+    this.macMachineId = const Value.absent(),
+    this.devDeviceId = const Value.absent(),
+    this.sqmId = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CursorAccountsCompanion.insert({
+    required String id,
+    required String name,
+    this.email = const Value.absent(),
+    this.accessToken = const Value.absent(),
+    this.refreshToken = const Value.absent(),
+    this.membershipType = const Value.absent(),
+    this.signUpType = const Value.absent(),
+    this.machineId = const Value.absent(),
+    this.macMachineId = const Value.absent(),
+    this.devDeviceId = const Value.absent(),
+    this.sqmId = const Value.absent(),
+    this.isActive = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<CursorAccount> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? email,
+    Expression<String>? accessToken,
+    Expression<String>? refreshToken,
+    Expression<String>? membershipType,
+    Expression<String>? signUpType,
+    Expression<String>? machineId,
+    Expression<String>? macMachineId,
+    Expression<String>? devDeviceId,
+    Expression<String>? sqmId,
+    Expression<bool>? isActive,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (email != null) 'email': email,
+      if (accessToken != null) 'access_token': accessToken,
+      if (refreshToken != null) 'refresh_token': refreshToken,
+      if (membershipType != null) 'membership_type': membershipType,
+      if (signUpType != null) 'sign_up_type': signUpType,
+      if (machineId != null) 'machine_id': machineId,
+      if (macMachineId != null) 'mac_machine_id': macMachineId,
+      if (devDeviceId != null) 'dev_device_id': devDeviceId,
+      if (sqmId != null) 'sqm_id': sqmId,
+      if (isActive != null) 'is_active': isActive,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CursorAccountsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String?>? email,
+    Value<String?>? accessToken,
+    Value<String?>? refreshToken,
+    Value<String?>? membershipType,
+    Value<String?>? signUpType,
+    Value<String?>? machineId,
+    Value<String?>? macMachineId,
+    Value<String?>? devDeviceId,
+    Value<String?>? sqmId,
+    Value<bool>? isActive,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return CursorAccountsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      accessToken: accessToken ?? this.accessToken,
+      refreshToken: refreshToken ?? this.refreshToken,
+      membershipType: membershipType ?? this.membershipType,
+      signUpType: signUpType ?? this.signUpType,
+      machineId: machineId ?? this.machineId,
+      macMachineId: macMachineId ?? this.macMachineId,
+      devDeviceId: devDeviceId ?? this.devDeviceId,
+      sqmId: sqmId ?? this.sqmId,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (email.present) {
+      map['email'] = Variable<String>(email.value);
+    }
+    if (accessToken.present) {
+      map['access_token'] = Variable<String>(accessToken.value);
+    }
+    if (refreshToken.present) {
+      map['refresh_token'] = Variable<String>(refreshToken.value);
+    }
+    if (membershipType.present) {
+      map['membership_type'] = Variable<String>(membershipType.value);
+    }
+    if (signUpType.present) {
+      map['sign_up_type'] = Variable<String>(signUpType.value);
+    }
+    if (machineId.present) {
+      map['machine_id'] = Variable<String>(machineId.value);
+    }
+    if (macMachineId.present) {
+      map['mac_machine_id'] = Variable<String>(macMachineId.value);
+    }
+    if (devDeviceId.present) {
+      map['dev_device_id'] = Variable<String>(devDeviceId.value);
+    }
+    if (sqmId.present) {
+      map['sqm_id'] = Variable<String>(sqmId.value);
+    }
+    if (isActive.present) {
+      map['is_active'] = Variable<bool>(isActive.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CursorAccountsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('email: $email, ')
+          ..write('accessToken: $accessToken, ')
+          ..write('refreshToken: $refreshToken, ')
+          ..write('membershipType: $membershipType, ')
+          ..write('signUpType: $signUpType, ')
+          ..write('machineId: $machineId, ')
+          ..write('macMachineId: $macMachineId, ')
+          ..write('devDeviceId: $devDeviceId, ')
+          ..write('sqmId: $sqmId, ')
+          ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -1237,11 +2188,15 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ProviderProfilesTable providerProfiles = $ProviderProfilesTable(
     this,
   );
+  late final $CursorAccountsTable cursorAccounts = $CursorAccountsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [providerProfiles];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+    providerProfiles,
+    cursorAccounts,
+  ];
 }
 
 typedef $$ProviderProfilesTableCreateCompanionBuilder =
@@ -1261,10 +2216,12 @@ typedef $$ProviderProfilesTableCreateCompanionBuilder =
       Value<String?> personality,
       Value<String?> oauthData,
       Value<String?> vscodeModel,
+      Value<String?> vscodeModelMode,
       Value<String?> defaultHaikuModel,
       Value<String?> defaultSonnetModel,
       Value<String?> defaultOpusModel,
       Value<String?> configContent,
+      Value<bool> isOfficialProvider,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -1286,10 +2243,12 @@ typedef $$ProviderProfilesTableUpdateCompanionBuilder =
       Value<String?> personality,
       Value<String?> oauthData,
       Value<String?> vscodeModel,
+      Value<String?> vscodeModelMode,
       Value<String?> defaultHaikuModel,
       Value<String?> defaultSonnetModel,
       Value<String?> defaultOpusModel,
       Value<String?> configContent,
+      Value<bool> isOfficialProvider,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -1379,6 +2338,11 @@ class $$ProviderProfilesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get vscodeModelMode => $composableBuilder(
+    column: $table.vscodeModelMode,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get defaultHaikuModel => $composableBuilder(
     column: $table.defaultHaikuModel,
     builder: (column) => ColumnFilters(column),
@@ -1396,6 +2360,11 @@ class $$ProviderProfilesTableFilterComposer
 
   ColumnFilters<String> get configContent => $composableBuilder(
     column: $table.configContent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isOfficialProvider => $composableBuilder(
+    column: $table.isOfficialProvider,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1494,6 +2463,11 @@ class $$ProviderProfilesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get vscodeModelMode => $composableBuilder(
+    column: $table.vscodeModelMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get defaultHaikuModel => $composableBuilder(
     column: $table.defaultHaikuModel,
     builder: (column) => ColumnOrderings(column),
@@ -1511,6 +2485,11 @@ class $$ProviderProfilesTableOrderingComposer
 
   ColumnOrderings<String> get configContent => $composableBuilder(
     column: $table.configContent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isOfficialProvider => $composableBuilder(
+    column: $table.isOfficialProvider,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -1593,6 +2572,11 @@ class $$ProviderProfilesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get vscodeModelMode => $composableBuilder(
+    column: $table.vscodeModelMode,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get defaultHaikuModel => $composableBuilder(
     column: $table.defaultHaikuModel,
     builder: (column) => column,
@@ -1610,6 +2594,11 @@ class $$ProviderProfilesTableAnnotationComposer
 
   GeneratedColumn<String> get configContent => $composableBuilder(
     column: $table.configContent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isOfficialProvider => $composableBuilder(
+    column: $table.isOfficialProvider,
     builder: (column) => column,
   );
 
@@ -1672,10 +2661,12 @@ class $$ProviderProfilesTableTableManager
                 Value<String?> personality = const Value.absent(),
                 Value<String?> oauthData = const Value.absent(),
                 Value<String?> vscodeModel = const Value.absent(),
+                Value<String?> vscodeModelMode = const Value.absent(),
                 Value<String?> defaultHaikuModel = const Value.absent(),
                 Value<String?> defaultSonnetModel = const Value.absent(),
                 Value<String?> defaultOpusModel = const Value.absent(),
                 Value<String?> configContent = const Value.absent(),
+                Value<bool> isOfficialProvider = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -1695,10 +2686,12 @@ class $$ProviderProfilesTableTableManager
                 personality: personality,
                 oauthData: oauthData,
                 vscodeModel: vscodeModel,
+                vscodeModelMode: vscodeModelMode,
                 defaultHaikuModel: defaultHaikuModel,
                 defaultSonnetModel: defaultSonnetModel,
                 defaultOpusModel: defaultOpusModel,
                 configContent: configContent,
+                isOfficialProvider: isOfficialProvider,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -1720,10 +2713,12 @@ class $$ProviderProfilesTableTableManager
                 Value<String?> personality = const Value.absent(),
                 Value<String?> oauthData = const Value.absent(),
                 Value<String?> vscodeModel = const Value.absent(),
+                Value<String?> vscodeModelMode = const Value.absent(),
                 Value<String?> defaultHaikuModel = const Value.absent(),
                 Value<String?> defaultSonnetModel = const Value.absent(),
                 Value<String?> defaultOpusModel = const Value.absent(),
                 Value<String?> configContent = const Value.absent(),
+                Value<bool> isOfficialProvider = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -1743,10 +2738,12 @@ class $$ProviderProfilesTableTableManager
                 personality: personality,
                 oauthData: oauthData,
                 vscodeModel: vscodeModel,
+                vscodeModelMode: vscodeModelMode,
                 defaultHaikuModel: defaultHaikuModel,
                 defaultSonnetModel: defaultSonnetModel,
                 defaultOpusModel: defaultOpusModel,
                 configContent: configContent,
+                isOfficialProvider: isOfficialProvider,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -1776,10 +2773,397 @@ typedef $$ProviderProfilesTableProcessedTableManager =
       ProviderProfile,
       PrefetchHooks Function()
     >;
+typedef $$CursorAccountsTableCreateCompanionBuilder =
+    CursorAccountsCompanion Function({
+      required String id,
+      required String name,
+      Value<String?> email,
+      Value<String?> accessToken,
+      Value<String?> refreshToken,
+      Value<String?> membershipType,
+      Value<String?> signUpType,
+      Value<String?> machineId,
+      Value<String?> macMachineId,
+      Value<String?> devDeviceId,
+      Value<String?> sqmId,
+      Value<bool> isActive,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$CursorAccountsTableUpdateCompanionBuilder =
+    CursorAccountsCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String?> email,
+      Value<String?> accessToken,
+      Value<String?> refreshToken,
+      Value<String?> membershipType,
+      Value<String?> signUpType,
+      Value<String?> machineId,
+      Value<String?> macMachineId,
+      Value<String?> devDeviceId,
+      Value<String?> sqmId,
+      Value<bool> isActive,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$CursorAccountsTableFilterComposer
+    extends Composer<_$AppDatabase, $CursorAccountsTable> {
+  $$CursorAccountsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get email => $composableBuilder(
+    column: $table.email,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get accessToken => $composableBuilder(
+    column: $table.accessToken,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get refreshToken => $composableBuilder(
+    column: $table.refreshToken,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get membershipType => $composableBuilder(
+    column: $table.membershipType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get signUpType => $composableBuilder(
+    column: $table.signUpType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get machineId => $composableBuilder(
+    column: $table.machineId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get macMachineId => $composableBuilder(
+    column: $table.macMachineId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get devDeviceId => $composableBuilder(
+    column: $table.devDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sqmId => $composableBuilder(
+    column: $table.sqmId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CursorAccountsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CursorAccountsTable> {
+  $$CursorAccountsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get email => $composableBuilder(
+    column: $table.email,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get accessToken => $composableBuilder(
+    column: $table.accessToken,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get refreshToken => $composableBuilder(
+    column: $table.refreshToken,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get membershipType => $composableBuilder(
+    column: $table.membershipType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get signUpType => $composableBuilder(
+    column: $table.signUpType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get machineId => $composableBuilder(
+    column: $table.machineId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get macMachineId => $composableBuilder(
+    column: $table.macMachineId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get devDeviceId => $composableBuilder(
+    column: $table.devDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sqmId => $composableBuilder(
+    column: $table.sqmId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CursorAccountsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CursorAccountsTable> {
+  $$CursorAccountsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get email =>
+      $composableBuilder(column: $table.email, builder: (column) => column);
+
+  GeneratedColumn<String> get accessToken => $composableBuilder(
+    column: $table.accessToken,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get refreshToken => $composableBuilder(
+    column: $table.refreshToken,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get membershipType => $composableBuilder(
+    column: $table.membershipType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get signUpType => $composableBuilder(
+    column: $table.signUpType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get machineId =>
+      $composableBuilder(column: $table.machineId, builder: (column) => column);
+
+  GeneratedColumn<String> get macMachineId => $composableBuilder(
+    column: $table.macMachineId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get devDeviceId => $composableBuilder(
+    column: $table.devDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sqmId =>
+      $composableBuilder(column: $table.sqmId, builder: (column) => column);
+
+  GeneratedColumn<bool> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$CursorAccountsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CursorAccountsTable,
+          CursorAccount,
+          $$CursorAccountsTableFilterComposer,
+          $$CursorAccountsTableOrderingComposer,
+          $$CursorAccountsTableAnnotationComposer,
+          $$CursorAccountsTableCreateCompanionBuilder,
+          $$CursorAccountsTableUpdateCompanionBuilder,
+          (
+            CursorAccount,
+            BaseReferences<_$AppDatabase, $CursorAccountsTable, CursorAccount>,
+          ),
+          CursorAccount,
+          PrefetchHooks Function()
+        > {
+  $$CursorAccountsTableTableManager(
+    _$AppDatabase db,
+    $CursorAccountsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CursorAccountsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CursorAccountsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CursorAccountsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> email = const Value.absent(),
+                Value<String?> accessToken = const Value.absent(),
+                Value<String?> refreshToken = const Value.absent(),
+                Value<String?> membershipType = const Value.absent(),
+                Value<String?> signUpType = const Value.absent(),
+                Value<String?> machineId = const Value.absent(),
+                Value<String?> macMachineId = const Value.absent(),
+                Value<String?> devDeviceId = const Value.absent(),
+                Value<String?> sqmId = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CursorAccountsCompanion(
+                id: id,
+                name: name,
+                email: email,
+                accessToken: accessToken,
+                refreshToken: refreshToken,
+                membershipType: membershipType,
+                signUpType: signUpType,
+                machineId: machineId,
+                macMachineId: macMachineId,
+                devDeviceId: devDeviceId,
+                sqmId: sqmId,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                Value<String?> email = const Value.absent(),
+                Value<String?> accessToken = const Value.absent(),
+                Value<String?> refreshToken = const Value.absent(),
+                Value<String?> membershipType = const Value.absent(),
+                Value<String?> signUpType = const Value.absent(),
+                Value<String?> machineId = const Value.absent(),
+                Value<String?> macMachineId = const Value.absent(),
+                Value<String?> devDeviceId = const Value.absent(),
+                Value<String?> sqmId = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CursorAccountsCompanion.insert(
+                id: id,
+                name: name,
+                email: email,
+                accessToken: accessToken,
+                refreshToken: refreshToken,
+                membershipType: membershipType,
+                signUpType: signUpType,
+                machineId: machineId,
+                macMachineId: macMachineId,
+                devDeviceId: devDeviceId,
+                sqmId: sqmId,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CursorAccountsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CursorAccountsTable,
+      CursorAccount,
+      $$CursorAccountsTableFilterComposer,
+      $$CursorAccountsTableOrderingComposer,
+      $$CursorAccountsTableAnnotationComposer,
+      $$CursorAccountsTableCreateCompanionBuilder,
+      $$CursorAccountsTableUpdateCompanionBuilder,
+      (
+        CursorAccount,
+        BaseReferences<_$AppDatabase, $CursorAccountsTable, CursorAccount>,
+      ),
+      CursorAccount,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
   $$ProviderProfilesTableTableManager get providerProfiles =>
       $$ProviderProfilesTableTableManager(_db, _db.providerProfiles);
+  $$CursorAccountsTableTableManager get cursorAccounts =>
+      $$CursorAccountsTableTableManager(_db, _db.cursorAccounts);
 }

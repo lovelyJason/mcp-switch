@@ -28,6 +28,7 @@ import 'config/mcp_presets_config.dart';
 import 'config/provider_presets_config.dart';
 import 'constants/editor_features.dart';
 import 'services/cursor_workspace_service.dart';
+import 'services/cursor_account_service.dart';
 import 'utils/global_keys.dart';
 import 'data/database.dart';
 import 'services/provider_switch_service.dart';
@@ -127,6 +128,9 @@ void main() async {
   final providerSwitchService = ProviderSwitchService(db);
   await providerSwitchService.init();
 
+  final cursorAccountService = CursorAccountService(db);
+  await cursorAccountService.init();
+
   // Initialize Update Service（自动检测更新）
   final updateService = UpdateService(configService: configService);
   updateService.init();
@@ -157,6 +161,7 @@ void main() async {
         ChangeNotifierProvider.value(value: mcpHealthCheckService),
         ChangeNotifierProvider.value(value: updateService),
         ChangeNotifierProvider.value(value: providerSwitchService),
+        ChangeNotifierProvider.value(value: cursorAccountService),
         ChangeNotifierProvider.value(value: remoteClawService),
       ],
       child: const McpSwitchApp(),

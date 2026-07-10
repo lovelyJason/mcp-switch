@@ -13,6 +13,7 @@ import '../plugins/gemini_skills_screen.dart';
 import '../plugins/antigravity_skills_screen.dart';
 import '../provider_switch/provider_list_screen.dart';
 import '../sessions/session_manager_screen.dart';
+import '../cursor_account/cursor_account_list_screen.dart';
 
 /// 头部操作按钮组（胶囊样式）
 /// 根据不同编辑器类型显示不同的按钮组合：
@@ -61,13 +62,36 @@ class HeaderActionButtons extends StatelessWidget {
       return _buildClaudeButtons(context, claudeDisabled);
     } else if (isCodex) {
       return _buildCodexButtons(context, codexDisabled);
-    } else if (isGemini) {
+    } else     if (isGemini) {
       return _buildGeminiButtons(context, geminiDisabled);
     } else if (isAntigravity) {
       return _buildAntigravityButtons(context);
+    } else if (selectedEditor == EditorType.cursor) {
+      return _buildCursorButtons(context);
     } else {
       return _buildDefaultButtons(context, windsurfDisabled || kiroDisabled);
     }
+  }
+
+  /// Cursor: Rules + 账号管理
+  Widget _buildCursorButtons(BuildContext context) {
+    final rulesBtn = _buildRulesButton(context, false);
+    final accountBtn = IconButton(
+      icon: const Icon(Icons.manage_accounts_outlined, size: 18, color: Colors.orange),
+      tooltip: S.get('cursor_account_tooltip'),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      onPressed: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const CursorAccountListScreen()),
+        );
+      },
+    );
+
+    return _buildCapsuleContainer(
+      context,
+      children: [rulesBtn, _buildDivider(), accountBtn],
+    );
   }
 
   /// Claude: Skills + Prompt + Provider + More (Rules在下拉菜单)

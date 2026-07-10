@@ -180,6 +180,9 @@ presets:
           command: npx
           args: ['-y', '@playwright/mcp@latest']
         claude_cli: 'claude mcp add --scope user {{name}} -- npx -y @playwright/mcp@latest'
+        global_install:
+          npm_package: '@playwright/mcp@latest'
+          bin_name: playwright-mcp
 
     form_fields: []
 

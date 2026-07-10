@@ -351,12 +351,14 @@ class McpConnectionType {
   final bool recommended;
   final Map<String, dynamic> config;
   final String? claudeCli; // Claude Code CLI 命令模板
+  final GlobalInstallConfig? globalInstall;
 
   McpConnectionType({
     required this.type,
     this.recommended = false,
     required this.config,
     this.claudeCli,
+    this.globalInstall,
   });
 
   /// 获取 command
@@ -397,11 +399,15 @@ class McpConnectionType {
   String? get codexBearerEnv => config['codex_bearer_env']?.toString();
 
   factory McpConnectionType.fromMap(Map<String, dynamic> map) {
+    final globalInstallMap = map['global_install'] as Map<String, dynamic>?;
     return McpConnectionType(
       type: map['type']?.toString() ?? 'local',
       recommended: map['recommended'] == true,
       config: map['config'] as Map<String, dynamic>? ?? {},
       claudeCli: map['claude_cli']?.toString(),
+      globalInstall: globalInstallMap != null
+          ? GlobalInstallConfig.fromMap(globalInstallMap)
+          : null,
     );
   }
 
@@ -419,6 +425,24 @@ class McpConnectionType {
       cmd = cmd.replaceAll('{{${entry.key}}}', entry.value);
     }
     return cmd;
+  }
+}
+
+/// 全局安装配置
+class GlobalInstallConfig {
+  final String npmPackage; // npm 包名，如 @playwright/mcp@latest
+  final String binName; // 全局安装后的 bin 名称，如 playwright-mcp
+
+  const GlobalInstallConfig({
+    required this.npmPackage,
+    required this.binName,
+  });
+
+  factory GlobalInstallConfig.fromMap(Map<String, dynamic> map) {
+    return GlobalInstallConfig(
+      npmPackage: map['npm_package']?.toString() ?? '',
+      binName: map['bin_name']?.toString() ?? '',
+    );
   }
 }
 

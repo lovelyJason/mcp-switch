@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
@@ -26,11 +29,16 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
   late String _selectedEditor;
   bool? _isConfigSynced;
 
+  /// 当前 ~/.codex/auth.json 是否含有 OAuth 数据（用于"应用当前登录态"按钮）
+  bool _hasLocalCodexAuth = false;
+  String _localCodexAuthPreview = '';
+
   @override
   void initState() {
     super.initState();
     _selectedEditor = widget.initialEditorType;
     _checkConfigSync();
+    _loadLocalCodexAuth();
   }
 
   void _checkConfigSync() {
@@ -41,6 +49,43 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
     service.checkConfigSync(_selectedEditor).then((synced) {
       if (mounted) setState(() => _isConfigSynced = synced);
     });
+  }
+
+  Future<void> _applyAuthToProfile(ProviderProfile profile) async {
+    final service = Provider.of<ProviderSwitchService>(
+      context,
+      listen: false,
+    );
+    final oauthData =
+        await ProviderSwitchService.readCodexOauthDataFromAuthFile();
+    if (oauthData == null || oauthData.isEmpty) return;
+    if (!mounted) return;
+    await service.updateProfile(
+      id: profile.id,
+      editorType: _selectedEditor,
+      name: profile.name,
+      oauthData: Value(oauthData),
+    );
+    await _loadLocalCodexAuth();
+    if (!mounted) return;
+    Toast.show(
+      context,
+      message: S.get('provider_apply_auth_success')
+          .replaceAll('{name}', profile.name),
+      type: ToastType.success,
+    );
+  }
+
+  Future<void> _loadLocalCodexAuth() async {
+    final oauthData =
+        await ProviderSwitchService.readCodexOauthDataFromAuthFile();
+    final preview = await ProviderSwitchService.readCodexAuthFile();
+    if (mounted) {
+      setState(() {
+        _hasLocalCodexAuth = oauthData != null && oauthData.isNotEmpty;
+        _localCodexAuthPreview = preview;
+      });
+    }
   }
 
   @override
@@ -350,6 +395,10 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
                         : null,
                     isActiveSynced: _isConfigSynced,
                     onReturnFromEdit: _checkConfigSync,
+                    hasLocalCodexAuth: _hasLocalCodexAuth,
+                    localCodexAuthPreview: _localCodexAuthPreview,
+                    onApplyAuth: () =>
+                        _applyAuthToProfile(profile),
                   );
                 },
               ),
@@ -368,6 +417,9 @@ class _ProviderListItem extends StatefulWidget {
   final bool? isConfigSynced;
   final bool? isActiveSynced;
   final VoidCallback? onReturnFromEdit;
+  final bool hasLocalCodexAuth;
+  final String localCodexAuthPreview;
+  final VoidCallback? onApplyAuth;
 
   const _ProviderListItem({
     required this.profile,
@@ -376,6 +428,9 @@ class _ProviderListItem extends StatefulWidget {
     this.isConfigSynced,
     this.isActiveSynced,
     this.onReturnFromEdit,
+    this.hasLocalCodexAuth = false,
+    this.localCodexAuthPreview = '',
+    this.onApplyAuth,
   });
 
   @override
@@ -384,6 +439,14 @@ class _ProviderListItem extends StatefulWidget {
 
 class _ProviderListItemState extends State<_ProviderListItem> {
   bool _isHovering = false;
+
+  /// 是否为 Codex OAuth 供应商（通过 isOfficialProvider 标识）
+  bool get _isCodexOauthProfile =>
+      widget.editorType == 'codex' && widget.profile.isOfficialProvider;
+
+  bool get _isNotLoggedIn =>
+      _isCodexOauthProfile &&
+      (widget.profile.oauthData ?? '').trim().isEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -541,6 +604,52 @@ class _ProviderListItemState extends State<_ProviderListItem> {
                 : Colors.grey.shade600,
           ),
         ),
+        if (_isNotLoggedIn || (_isCodexOauthProfile && widget.hasLocalCodexAuth))
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                if (_isNotLoggedIn)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          size: 12,
+                          color: Colors.redAccent,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          S.get('provider_not_logged_in'),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                // 仅当该 profile 自身还没有 auth.json（oauthData 为空）时，
+                // 才显示「应用当前登录态」按钮；已登录的预设不再展示。
+                if (_isNotLoggedIn && widget.hasLocalCodexAuth)
+                  _AuthPopoverButton(
+                    preview: widget.localCodexAuthPreview,
+                    onApply: () => widget.onApplyAuth?.call(),
+                  ),
+              ],
+            ),
+          ),
         if (widget.profile.isActive)
           Padding(
             padding: const EdgeInsets.only(top: 6),
@@ -710,14 +819,6 @@ class _ProviderListItemState extends State<_ProviderListItem> {
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
       onPressed: () {
-        if (ProviderSwitchService.isOfficialProfile(widget.profile)) {
-          Toast.show(
-            context,
-            message: S.get('provider_official_delete_hint'),
-            type: ToastType.warning,
-          );
-          return;
-        }
         if (widget.profile.isActive) {
           Toast.show(
             context,
@@ -745,4 +846,191 @@ class _ProviderListItemState extends State<_ProviderListItem> {
     );
   }
 
+}
+
+/// 「应用当前登录态」按钮：悬浮时以 Popover 展示 auth.json 内容
+class _AuthPopoverButton extends StatefulWidget {
+  final String preview;
+  final VoidCallback? onApply;
+
+  const _AuthPopoverButton({required this.preview, this.onApply});
+
+  @override
+  State<_AuthPopoverButton> createState() => _AuthPopoverButtonState();
+}
+
+class _AuthPopoverButtonState extends State<_AuthPopoverButton> {
+  final _layerLink = LayerLink();
+  OverlayEntry? _overlayEntry;
+  Timer? _hideTimer;
+
+  void _showPopover() {
+    _hideTimer?.cancel();
+    if (_overlayEntry != null) return;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    _overlayEntry = OverlayEntry(
+      builder: (_) => _AuthPopoverOverlay(
+        link: _layerLink,
+        preview: widget.preview,
+        isDark: isDark,
+        onMouseEnter: () => _hideTimer?.cancel(),
+        onMouseExit: _scheduleHide,
+      ),
+    );
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  void _scheduleHide() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(milliseconds: 150), _hidePopover);
+  }
+
+  void _hidePopover() {
+    _hideTimer?.cancel();
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  @override
+  void dispose() {
+    _hidePopover();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => _showPopover(),
+        onExit: (_) => _scheduleHide(),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            widget.onApply?.call();
+            _hidePopover();
+          },
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                    Icons.login, size: 12, color: Colors.orange),
+                const SizedBox(width: 4),
+                Text(
+                  S.get('provider_apply_current_auth'),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.orange,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AuthPopoverOverlay extends StatelessWidget {
+  final LayerLink link;
+  final String preview;
+  final bool isDark;
+  final VoidCallback onMouseEnter;
+  final VoidCallback onMouseExit;
+
+  const _AuthPopoverOverlay({
+    required this.link,
+    required this.preview,
+    required this.isDark,
+    required this.onMouseEnter,
+    required this.onMouseExit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = isDark ? const Color(0xFF2C2C2E) : Colors.white;
+    final border = isDark ? Colors.white12 : Colors.grey.shade200;
+    final textColor = isDark ? Colors.grey.shade300 : Colors.grey.shade800;
+
+    return Stack(
+      children: [
+        Positioned(
+          left: 0,
+          top: 0,
+          child: CompositedTransformFollower(
+            link: link,
+            targetAnchor: Alignment.bottomLeft,
+            followerAnchor: Alignment.topLeft,
+            offset: const Offset(0, 6),
+            child: Material(
+              color: Colors.transparent,
+              child: MouseRegion(
+                onEnter: (_) => onMouseEnter(),
+                onExit: (_) => onMouseExit(),
+                child: Container(
+                  width: 280,
+                  constraints: const BoxConstraints(maxHeight: 180),
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: border),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.12),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        child: Text(
+                          '~/.codex/auth.json',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: textColor,
+                          ),
+                        ),
+                      ),
+                      Divider(height: 1, color: border),
+                      Flexible(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(10),
+                          child: SelectableText(
+                            preview.isNotEmpty ? preview : '(empty)',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontFamily: 'monospace',
+                              color: textColor,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

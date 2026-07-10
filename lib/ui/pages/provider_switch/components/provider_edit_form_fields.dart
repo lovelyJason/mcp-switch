@@ -16,12 +16,16 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
   set _selectedModel(String? v);
   String? get _selectedVscodeModel;
   set _selectedVscodeModel(String? v);
+  String get _selectedVscodeModelMode;
+  set _selectedVscodeModelMode(String v);
+  void _onVscodeModelModeChanged();
   String? get _selectedReasoningEffort;
   set _selectedReasoningEffort(String? v);
   String? get _selectedPersonality;
   set _selectedPersonality(String? v);
   bool get _isOfficial;
-  bool get _isOfficialPreset;
+  bool get _usesOfficialAuth;
+  bool get _lockName;
   String? get _selectedPresetName;
   bool get _isClaude;
   bool get _isGemini;
@@ -92,10 +96,26 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
             child: TextFormField(
               controller: _nameController,
               style: const TextStyle(fontSize: 14),
-              decoration: _inputDecoration(S.get('provider_name_hint')),
+              enabled: !_lockName,
+              decoration: _disabledDecoration(
+                S.get('provider_name_hint'),
+                disabled: _lockName,
+              ),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) {
                   return S.get('provider_name_required');
+                }
+                final service = Provider.of<ProviderSwitchService>(
+                  context,
+                  listen: false,
+                );
+                final available = service.isProviderNameAvailable(
+                  editorType: widget.editorType,
+                  name: v,
+                  excludeId: widget.profile?.id,
+                );
+                if (!available) {
+                  return S.get('provider_name_duplicate');
                 }
                 return null;
               },
@@ -122,19 +142,19 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
     return _buildLabeledField(
       label: S.get('provider_api_token'),
       isRequired: true,
-      trailing: _isOfficial ? _buildOfficialHintIcon(isDark) : null,
+      trailing: _usesOfficialAuth ? _buildOfficialHintIcon(isDark) : null,
       child: TextFormField(
         controller: _apiTokenController,
         style: TextStyle(
           fontSize: 14,
-          color: _isOfficial ? Colors.grey.shade500 : null,
+          color: _usesOfficialAuth ? Colors.grey.shade500 : null,
         ),
         obscureText: _obscureToken,
-        enabled: !_isOfficial,
+        enabled: !_usesOfficialAuth,
         decoration:
             _disabledDecoration(
               S.get('provider_api_token_hint'),
-              disabled: _isOfficial,
+              disabled: _usesOfficialAuth,
             ).copyWith(
               suffixIcon: IconButton(
                 icon: Icon(
@@ -145,7 +165,7 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
                 onPressed: () => setState(() => _obscureToken = !_obscureToken),
               ),
             ),
-        validator: _isOfficial
+        validator: _usesOfficialAuth
             ? null
             : (v) {
                 if (v == null || v.trim().isEmpty) {
@@ -164,26 +184,26 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
       children: [
         _buildLabeledField(
           label: S.get('provider_base_url'),
-          isRequired: !_isOfficialPreset,
+          isRequired: !_usesOfficialAuth,
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (_isOfficial) _buildOfficialHintIcon(isDark),
-              if (!_isOfficial) _buildSpeedTestButton(isDark),
+              if (_usesOfficialAuth) _buildOfficialHintIcon(isDark),
+              if (!_usesOfficialAuth) _buildSpeedTestButton(isDark),
             ],
           ),
           child: TextFormField(
             controller: _baseUrlController,
             style: TextStyle(
               fontSize: 14,
-              color: _isOfficial ? Colors.grey.shade500 : null,
+              color: _usesOfficialAuth ? Colors.grey.shade500 : null,
             ),
-            enabled: !_isOfficial,
+            enabled: !_usesOfficialAuth,
             decoration: _disabledDecoration(
               S.get('provider_base_url_hint'),
-              disabled: _isOfficial,
+              disabled: _usesOfficialAuth,
             ),
-            validator: _isOfficial
+            validator: _usesOfficialAuth
                 ? null
                 : (v) {
                     if (v == null || v.trim().isEmpty) {
@@ -200,7 +220,7 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
                   },
           ),
         ),
-        if (!_isOfficial && _isClaude)
+        if (!_usesOfficialAuth && _isClaude)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Container(
@@ -619,20 +639,116 @@ mixin _ProviderEditFormFields on State<ProviderEditScreen> {
 
     return _buildLabeledField(
       label: S.get('provider_vscode_model'),
-      trailing: Tooltip(
-        message: S.get('provider_vscode_model_format_hint'),
-        preferBelow: false,
-        child: Icon(
-          Icons.help_outline,
-          size: 16,
-          color: isDark ? Colors.grey.shade500 : Colors.grey.shade400,
-        ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Tooltip(
+            message: S.get('provider_vscode_model_format_hint'),
+            preferBelow: false,
+            child: Icon(
+              Icons.help_outline,
+              size: 16,
+              color: isDark ? Colors.grey.shade500 : Colors.grey.shade400,
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buildVscodeModelModeSelector(isDark),
+        ],
       ),
       child: _buildAutocompleteModelField(
         value: _selectedVscodeModel,
         models: models,
         hint: S.get('provider_vscode_model_hint'),
         onChanged: (val) => setState(() => _selectedVscodeModel = val),
+      ),
+    );
+  }
+
+  /// 旧版 / 新版 模式切换控件
+  Widget _buildVscodeModelModeSelector(bool isDark) {
+    return Container(
+      height: 22,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isDark ? Colors.white12 : Colors.grey.shade300,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildVscodeModelModeButton(
+            mode: 'legacy',
+            label: S.get('provider_vscode_model_mode_legacy'),
+            tooltip: S.get('provider_vscode_model_mode_legacy_tooltip'),
+            isFirst: true,
+            isDark: isDark,
+          ),
+          Container(
+            width: 1,
+            height: 16,
+            color: isDark ? Colors.white12 : Colors.grey.shade300,
+          ),
+          _buildVscodeModelModeButton(
+            mode: 'modern',
+            label: S.get('provider_vscode_model_mode_modern'),
+            tooltip: S.get('provider_vscode_model_mode_modern_tooltip'),
+            isFirst: false,
+            isDark: isDark,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVscodeModelModeButton({
+    required String mode,
+    required String label,
+    required String tooltip,
+    required bool isFirst,
+    required bool isDark,
+  }) {
+    final isSelected = _selectedVscodeModelMode == mode;
+    final radius = isFirst
+        ? const BorderRadius.only(
+            topLeft: Radius.circular(5),
+            bottomLeft: Radius.circular(5),
+          )
+        : const BorderRadius.only(
+            topRight: Radius.circular(5),
+            bottomRight: Radius.circular(5),
+          );
+    return Tooltip(
+      message: tooltip,
+      preferBelow: false,
+      child: InkWell(
+        borderRadius: radius,
+        onTap: () {
+          if (_selectedVscodeModelMode == mode) return;
+          setState(() => _selectedVscodeModelMode = mode);
+          _syncFormToClaudePreview();
+          _onVscodeModelModeChanged();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            color: isSelected
+                ? Colors.orange.withValues(alpha: 0.18)
+                : Colors.transparent,
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+              color: isSelected
+                  ? Colors.orange.shade300
+                  : (isDark ? Colors.white70 : Colors.black54),
+            ),
+          ),
+        ),
       ),
     );
   }

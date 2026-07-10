@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
@@ -75,6 +76,8 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   @override
   String? _selectedVscodeModel;
   @override
+  String _selectedVscodeModelMode = 'legacy';
+  @override
   String? _selectedReasoningEffort;
   @override
   String? _selectedPersonality;
@@ -113,6 +116,10 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   @override
   bool get _codexAuthLoaded => _codexAuthContentLoaded;
   bool _codexAuthContentLoaded = false;
+  @override
+  final TextEditingController _codexAuthController = TextEditingController();
+  @override
+  bool _isAuthEditing = false;
 
   @override
   String _geminiExistingEnvContent = '';
@@ -138,11 +145,27 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   bool get _isClaude => widget.editorType == 'claude';
   @override
   bool get _isGemini => widget.editorType == 'gemini';
+
+  /// 是否为官方供应商 profile（由 DB 字段 isOfficialProvider 标识）
   @override
   bool get _isOfficial =>
+      widget.profile != null && widget.profile!.isOfficialProvider;
+
+  /// 是否为官方种子 profile（ID 以 official- 开头，名称锁定）
+  bool get _isOfficialSeed =>
       widget.profile != null &&
-      ProviderSwitchService.isOfficialProfile(widget.profile!);
+      widget.profile!.id
+          .startsWith(ProviderSwitchService.officialIdPrefix);
+
+  /// 是否隐藏 apiToken/baseUrl 字段
   @override
+  bool get _usesOfficialAuth =>
+      _isOfficial || _isOfficialPreset;
+
+  /// 名称锁定：仅官方种子 profile 不可改名
+  @override
+  bool get _lockName => _isOfficialSeed;
+
   bool get _isOfficialPreset {
     if (_selectedPresetName == null || _selectedPresetName == '_custom_') {
       return false;
@@ -180,6 +203,8 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
     );
     _selectedModel = p?.model ?? (_isClaude ? 'default' : null);
     _selectedVscodeModel = _isClaude ? p?.vscodeModel : null;
+    _selectedVscodeModelMode =
+        _isClaude ? (p?.vscodeModelMode ?? 'legacy') : 'legacy';
     _selectedReasoningEffort = p?.modelReasoningEffort ?? 'high';
     _selectedPersonality = p?.personality ?? 'pragmatic';
     _selectedPresetName = '_custom_';
@@ -361,15 +386,42 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
     }
   }
 
+  /// 用户在表单中切换 VSCode 插件模型模式时回调：
+  /// - 已有 profile：按新模式重新对比磁盘文件，刷新冲突横幅
+  /// - 新建场景：清掉残留横幅
+  @override
+  void _onVscodeModelModeChanged() {
+    final p = widget.profile;
+    if (p != null) {
+      unawaited(_checkVscodeModelConflict(p));
+    } else if (_hasVscodeModelConflict) {
+      setState(() {
+        _hasVscodeModelConflict = false;
+        _localVscodeModel = null;
+      });
+    }
+  }
+
   Future<void> _checkVscodeModelConflict(ProviderProfile p) async {
     try {
-      final fileModel = await ProviderSwitchService.readVscodeSelectedModel();
+      // 按编辑界面当前选择的模式决定对比哪个文件，
+      // 而不是 SQLite 中保存的旧值（用户可能正在切换模式但未保存）。
+      final mode = _selectedVscodeModelMode;
+      final fileModel =
+          await ProviderSwitchService.readVscodeModelFor(mode);
       final dbModel = (p.vscodeModel ?? '').trim();
       final diskModel = (fileModel ?? '').trim();
-      if (dbModel != diskModel && mounted) {
+      if (!mounted) return;
+      if (dbModel != diskModel) {
         setState(() {
           _hasVscodeModelConflict = true;
           _localVscodeModel = fileModel;
+        });
+      } else {
+        // 切换模式后无冲突，清掉旧的横幅
+        setState(() {
+          _hasVscodeModelConflict = false;
+          _localVscodeModel = null;
         });
       }
     } catch (_) {}
@@ -505,6 +557,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       'maxThinkingTokens': _maxThinkingTokensController.text.trim(),
       'model': _selectedModel?.trim(),
       'vscodeModel': _selectedVscodeModel?.trim(),
+      'vscodeModelMode': _selectedVscodeModelMode,
       'defaultHaikuModel': _defaultHaikuModelController.text.trim(),
       'defaultSonnetModel': _defaultSonnetModelController.text.trim(),
       'defaultOpusModel': _defaultOpusModelController.text.trim(),
@@ -560,6 +613,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
     _defaultSonnetModelController.dispose();
     _defaultOpusModelController.dispose();
     _pageScrollController.dispose();
+    _codexAuthController.dispose();
     super.dispose();
   }
 
@@ -609,9 +663,14 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
                           const SizedBox(height: 16),
                           _buildPresetChips(isDark),
                         ],
+                        if (!_isEditMode &&
+                            _isOfficialPreset &&
+                            !_isClaude &&
+                            !_isGemini)
+                          _buildOauthSnapshotHint(isDark),
                         const SizedBox(height: 24),
                         _buildNameAndDescription(isDark),
-                        if (!_isOfficialPreset) ...[
+                        if (!_usesOfficialAuth) ...[
                           const SizedBox(height: 20),
                           _buildApiTokenField(isDark),
                           const SizedBox(height: 16),
@@ -786,10 +845,15 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   void _applyPreset(ProviderPreset preset) {
     setState(() {
       _selectedPresetName = preset.id;
-      _nameController.text = preset.name;
       _descriptionController.text = preset.description;
       _baseUrlController.text = preset.baseUrl;
       _websiteController.text = preset.website ?? '';
+
+      if (preset.isOfficial) {
+        _nameController.text = _nextOfficialAccountName(preset.name);
+      } else {
+        _nameController.text = preset.name;
+      }
 
       if (preset.id == 'zhipu') {
         _defaultHaikuModelController.text = 'glm-4.5-air';
@@ -801,6 +865,59 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
         _defaultOpusModelController.text = '';
       }
     });
+  }
+
+  /// 为官方预设生成不重复的默认名，如 "OpenAI - 账号 2"
+  String _nextOfficialAccountName(String providerName) {
+    final service =
+        Provider.of<ProviderSwitchService>(context, listen: false);
+    final existing = service.getProfiles(widget.editorType);
+    for (var n = existing.length + 1;; n++) {
+      final candidate = S.get('provider_official_account_default_name')
+          .replaceAll('{provider}', providerName)
+          .replaceAll('{n}', '$n');
+      final taken = existing.any(
+        (p) => p.name.trim().toLowerCase() == candidate.trim().toLowerCase(),
+      );
+      if (!taken) return candidate;
+    }
+  }
+
+  Widget _buildOauthSnapshotHint(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.amber.withValues(alpha: 0.1)
+              : Colors.amber.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.lightbulb_outline,
+              size: 14,
+              color:
+                  isDark ? Colors.amber.shade300 : Colors.amber.shade700,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                S.get('provider_official_account_save_first_hint'),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark
+                      ? Colors.amber.shade300
+                      : Colors.amber.shade800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildBottomBar(bool isDark) {
@@ -897,53 +1014,94 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
             ? null
             : _defaultOpusModelController.text.trim();
 
-    if (_isEditMode) {
-      await service.updateProfile(
-        id: widget.profile!.id,
-        editorType: widget.editorType,
-        name: name,
-        description: description,
-        apiToken: apiToken,
-        baseUrl: baseUrl,
-        model: _selectedModel,
-        maxOutputTokens: maxOutputTokens,
-        maxThinkingTokens: maxThinkingTokens,
-        modelReasoningEffort: _selectedReasoningEffort,
-        personality: _selectedPersonality,
-        website: website,
-        configContent: configContent,
-        vscodeModel: _selectedVscodeModel,
-        defaultHaikuModel: defaultHaikuModel,
-        defaultSonnetModel: defaultSonnetModel,
-        defaultOpusModel: defaultOpusModel,
+    final isNewOfficialCodex =
+        !_isEditMode && _isOfficialPreset && !_isClaude && !_isGemini;
+
+    // 如果编辑了 auth.json，提取 OAuth 字段保存到 oauthData
+    var oauthDataValue = const Value<String?>.absent();
+    if (_isAuthEditing && _codexAuthController.text.trim().isNotEmpty) {
+      try {
+        final parsed = jsonDecode(_codexAuthController.text.trim());
+        if (parsed is Map<String, dynamic>) {
+          final oauth = Map<String, dynamic>.from(parsed);
+          oauth.remove('OPENAI_API_KEY');
+          if (oauth.isNotEmpty) {
+            oauthDataValue = Value(jsonEncode(oauth));
+          }
+        }
+      } catch (_) {}
+    }
+
+    try {
+      if (_isEditMode) {
+        await service.updateProfile(
+          id: widget.profile!.id,
+          editorType: widget.editorType,
+          name: name,
+          description: description,
+          apiToken: _usesOfficialAuth ? null : apiToken,
+          baseUrl: _usesOfficialAuth ? null : baseUrl,
+          model: _selectedModel,
+          maxOutputTokens: maxOutputTokens,
+          maxThinkingTokens: maxThinkingTokens,
+          modelReasoningEffort: _selectedReasoningEffort,
+          personality: _selectedPersonality,
+          website: website,
+          configContent: configContent,
+          vscodeModel: _selectedVscodeModel,
+          vscodeModelMode: _isClaude ? _selectedVscodeModelMode : null,
+          defaultHaikuModel: defaultHaikuModel,
+          defaultSonnetModel: defaultSonnetModel,
+          defaultOpusModel: defaultOpusModel,
+          oauthData: oauthDataValue,
+        );
+      } else {
+        await service.addProfile(
+          editorType: widget.editorType,
+          name: name,
+          description: description,
+          apiToken: _usesOfficialAuth ? null : apiToken,
+          baseUrl: _usesOfficialAuth ? null : baseUrl,
+          model: _selectedModel,
+          maxOutputTokens: maxOutputTokens,
+          maxThinkingTokens: maxThinkingTokens,
+          modelReasoningEffort: _selectedReasoningEffort,
+          personality: _selectedPersonality,
+          website: website,
+          configContent: configContent,
+          vscodeModel: _selectedVscodeModel,
+          vscodeModelMode: _isClaude ? _selectedVscodeModelMode : null,
+          defaultHaikuModel: defaultHaikuModel,
+          defaultSonnetModel: defaultSonnetModel,
+          defaultOpusModel: defaultOpusModel,
+          isOfficialProvider: _isOfficialPreset,
+        );
+      }
+    } on DuplicateProviderNameException {
+      if (!mounted) return;
+      Toast.show(
+        context,
+        message: S.get('provider_name_duplicate'),
+        type: ToastType.warning,
       );
-    } else {
-      await service.addProfile(
-        editorType: widget.editorType,
-        name: name,
-        description: description,
-        apiToken: apiToken,
-        baseUrl: baseUrl,
-        model: _selectedModel,
-        maxOutputTokens: maxOutputTokens,
-        maxThinkingTokens: maxThinkingTokens,
-        modelReasoningEffort: _selectedReasoningEffort,
-        personality: _selectedPersonality,
-        website: website,
-        configContent: configContent,
-        vscodeModel: _selectedVscodeModel,
-        defaultHaikuModel: defaultHaikuModel,
-        defaultSonnetModel: defaultSonnetModel,
-        defaultOpusModel: defaultOpusModel,
-      );
+      return;
     }
 
     if (mounted) {
-      Toast.show(
-        context,
-        message: S.get('provider_save_success'),
-        type: ToastType.success,
-      );
+      if (isNewOfficialCodex) {
+        Toast.show(
+          context,
+          message: S.get('provider_official_codex_login_hint'),
+          type: ToastType.info,
+          duration: const Duration(seconds: 5),
+        );
+      } else {
+        Toast.show(
+          context,
+          message: S.get('provider_save_success'),
+          type: ToastType.success,
+        );
+      }
       Navigator.of(context).pop();
     }
   }
@@ -988,6 +1146,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       personality: _selectedPersonality,
       website: _websiteController.text.isEmpty ? null : _websiteController.text,
       vscodeModel: _selectedVscodeModel,
+      vscodeModelMode: _isClaude ? _selectedVscodeModelMode : null,
       defaultHaikuModel: _defaultHaikuModelController.text.trim().isEmpty
           ? null
           : _defaultHaikuModelController.text.trim(),
@@ -997,6 +1156,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       defaultOpusModel: _defaultOpusModelController.text.trim().isEmpty
           ? null
           : _defaultOpusModelController.text.trim(),
+      isOfficialProvider: widget.profile?.isOfficialProvider ?? _isOfficialPreset,
       createdAt: widget.profile?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
     );

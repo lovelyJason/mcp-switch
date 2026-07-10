@@ -11,6 +11,16 @@ import '../data/database.dart';
 import 'claude_plugin_integration_service.dart';
 import '../utils/platform_utils.dart';
 
+class DuplicateProviderNameException implements Exception {
+  final String editorType;
+  final String name;
+
+  const DuplicateProviderNameException(this.editorType, this.name);
+
+  @override
+  String toString() => 'Duplicate provider name "$name" for $editorType';
+}
+
 /// 供应商配置切换服务
 ///
 /// 管理 Claude Code、Codex 和 Gemini 的供应商（API 代理/中转站）配置，
@@ -31,14 +41,14 @@ class ProviderSwitchService extends ChangeNotifier {
   List<ProviderProfile> get codexProfiles => _codexProfiles;
   List<ProviderProfile> get geminiProfiles => _geminiProfiles;
 
-  /// 官方配置的固定 ID 前缀
+  /// 官方配置的固定 ID 前缀（仅用于种子 profile 的 ID 生成）
   static const String officialIdPrefix = 'official-';
   static const Duration _codexModelsCacheTtl = Duration(hours: 6);
   static const String _codexModelsCacheFileName = 'codex_models.json';
 
-  /// 判断是否为官方预置配置
+  /// 判断是否为官方供应商（通过 OAuth 登录，不需要 apiToken/baseUrl）
   static bool isOfficialProfile(ProviderProfile profile) {
-    return profile.id.startsWith(officialIdPrefix);
+    return profile.isOfficialProvider;
   }
 
   ProviderSwitchService(this._db);
@@ -75,6 +85,7 @@ class ProviderSwitchService extends ChangeNotifier {
 
     String? fileBaseUrl;
     String? fileApiToken;
+    String? fileOauthRefresh;
 
     try {
       if (editorType == 'claude') {
@@ -144,7 +155,7 @@ class ProviderSwitchService extends ChangeNotifier {
           }
         }
 
-        // 读取 auth.json 中的 OPENAI_API_KEY
+        // 读取 auth.json 中的 OPENAI_API_KEY + OAuth refresh_token
         final authPath = PlatformUtils.joinPath(home, '.codex', 'auth.json');
         final authFile = File(authPath);
         if (await authFile.exists()) {
@@ -153,6 +164,13 @@ class ProviderSwitchService extends ChangeNotifier {
             final decoded = jsonDecode(raw.trim());
             if (decoded is Map<String, dynamic>) {
               fileApiToken = decoded['OPENAI_API_KEY'] as String?;
+              final tokens = decoded['tokens'];
+              if (tokens is Map<String, dynamic>) {
+                final refresh = tokens['refresh_token'];
+                if (refresh is String && refresh.isNotEmpty) {
+                  fileOauthRefresh = refresh;
+                }
+              }
             }
           } catch (_) {}
         }
@@ -166,16 +184,64 @@ class ProviderSwitchService extends ChangeNotifier {
       return;
     }
 
+    // Codex 场景：auth.json 为空（无 apiKey、无 OAuth tokens）时，
+    // 说明用户刚切到一个空 profile 等待登录，不应改变激活态
+    if (editorType == 'codex' &&
+        (fileBaseUrl == null || fileBaseUrl.isEmpty) &&
+        (fileApiToken == null || fileApiToken.isEmpty) &&
+        fileOauthRefresh == null) {
+      return;
+    }
+
+    // Codex 场景：当前激活的是一个非种子的空 OAuth profile（等待登录），
+    // auth.json 出现了新的 OAuth tokens → 自动归属到该 profile
+    if (editorType == 'codex' && fileOauthRefresh != null) {
+      final active = all.where((p) => p.isActive).firstOrNull;
+      if (active != null &&
+          !active.id.startsWith(officialIdPrefix) &&
+          (active.oauthData ?? '').trim().isEmpty) {
+        final oauthData = await readCodexOauthDataFromAuthFile();
+        if (oauthData != null && oauthData.isNotEmpty) {
+          await _db.updateProfile(
+            ProviderProfilesCompanion(
+              id: Value(active.id),
+              oauthData: Value(oauthData),
+              updatedAt: Value(DateTime.now()),
+            ),
+          );
+        }
+        return;
+      }
+    }
+
     // 根据 baseUrl + apiToken 找到匹配的 profile
+    // OAuth-only 模式（baseUrl/apiToken 都为空）下，进一步用 refresh_token 区分多账号
     ProviderProfile? matched;
-    for (final p in all) {
-      final pBase = p.baseUrl ?? '';
-      final fBase = fileBaseUrl ?? '';
-      final pToken = p.apiToken ?? '';
-      final fToken = fileApiToken ?? '';
-      if (pBase == fBase && pToken == fToken) {
-        matched = p;
-        break;
+    final fBase = fileBaseUrl ?? '';
+    final fToken = fileApiToken ?? '';
+    final oauthOnly = editorType == 'codex' &&
+        fBase.isEmpty &&
+        fToken.isEmpty &&
+        fileOauthRefresh != null;
+    if (oauthOnly) {
+      for (final p in all) {
+        final pBase = p.baseUrl ?? '';
+        final pToken = p.apiToken ?? '';
+        if (pBase.isNotEmpty || pToken.isNotEmpty) continue;
+        if (_extractRefreshToken(p.oauthData) == fileOauthRefresh) {
+          matched = p;
+          break;
+        }
+      }
+    }
+    if (matched == null) {
+      for (final p in all) {
+        final pBase = p.baseUrl ?? '';
+        final pToken = p.apiToken ?? '';
+        if (pBase == fBase && pToken == fToken) {
+          matched = p;
+          break;
+        }
       }
     }
 
@@ -189,9 +255,15 @@ class ProviderSwitchService extends ChangeNotifier {
       }
     }
 
-    // 还是没匹配上：如果 baseUrl 为空，匹配官方配置
+    // 还是没匹配上：如果 baseUrl 为空且 auth.json 有 OAuth 数据，匹配官方种子配置
+    // 如果 auth.json 也是空的（用户刚切到空 profile 准备登录），保持当前激活态不变
     if (matched == null && (fileBaseUrl == null || fileBaseUrl.isEmpty)) {
-      matched = all.where((p) => isOfficialProfile(p)).firstOrNull;
+      final hasOauthInFile = editorType != 'codex' || fileOauthRefresh != null;
+      if (hasOauthInFile) {
+        matched = all
+            .where((p) => p.id.startsWith(officialIdPrefix))
+            .firstOrNull;
+      }
     }
 
     if (matched != null) {
@@ -214,17 +286,19 @@ class ProviderSwitchService extends ChangeNotifier {
     }
   }
 
+  Future<bool> _isSeedDeleted(String officialId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('seed_deleted_$officialId') ?? false;
+  }
+
   Future<void> _syncClaudeOfficial() async {
     final officialId = '${officialIdPrefix}claude';
     final existing = await _db.getProfileById(officialId);
     final now = DateTime.now();
 
-    if (existing != null) {
-      // 已存在：不动任何字段，保持原样
-      return;
-    }
+    if (existing != null) return;
+    if (await _isSeedDeleted(officialId)) return;
 
-    // 首次创建：官方配置，字段为空，默认激活
     await _db.insertProfile(
       ProviderProfilesCompanion.insert(
         id: officialId,
@@ -232,6 +306,7 @@ class ProviderSwitchService extends ChangeNotifier {
         name: 'Official',
         description: const Value('Anthropic Official'),
         isActive: const Value(true),
+        isOfficialProvider: const Value(true),
         apiToken: const Value(null),
         baseUrl: const Value(null),
         model: const Value(null),
@@ -293,29 +368,40 @@ class ProviderSwitchService extends ChangeNotifier {
     final existing = await _db.getProfileById(officialId);
     final now = DateTime.now();
 
+    // 如果当前激活的是另一个官方 OAuth profile（等待登录），
+    // auth.json 的 OAuth tokens 属于那个 profile，不应写入种子
+    final activeProfile = await _db.getActiveProfile('codex');
+    final anotherEmpty = activeProfile != null &&
+        activeProfile.id != officialId &&
+        activeProfile.isOfficialProvider &&
+        (activeProfile.oauthData ?? '').trim().isEmpty;
+    final safeOauthData = anotherEmpty ? existing?.oauthData : oauthData;
+
     if (existing != null) {
       await _db.updateProfile(
         ProviderProfilesCompanion(
           id: Value(officialId),
           editorType: const Value('codex'),
-          name: const Value('Official'),
+          name: const Value('OpenAI'),
           description: const Value('OpenAI Official'),
+          isOfficialProvider: const Value(true),
           apiToken: Value(apiToken),
           model: Value(model ?? codexModels.first),
           modelReasoningEffort: Value(reasoningEffort ?? 'high'),
           personality: Value(personality ?? 'pragmatic'),
-          oauthData: Value(oauthData),
+          oauthData: Value(safeOauthData),
           updatedAt: Value(now),
         ),
       );
-    } else {
+    } else if (!await _isSeedDeleted(officialId)) {
       await _db.insertProfile(
         ProviderProfilesCompanion.insert(
           id: officialId,
           editorType: 'codex',
-          name: 'Official',
+          name: 'OpenAI',
           description: const Value('OpenAI Official'),
           isActive: const Value(true),
+          isOfficialProvider: const Value(true),
           apiToken: Value(apiToken),
           model: Value(model ?? codexModels.first),
           modelReasoningEffort: Value(reasoningEffort ?? 'high'),
@@ -335,6 +421,7 @@ class ProviderSwitchService extends ChangeNotifier {
     final now = DateTime.now();
 
     if (existing != null) return;
+    if (await _isSeedDeleted(officialId)) return;
 
     await _db.insertProfile(
       ProviderProfilesCompanion.insert(
@@ -342,6 +429,7 @@ class ProviderSwitchService extends ChangeNotifier {
         editorType: 'gemini',
         name: 'Official',
         description: const Value('Google Official'),
+        isOfficialProvider: const Value(true),
         isActive: const Value(true),
         apiToken: const Value(null),
         baseUrl: const Value(null),
@@ -385,6 +473,33 @@ class ProviderSwitchService extends ChangeNotifier {
     return _codexProfiles;
   }
 
+  bool isProviderNameAvailable({
+    required String editorType,
+    required String name,
+    String? excludeId,
+  }) {
+    final normalized = name.trim().toLowerCase();
+    if (normalized.isEmpty) return true;
+    return !getProfiles(editorType).any((profile) {
+      if (excludeId != null && profile.id == excludeId) return false;
+      return profile.name.trim().toLowerCase() == normalized;
+    });
+  }
+
+  void _ensureProviderNameAvailable({
+    required String editorType,
+    required String name,
+    String? excludeId,
+  }) {
+    if (!isProviderNameAvailable(
+      editorType: editorType,
+      name: name,
+      excludeId: excludeId,
+    )) {
+      throw DuplicateProviderNameException(editorType, name);
+    }
+  }
+
   /// 获取激活的配置
   ProviderProfile? getActiveProfile(String editorType) {
     final profiles = getProfiles(editorType);
@@ -410,10 +525,15 @@ class ProviderSwitchService extends ChangeNotifier {
     String? website,
     String? configContent,
     String? vscodeModel,
+    String? vscodeModelMode,
     String? defaultHaikuModel,
     String? defaultSonnetModel,
     String? defaultOpusModel,
+    String? oauthData,
+    bool isOfficialProvider = false,
   }) async {
+    _ensureProviderNameAvailable(editorType: editorType, name: name);
+
     final now = DateTime.now();
     final entry = ProviderProfilesCompanion.insert(
       id: const Uuid().v4(),
@@ -430,9 +550,12 @@ class ProviderSwitchService extends ChangeNotifier {
       website: Value(website),
       configContent: Value(configContent),
       vscodeModel: Value(vscodeModel),
+      vscodeModelMode: Value(vscodeModelMode),
       defaultHaikuModel: Value(defaultHaikuModel),
       defaultSonnetModel: Value(defaultSonnetModel),
       defaultOpusModel: Value(defaultOpusModel),
+      oauthData: Value(oauthData),
+      isOfficialProvider: Value(isOfficialProvider),
       createdAt: now,
       updatedAt: now,
     );
@@ -442,6 +565,9 @@ class ProviderSwitchService extends ChangeNotifier {
   }
 
   /// 更新配置
+  ///
+  /// `oauthData` 默认 `Value.absent()`，表示不修改原值。
+  /// 传入显式 Value 才会覆盖（包括传 `Value(null)` 清空）。
   Future<void> updateProfile({
     required String id,
     required String editorType,
@@ -457,10 +583,18 @@ class ProviderSwitchService extends ChangeNotifier {
     String? website,
     String? configContent,
     String? vscodeModel,
+    String? vscodeModelMode,
     String? defaultHaikuModel,
     String? defaultSonnetModel,
     String? defaultOpusModel,
+    Value<String?> oauthData = const Value.absent(),
   }) async {
+    _ensureProviderNameAvailable(
+      editorType: editorType,
+      name: name,
+      excludeId: id,
+    );
+
     final existingProfile = await _db.getProfileById(id);
     final wasActive = existingProfile?.isActive ?? false;
 
@@ -479,9 +613,11 @@ class ProviderSwitchService extends ChangeNotifier {
       website: Value(website),
       configContent: Value(configContent),
       vscodeModel: Value(vscodeModel),
+      vscodeModelMode: Value(vscodeModelMode),
       defaultHaikuModel: Value(defaultHaikuModel),
       defaultSonnetModel: Value(defaultSonnetModel),
       defaultOpusModel: Value(defaultOpusModel),
+      oauthData: oauthData,
       updatedAt: Value(DateTime.now()),
     );
     await _db.updateProfile(entry);
@@ -497,6 +633,11 @@ class ProviderSwitchService extends ChangeNotifier {
 
   /// 删除配置
   Future<void> deleteProfile(String id, String editorType) async {
+    if (id.startsWith(officialIdPrefix)) {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'seed_deleted_$id';
+      await prefs.setBool(key, true);
+    }
     await _db.deleteProfile(id);
     await _loadProfiles();
     notifyListeners();
@@ -783,7 +924,14 @@ class ProviderSwitchService extends ChangeNotifier {
   }
 
   /// 写入 VSCode 插件模型到 VSCode settings.json
+  ///
+  /// - legacy 模式（默认）：写入 VSCode `settings.json` 的 `claudeCode.selectedModel`
+  /// - modern 模式：新版 Claude Code 插件从 `~/.claude/settings.json` 的 `model` 字段读取，
+  ///   此时主动从 VSCode `settings.json` 中移除 `claudeCode.selectedModel`，
+  ///   避免旧字段残留干扰。`model` 值已经在 `_writeClaudeSettings` 中通过
+  ///   `configContent` 写入（由编辑表单的 `_overlayFormValues` 控制）。
   Future<void> _writeVscodePluginModel(ProviderProfile profile) async {
+    final mode = profile.vscodeModelMode ?? 'legacy';
     final vscodeModel = profile.vscodeModel;
     final home = PlatformUtils.userHome;
     final codeUserDir = PlatformUtils.joinPath(
@@ -795,6 +943,21 @@ class ProviderSwitchService extends ChangeNotifier {
     );
     final settingsPath = PlatformUtils.joinPath(codeUserDir, 'settings.json');
     final file = File(settingsPath);
+
+    if (mode == 'modern') {
+      // modern 模式不写 VSCode settings.json；如有旧字段则清理
+      if (!await file.exists()) return;
+      try {
+        final settings =
+            jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+        if (settings.containsKey('claudeCode.selectedModel')) {
+          settings.remove('claudeCode.selectedModel');
+          const encoder = JsonEncoder.withIndent('    ');
+          await file.writeAsString(encoder.convert(settings));
+        }
+      } catch (_) {}
+      return;
+    }
 
     Map<String, dynamic> settings = {};
     if (await file.exists()) {
@@ -853,14 +1016,16 @@ class ProviderSwitchService extends ChangeNotifier {
       await tomlFile.writeAsString(generated.isEmpty ? '' : '$generated\n');
     }
 
-    await _writeCodexAuth(profile.apiToken);
+    await _writeCodexAuth(profile);
   }
 
   /// 写入 Codex 认证文件 (~/.codex/auth.json)
   ///
-  /// - 有 apiKey（第三方）→ 只写 {"OPENAI_API_KEY": "sk-xxx"}，清除 OAuth 字段
-  /// - 无 apiKey（官方）→ 从 DB 恢复 OAuth tokens，OPENAI_API_KEY 设为 null
-  Future<void> _writeCodexAuth(String? apiKey) async {
+  /// - 有 apiKey（第三方）→ 只写 {"OPENAI_API_KEY": "sk-xxx"}
+  /// - 无 apiKey 但有 profile.oauthData → 用该 profile 自身快照的 OAuth tokens
+  /// - 官方种子且自身无 oauthData → 兜底从 DB 读取（兼容老数据）
+  /// - 用户新建的空 OAuth profile → 清空 auth.json，让 Codex 弹出登录
+  Future<void> _writeCodexAuth(ProviderProfile profile) async {
     final home = PlatformUtils.userHome;
     final authPath = PlatformUtils.joinPath(home, '.codex', 'auth.json');
     final authFile = File(authPath);
@@ -870,26 +1035,71 @@ class ProviderSwitchService extends ChangeNotifier {
     }
 
     const encoder = JsonEncoder.withIndent('  ');
+    final apiKey = profile.apiToken;
     final hasKey = apiKey != null && apiKey.isNotEmpty;
 
     if (hasKey) {
-      // 第三方：只写 OPENAI_API_KEY，清除 OAuth 字段
       await authFile.writeAsString(encoder.convert({'OPENAI_API_KEY': apiKey}));
-    } else {
-      // 官方：从 DB 恢复 OAuth tokens + OPENAI_API_KEY 设为 null
-      final officialId = '${officialIdPrefix}codex';
-      final profile = await _db.getProfileById(officialId);
-      final Map<String, dynamic> authMap = {'OPENAI_API_KEY': null};
-      if (profile?.oauthData != null) {
-        try {
-          final oauth = jsonDecode(profile!.oauthData!);
-          if (oauth is Map<String, dynamic>) {
-            authMap.addAll(oauth);
-          }
-        } catch (_) {}
-      }
-      await authFile.writeAsString(encoder.convert(authMap));
+      return;
     }
+
+    String? oauthJson = profile.oauthData;
+
+    // 仅官方种子（official-codex）才做兜底：从 DB 恢复 OAuth（兼容老数据）
+    // 用户新建的 official 空 OAuth profile 不做兜底，清空 auth.json 以触发登录
+    if ((oauthJson == null || oauthJson.isEmpty) &&
+        profile.id == '${officialIdPrefix}codex') {
+      final fallback = await _db.getProfileById(profile.id);
+      oauthJson = fallback?.oauthData;
+    }
+
+    final Map<String, dynamic> authMap = {'OPENAI_API_KEY': null};
+    if (oauthJson != null && oauthJson.isNotEmpty) {
+      try {
+        final oauth = jsonDecode(oauthJson);
+        if (oauth is Map<String, dynamic>) {
+          authMap.addAll(oauth);
+        }
+      } catch (_) {}
+    }
+    await authFile.writeAsString(encoder.convert(authMap));
+  }
+
+  /// 读取当前 ~/.codex/auth.json 的 OAuth 字段（排除 OPENAI_API_KEY），
+  /// 返回 JSON 字符串。文件不存在或无 OAuth 数据时返回 null。
+  ///
+  /// 用于"添加 OpenAI 账号"时对当前已登录账号做快照。
+  static Future<String?> readCodexOauthDataFromAuthFile() async {
+    final home = PlatformUtils.userHome;
+    final authPath = PlatformUtils.joinPath(home, '.codex', 'auth.json');
+    final authFile = File(authPath);
+    if (!await authFile.exists()) return null;
+    try {
+      final raw = await authFile.readAsString();
+      final decoded = jsonDecode(raw.trim());
+      if (decoded is! Map<String, dynamic>) return null;
+      final clone = Map<String, dynamic>.from(decoded);
+      clone.remove('OPENAI_API_KEY');
+      if (clone.isEmpty) return null;
+      return jsonEncode(clone);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 从 oauthData JSON 中提取 tokens.refresh_token（用于多账号匹配）
+  static String? _extractRefreshToken(String? oauthData) {
+    if (oauthData == null || oauthData.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(oauthData);
+      if (decoded is! Map<String, dynamic>) return null;
+      final tokens = decoded['tokens'];
+      if (tokens is Map<String, dynamic>) {
+        final refresh = tokens['refresh_token'];
+        if (refresh is String && refresh.isNotEmpty) return refresh;
+      }
+    } catch (_) {}
+    return null;
   }
 
   /// 检查已选中供应商的 configContent 与配置文件是否一致
@@ -936,8 +1146,42 @@ class ProviderSwitchService extends ChangeNotifier {
     }
   }
 
+  /// 读取 ~/.claude/settings.json 中的顶层 model 字段
+  /// 新版 Claude Code 插件从此处读取 VSCode 插件模型
+  static Future<String?> readClaudeSettingsModel() async {
+    final home = PlatformUtils.userHome;
+    final path = PlatformUtils.joinPath(home, '.claude', 'settings.json');
+    final file = File(path);
+    if (!await file.exists()) return null;
+    try {
+      final data = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      return data['model']?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 根据 vscodeModelMode 读取对应文件中的 VSCode 插件模型值
+  static Future<String?> readVscodeModelFor(String? mode) async {
+    if ((mode ?? 'legacy') == 'modern') {
+      return readClaudeSettingsModel();
+    }
+    return readVscodeSelectedModel();
+  }
+
   /// 检查 VSCode 插件模型是否与 SQLite 一致
+  ///
+  /// - legacy 模式：对比 VSCode `settings.json` 的 `claudeCode.selectedModel`
+  /// - modern 模式：对比 `~/.claude/settings.json` 的顶层 `model`
+  ///   （已被 `_writeClaudeSettings` 通过 configContent 覆盖；此处单独校验，
+  ///   方便在编辑界面给出 VSCode 插件模型维度的明确提示。）
   Future<bool> checkVscodeModelSync(ProviderProfile profile) async {
+    final mode = profile.vscodeModelMode ?? 'legacy';
+    if (mode == 'modern') {
+      // 在 checkConfigSync 中，~/.claude/settings.json 已通过整体 jsonEquals
+      // 比较过；此处保持向后兼容地返回 true，避免重复触发同一冲突。
+      return true;
+    }
     final dbModel = profile.vscodeModel;
     final fileModel = await readVscodeSelectedModel();
     final dbNorm = (dbModel ?? '').trim();
@@ -1047,9 +1291,12 @@ class ProviderSwitchService extends ChangeNotifier {
     'claude-sonnet-4-6',
     'claude-sonnet-4-5',
     'claude-opus-4-6',
+    'claude-opus-4-6[1m]',
     'claude-opus-4-5',
     'claude-opus-4-1',
     'claude-haiku-4-5',
+    'sonnet[1m]',
+    'opus[1m]',
   ];
 
   /// 获取 Codex 可用模型列表

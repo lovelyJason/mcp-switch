@@ -27,6 +27,8 @@ mixin _ProviderEditPreview on State<ProviderEditScreen> {
   TextEditingController get _defaultOpusModelController;
   String? get _selectedModel;
   set _selectedModel(String? v);
+  String? get _selectedVscodeModel;
+  String get _selectedVscodeModelMode;
   String? get _selectedReasoningEffort;
   set _selectedReasoningEffort(String? v);
   String? get _selectedPersonality;
@@ -40,6 +42,9 @@ mixin _ProviderEditPreview on State<ProviderEditScreen> {
 
   String get _codexAuthContent;
   bool get _codexAuthLoaded;
+  TextEditingController get _codexAuthController;
+  bool get _isAuthEditing;
+  set _isAuthEditing(bool v);
 
   String get _geminiExistingEnvContent;
   bool get _geminiEnvLoaded;
@@ -361,6 +366,15 @@ mixin _ProviderEditPreview on State<ProviderEditScreen> {
       data['model'] = model;
     } else {
       data.remove('model');
+    }
+
+    // 新版（modern）模式：VSCode 插件读取 ~/.claude/settings.json -> model，
+    // 此时 vscodeModel 优先级高于 CLI 模型。
+    if (_selectedVscodeModelMode == 'modern') {
+      final vscodeModel = _selectedVscodeModel?.trim();
+      if (vscodeModel != null && vscodeModel.isNotEmpty) {
+        data['model'] = vscodeModel;
+      }
     }
   }
 
@@ -713,6 +727,37 @@ mixin _ProviderEditPreview on State<ProviderEditScreen> {
                 fontFamily: 'Menlo',
               ),
             ),
+            const Spacer(),
+            if (_isOfficial && _codexAuthLoaded)
+              TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    if (!_isAuthEditing) {
+                      _codexAuthController.text = _codexAuthContent;
+                      _isAuthEditing = true;
+                    } else {
+                      _isAuthEditing = false;
+                    }
+                  });
+                },
+                icon: Icon(
+                  _isAuthEditing
+                      ? Icons.visibility
+                      : Icons.edit_outlined,
+                  size: 14,
+                ),
+                label: Text(
+                  _isAuthEditing
+                      ? S.get('provider_config_preview')
+                      : S.get('edit'),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: _isAuthEditing
+                      ? Colors.orange
+                      : Colors.grey.shade600,
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 8),
@@ -740,6 +785,18 @@ mixin _ProviderEditPreview on State<ProviderEditScreen> {
   Widget _buildOfficialAuthContent(TextStyle codeStyle) {
     if (!_codexAuthLoaded) {
       return Text('...', style: codeStyle);
+    }
+    if (_isAuthEditing) {
+      return TextField(
+        controller: _codexAuthController,
+        maxLines: null,
+        style: codeStyle,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          isDense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+      );
     }
     final text = _codexAuthContent;
     return SingleChildScrollView(

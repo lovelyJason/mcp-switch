@@ -1,3 +1,12 @@
+## v2.0.0
+
+### Changes
+- fix: upgrade font_awesome_flutter and pin Flutter 3.44.6 for CI
+- ci: pin Flutter 3.29.3 for font_awesome_flutter compatibility
+- ci: add macOS GitHub Actions workflow for release builds
+- feat: 提交离职前的改动
+- ci: artifact retention 7d to free actions storage quota
+
 ## v1.10.0
 
 ### ✨ 新增特性

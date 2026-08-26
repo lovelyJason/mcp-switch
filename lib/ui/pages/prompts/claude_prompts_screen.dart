@@ -8,7 +8,23 @@ import 'claude_prompt_edit_screen.dart';
 import '../../components/custom_dialog.dart';
 
 class ClaudePromptsScreen extends StatelessWidget {
-  const ClaudePromptsScreen({super.key});
+  final String titleKey;
+  final PromptService? promptService;
+
+  const ClaudePromptsScreen({
+    super.key,
+    this.titleKey = 'claude_prompt_title',
+    this.promptService,
+  });
+
+  Widget _editRoute(ClaudePrompt? prompt) {
+    final editScreen = ClaudePromptEditScreen(prompt: prompt);
+    if (promptService == null) return editScreen;
+    return ChangeNotifierProvider<PromptService>.value(
+      value: promptService!,
+      child: editScreen,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +70,7 @@ class ClaudePromptsScreen extends StatelessWidget {
                   ),
                   const SizedBox(width: 16),
                   Text(
-                    S.get('claude_prompt_title'),
+                    S.get(titleKey),
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -81,9 +97,7 @@ class ClaudePromptsScreen extends StatelessWidget {
                         minHeight: 36,
                       ),
                       onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ClaudePromptEditScreen(),
-                        ),
+                        MaterialPageRoute(builder: (_) => _editRoute(null)),
                       ),
                       tooltip: S.get('add_prompt'),
                     ),
@@ -175,6 +189,7 @@ class ClaudePromptsScreen extends StatelessWidget {
                             return PromptListItem(
                               prompt: prompt,
                               isDark: isDark,
+                              promptService: promptService,
                             );
                           },
                         ),
@@ -194,8 +209,23 @@ class ClaudePromptsScreen extends StatelessWidget {
 class PromptListItem extends StatefulWidget {
   final ClaudePrompt prompt;
   final bool isDark;
+  final PromptService? promptService;
 
-  const PromptListItem({super.key, required this.prompt, required this.isDark});
+  const PromptListItem({
+    super.key,
+    required this.prompt,
+    required this.isDark,
+    this.promptService,
+  });
+
+  Widget _editRoute() {
+    final editScreen = ClaudePromptEditScreen(prompt: prompt);
+    if (promptService == null) return editScreen;
+    return ChangeNotifierProvider<PromptService>.value(
+      value: promptService!,
+      child: editScreen,
+    );
+  }
 
   @override
   State<PromptListItem> createState() => _PromptListItemState();
@@ -233,11 +263,9 @@ class _PromptListItemState extends State<PromptListItem> {
               // Optional: Can still tap row to edit? User wants explicit Edit button.
               // Let's keep tap to edit for convenience or disable if Edit button handles it.
               // Previously tap to edit.
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ClaudePromptEditScreen(prompt: widget.prompt),
-                ),
-              );
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => widget._editRoute()));
             },
             borderRadius: BorderRadius.circular(12),
             child: Padding(
@@ -251,15 +279,14 @@ class _PromptListItemState extends State<PromptListItem> {
                       Provider.of<PromptService>(
                         context,
                         listen: false,
-                      )
-                          .toggleActive(widget.prompt.id, val);
+                      ).toggleActive(widget.prompt.id, val);
                     },
                     activeColor: const Color(
                       0xFF007AFF,
                     ), // Blue matching standard
                   ),
                   const SizedBox(width: 16),
-                  
+
                   // Text Content
                   Expanded(
                     child: Column(
@@ -327,7 +354,7 @@ class _PromptListItemState extends State<PromptListItem> {
                       ],
                     ),
                   ),
-                  
+
                   // Hover Actions
                   if (_isHovering) ...[
                     const SizedBox(width: 16),
@@ -350,8 +377,7 @@ class _PromptListItemState extends State<PromptListItem> {
                         onPressed: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) =>
-                                  ClaudePromptEditScreen(prompt: widget.prompt),
+                              builder: (_) => widget._editRoute(),
                             ),
                           );
                         },

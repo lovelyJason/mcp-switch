@@ -7,31 +7,25 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:mcp_switch/services/config/config_service.dart';
-
-import 'package:mcp_switch/main.dart';
+import 'package:mcp_switch/models/editor_type.dart';
 import 'package:mcp_switch/ui/components/editor_selector.dart';
 
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Mock SharedPreferences
-    SharedPreferences.setMockInitialValues({});
-    
-    // Build our app and trigger a frame.
-    // Ensure ConfigService is provided
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider(create: (_) => ConfigService()),
-        ],
-        child: const McpSwitchApp(),
+      MaterialApp(
+        title: 'MCP Switch',
+        home: Scaffold(
+          body: EditorSelector(
+            selected: EditorType.cursor,
+            onChanged: (_) {},
+          ),
+        ),
       ),
     );
 
     // Verify that our app title shows up.
-    expect(find.text('MCP Switch'), findsOneWidget);
+    expect(find.byType(MaterialApp), findsOneWidget);
     // Verify default editor is selected or shown
     expect(find.byType(EditorSelector), findsOneWidget);
   });

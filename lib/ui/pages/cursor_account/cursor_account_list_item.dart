@@ -11,12 +11,17 @@ import 'cursor_account_edit_screen.dart';
 class CursorAccountListItem extends StatefulWidget {
   final CursorAccount account;
   final bool isSynced;
+
+  /// 当前激活账号是否与 Cursor 不同步；为 true 时禁止切换到其他账号，
+  /// 避免用户手上最新的 Cursor 登录态被覆盖丢失。
+  final bool activeOutOfSync;
   final VoidCallback onChanged;
 
   const CursorAccountListItem({
     super.key,
     required this.account,
     required this.isSynced,
+    this.activeOutOfSync = false,
     required this.onChanged,
   });
 
@@ -178,6 +183,16 @@ class _CursorAccountListItemState extends State<CursorAccountListItem> {
   }
 
   Future<void> _onSwitch() async {
+    // 当前激活账号与 Cursor 不同步时，禁止切换到其他账号（先同步再切）
+    if (widget.activeOutOfSync) {
+      Toast.show(
+        context,
+        message: S.get('cursor_account_sync_before_switch'),
+        type: ToastType.warning,
+        duration: const Duration(seconds: 5),
+      );
+      return;
+    }
     setState(() => _switching = true);
     final service = context.read<CursorAccountService>();
     try {

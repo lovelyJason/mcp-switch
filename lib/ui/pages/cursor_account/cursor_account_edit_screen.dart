@@ -35,6 +35,9 @@ class _CursorAccountEditScreenState extends State<CursorAccountEditScreen> {
   bool _obscureRefresh = true;
   String _initialSnapshot = '';
 
+  /// 激活账号中与实时 Cursor 不一致的字段集合（email/accessToken/...）
+  Set<String> _outOfSync = {};
+
   bool get _isEdit => widget.accountId != null;
 
   @override
@@ -74,18 +77,44 @@ class _CursorAccountEditScreenState extends State<CursorAccountEditScreen> {
 
   Future<void> _loadAccount() async {
     setState(() => _loading = true);
-    final account = await context.read<CursorAccountService>().getAccountById(
-      widget.accountId!,
-    );
+    final service = context.read<CursorAccountService>();
+    final account = await service.getAccountById(widget.accountId!);
     if (account == null && mounted) {
       Navigator.of(context).pop();
       return;
     }
     if (account != null) {
       _fillFromAccount(account);
+      // 仅激活账号需要与实时 Cursor 比对，标出漂移字段
+      if (account.isActive) {
+        await _computeOutOfSync(service, account);
+      }
     }
     _takeSnapshot();
     if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _computeOutOfSync(
+    CursorAccountService service,
+    CursorAccount account,
+  ) async {
+    try {
+      final live = await service.captureFromCursor();
+      final diff = <String>{};
+      bool same(String? a, String? b) => (a ?? '').trim() == (b ?? '').trim();
+      if (!same(account.email, live.email)) diff.add('email');
+      if (!same(account.accessToken, live.accessToken)) diff.add('accessToken');
+      if (!same(account.refreshToken, live.refreshToken)) {
+        diff.add('refreshToken');
+      }
+      if (!same(account.membershipType, live.membershipType)) {
+        diff.add('membershipType');
+      }
+      if (!same(account.signUpType, live.signUpType)) diff.add('signUpType');
+      _outOfSync = diff;
+    } catch (_) {
+      _outOfSync = {};
+    }
   }
 
   void _fillFromAccount(CursorAccount account) {
@@ -207,6 +236,7 @@ class _CursorAccountEditScreenState extends State<CursorAccountEditScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
         children: [
+          if (_outOfSync.isNotEmpty) _buildSyncBanner(isDark),
           _buildSection(
             isDark: isDark,
             icon: Icons.person_outline,
@@ -228,6 +258,7 @@ class _CursorAccountEditScreenState extends State<CursorAccountEditScreen> {
               _buildLabeledField(
                 isDark: isDark,
                 label: S.get('cursor_account_email'),
+                outOfSync: _outOfSync.contains('email'),
                 child: _textField(
                   isDark: isDark,
                   controller: _emailCtrl,
@@ -241,6 +272,7 @@ class _CursorAccountEditScreenState extends State<CursorAccountEditScreen> {
                     child: _buildLabeledField(
                       isDark: isDark,
                       label: S.get('cursor_account_membership'),
+                      outOfSync: _outOfSync.contains('membershipType'),
                       child: _textField(
                         isDark: isDark,
                         controller: _membershipCtrl,
@@ -253,6 +285,7 @@ class _CursorAccountEditScreenState extends State<CursorAccountEditScreen> {
                     child: _buildLabeledField(
                       isDark: isDark,
                       label: S.get('cursor_account_sign_up_type'),
+                      outOfSync: _outOfSync.contains('signUpType'),
                       child: _textField(
                         isDark: isDark,
                         controller: _signUpCtrl,
@@ -273,6 +306,7 @@ class _CursorAccountEditScreenState extends State<CursorAccountEditScreen> {
               _buildLabeledField(
                 isDark: isDark,
                 label: S.get('cursor_account_access_token'),
+                outOfSync: _outOfSync.contains('accessToken'),
                 child: _textField(
                   isDark: isDark,
                   controller: _accessCtrl,
@@ -289,6 +323,7 @@ class _CursorAccountEditScreenState extends State<CursorAccountEditScreen> {
               _buildLabeledField(
                 isDark: isDark,
                 label: S.get('cursor_account_refresh_token'),
+                outOfSync: _outOfSync.contains('refreshToken'),
                 child: _textField(
                   isDark: isDark,
                   controller: _refreshCtrl,
@@ -396,11 +431,51 @@ class _CursorAccountEditScreenState extends State<CursorAccountEditScreen> {
     );
   }
 
+  Widget _buildSyncBanner(bool isDark) {
+    final labels = {
+      'email': S.get('cursor_account_email'),
+      'accessToken': S.get('cursor_account_access_token'),
+      'refreshToken': S.get('cursor_account_refresh_token'),
+      'membershipType': S.get('cursor_account_membership'),
+      'signUpType': S.get('cursor_account_sign_up_type'),
+    };
+    final names = _outOfSync.map((k) => labels[k] ?? k).join('、');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.sync_problem, size: 16, color: Colors.amber),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              S
+                  .get('cursor_account_out_of_sync_guide')
+                  .replaceAll('{fields}', names),
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.5,
+                color: isDark ? Colors.amber.shade200 : Colors.amber.shade900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLabeledField({
     required bool isDark,
     required String label,
     required Widget child,
     bool isRequired = false,
+    bool outOfSync = false,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -422,6 +497,15 @@ class _CursorAccountEditScreenState extends State<CursorAccountEditScreen> {
                   ' *',
                   style: TextStyle(fontSize: 13, color: Colors.red),
                 ),
+              if (outOfSync) ...[
+                const SizedBox(width: 6),
+                const Icon(Icons.sync_problem, size: 13, color: Colors.amber),
+                const SizedBox(width: 2),
+                Text(
+                  S.get('cursor_account_field_out_of_sync'),
+                  style: const TextStyle(fontSize: 11, color: Colors.amber),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 6),

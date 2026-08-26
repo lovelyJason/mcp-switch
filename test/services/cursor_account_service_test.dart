@@ -2,12 +2,14 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mcp_switch/data/database.dart';
 import 'package:mcp_switch/services/cursor_account_service.dart';
+import 'package:mcp_switch/services/logger_service.dart';
 
 void main() {
   late AppDatabase db;
   late CursorAccountService service;
 
-  setUp(() {
+  setUp(() async {
+    await LoggerService.init();
     db = AppDatabase.forTesting(NativeDatabase.memory());
     service = CursorAccountService(db);
   });

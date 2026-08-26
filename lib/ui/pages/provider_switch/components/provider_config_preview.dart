@@ -474,6 +474,8 @@ mixin _ProviderEditPreview on State<ProviderEditScreen> {
     return service.generateCodexPreview(
       _buildPreviewProfile(),
       existingConfigContent: _codexExistingConfigContent,
+      // 保存/预览：只 upsert 值，不删除用户已有的 model_provider / provider 段
+      preserveExistingProvider: true,
     );
   }
 

@@ -144,6 +144,8 @@ class _CursorAccountListScreenState extends State<CursorAccountListScreen> {
       builder: (context, service, _) {
         final accounts = service.accounts;
         final active = service.activeAccount;
+        final activeOutOfSync =
+            active != null && _syncMap[active.id] == false;
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
@@ -169,6 +171,7 @@ class _CursorAccountListScreenState extends State<CursorAccountListScreen> {
                   child: CursorAccountListItem(
                     account: a,
                     isSynced: _syncMap[a.id] ?? true,
+                    activeOutOfSync: activeOutOfSync,
                     onChanged: () async {
                       await service.refresh();
                       await _refreshSync();

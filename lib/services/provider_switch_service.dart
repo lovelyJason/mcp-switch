@@ -219,7 +219,8 @@ class ProviderSwitchService extends ChangeNotifier {
     ProviderProfile? matched;
     final fBase = fileBaseUrl ?? '';
     final fToken = fileApiToken ?? '';
-    final oauthOnly = editorType == 'codex' &&
+    final oauthOnly =
+        editorType == 'codex' &&
         fBase.isEmpty &&
         fToken.isEmpty &&
         fileOauthRefresh != null;
@@ -371,19 +372,19 @@ class ProviderSwitchService extends ChangeNotifier {
     // 如果当前激活的是另一个官方 OAuth profile（等待登录），
     // auth.json 的 OAuth tokens 属于那个 profile，不应写入种子
     final activeProfile = await _db.getActiveProfile('codex');
-    final anotherEmpty = activeProfile != null &&
+    final anotherEmpty =
+        activeProfile != null &&
         activeProfile.id != officialId &&
         activeProfile.isOfficialProvider &&
         (activeProfile.oauthData ?? '').trim().isEmpty;
     final safeOauthData = anotherEmpty ? existing?.oauthData : oauthData;
 
     if (existing != null) {
+      // 只刷新 OAuth/token 等运行时字段，保留用户对 name/description 的自定义
       await _db.updateProfile(
         ProviderProfilesCompanion(
           id: Value(officialId),
           editorType: const Value('codex'),
-          name: const Value('OpenAI'),
-          description: const Value('OpenAI Official'),
           isOfficialProvider: const Value(true),
           apiToken: Value(apiToken),
           model: Value(model ?? codexModels.first),
@@ -629,6 +630,42 @@ class ProviderSwitchService extends ChangeNotifier {
     }
 
     notifyListeners();
+  }
+
+  /// 将当前 ~/.codex/auth.json 的登录态同步到指定 Codex profile。
+  ///
+  /// 用于管理弹窗里的“同步登录态”按钮：把本机当前 Codex 登录态快照
+  /// 保存回当前账号对应的 sqlite 记录。
+  Future<void> syncCodexAuthToProfile(String id) async {
+    final profile = await _db.getProfileById(id);
+    if (profile == null) {
+      throw ArgumentError('profile not found: $id');
+    }
+    final oauthData = await readCodexOauthDataFromAuthFile();
+    if (oauthData == null || oauthData.isEmpty) {
+      throw StateError('no current codex auth found');
+    }
+    await updateProfile(
+      id: profile.id,
+      editorType: profile.editorType,
+      name: profile.name,
+      description: profile.description,
+      apiToken: profile.apiToken,
+      baseUrl: profile.baseUrl,
+      model: profile.model,
+      maxOutputTokens: profile.maxOutputTokens,
+      maxThinkingTokens: profile.maxThinkingTokens,
+      modelReasoningEffort: profile.modelReasoningEffort,
+      personality: profile.personality,
+      website: profile.website,
+      configContent: profile.configContent,
+      vscodeModel: profile.vscodeModel,
+      vscodeModelMode: profile.vscodeModelMode,
+      defaultHaikuModel: profile.defaultHaikuModel,
+      defaultSonnetModel: profile.defaultSonnetModel,
+      defaultOpusModel: profile.defaultOpusModel,
+      oauthData: Value(oauthData),
+    );
   }
 
   /// 删除配置
@@ -1133,13 +1170,18 @@ class ProviderSwitchService extends ChangeNotifier {
   static Future<String?> readVscodeSelectedModel() async {
     final home = PlatformUtils.userHome;
     final codeUserDir = PlatformUtils.joinPath(
-      home, 'Library', 'Application Support', 'Code', 'User',
+      home,
+      'Library',
+      'Application Support',
+      'Code',
+      'User',
     );
     final settingsPath = PlatformUtils.joinPath(codeUserDir, 'settings.json');
     final file = File(settingsPath);
     if (!await file.exists()) return null;
     try {
-      final data = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      final data =
+          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
       return data['claudeCode.selectedModel']?.toString();
     } catch (_) {
       return null;
@@ -1154,7 +1196,8 @@ class ProviderSwitchService extends ChangeNotifier {
     final file = File(path);
     if (!await file.exists()) return null;
     try {
-      final data = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      final data =
+          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
       return data['model']?.toString();
     } catch (_) {
       return null;
@@ -1230,11 +1273,13 @@ class ProviderSwitchService extends ChangeNotifier {
         if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
         final eqIdx = trimmed.indexOf('=');
         if (eqIdx < 0) continue;
-        map[trimmed.substring(0, eqIdx).trim()] =
-            trimmed.substring(eqIdx + 1).trim();
+        map[trimmed.substring(0, eqIdx).trim()] = trimmed
+            .substring(eqIdx + 1)
+            .trim();
       }
       return map;
     }
+
     return deepEquals(parse(a), parse(b));
   }
 
@@ -1685,6 +1730,7 @@ class ProviderSwitchService extends ChangeNotifier {
         envMap.remove(key);
       }
     }
+
     setOrRemove('GEMINI_API_KEY', profile.apiToken);
     setOrRemove('GOOGLE_GEMINI_BASE_URL', profile.baseUrl);
     setOrRemove('GEMINI_MODEL', profile.model);
@@ -1696,16 +1742,19 @@ class ProviderSwitchService extends ChangeNotifier {
   String generateCodexPreview(
     ProviderProfile profile, {
     String? existingConfigContent,
+    bool preserveExistingProvider = false,
   }) {
     return _mergeCodexConfig(
       existingContent: existingConfigContent ?? '',
       profile: profile,
+      preserveExistingProvider: preserveExistingProvider,
     );
   }
 
   String _mergeCodexConfig({
     required String existingContent,
     required ProviderProfile? profile,
+    bool preserveExistingProvider = false,
   }) {
     final lines = existingContent.trim().isEmpty
         ? <String>[]
@@ -1748,7 +1797,9 @@ class ProviderSwitchService extends ChangeNotifier {
       final providerName = existingProvider ?? 'custom';
       _upsertTopLevelKey(lines, 'model_provider', '"$providerName"');
       _upsertProviderSection(lines, providerName, customBaseUrl);
-    } else {
+    } else if (!preserveExistingProvider) {
+      // 激活生成路径：清掉旧的第三方 provider，避免官方账号仍走旧 base_url。
+      // 保存/预览路径（preserveExistingProvider=true）不删除，尊重用户手写内容。
       _removeTopLevelKey(lines, 'model_provider');
       _removeProviderSection(lines, existingProvider ?? 'custom');
     }
@@ -1812,7 +1863,10 @@ class ProviderSwitchService extends ChangeNotifier {
   }
 
   void _upsertProviderSection(
-      List<String> lines, String providerName, String baseUrl) {
+    List<String> lines,
+    String providerName,
+    String baseUrl,
+  ) {
     final sectionName = 'model_providers.$providerName';
     final range = _findSectionRange(lines, sectionName);
     final body = range == null

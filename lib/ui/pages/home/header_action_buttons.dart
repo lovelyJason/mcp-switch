@@ -7,6 +7,7 @@ import '../../components/custom_toast.dart';
 import '../rules/rules_screen.dart';
 import '../plugins/claude_code_skills_screen.dart';
 import '../prompts/claude_prompts_screen.dart';
+import '../prompts/codex_prompts_screen.dart';
 import '../prompts/gemini_prompts_screen.dart';
 import '../plugins/codex_skills_screen.dart';
 import '../plugins/gemini_skills_screen.dart';
@@ -18,7 +19,7 @@ import '../cursor_account/cursor_account_list_screen.dart';
 /// 头部操作按钮组（胶囊样式）
 /// 根据不同编辑器类型显示不同的按钮组合：
 /// - Claude: Skills + Prompt + More (Rules在下拉菜单)
-/// - Codex: Skills only
+/// - Codex: Skills + Prompt
 /// - Gemini: Skills only
 /// - Antigravity: Skills + Rules
 /// - Others: Rules only
@@ -62,7 +63,7 @@ class HeaderActionButtons extends StatelessWidget {
       return _buildClaudeButtons(context, claudeDisabled);
     } else if (isCodex) {
       return _buildCodexButtons(context, codexDisabled);
-    } else     if (isGemini) {
+    } else if (isGemini) {
       return _buildGeminiButtons(context, geminiDisabled);
     } else if (isAntigravity) {
       return _buildAntigravityButtons(context);
@@ -77,7 +78,11 @@ class HeaderActionButtons extends StatelessWidget {
   Widget _buildCursorButtons(BuildContext context) {
     final rulesBtn = _buildRulesButton(context, false);
     final accountBtn = IconButton(
-      icon: const Icon(Icons.manage_accounts_outlined, size: 18, color: Colors.orange),
+      icon: const Icon(
+        Icons.manage_accounts_outlined,
+        size: 18,
+        color: Colors.orange,
+      ),
       tooltip: S.get('cursor_account_tooltip'),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -115,7 +120,7 @@ class HeaderActionButtons extends StatelessWidget {
     );
   }
 
-  /// Codex: Skills + Provider + Sessions
+  /// Codex: Skills + Prompt + Provider + Sessions
   Widget _buildCodexButtons(BuildContext context, bool disabled) {
     final codexSkillsBtn = IconButton(
       icon: Icon(
@@ -123,14 +128,38 @@ class HeaderActionButtons extends StatelessWidget {
         size: 18,
         color: disabled ? Colors.grey : Colors.orange,
       ),
-      tooltip: disabled ? S.get('codex_not_installed_title') : S.get('codex_skills'),
+      tooltip: disabled
+          ? S.get('codex_not_installed_title')
+          : S.get('codex_skills'),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-      onPressed: disabled ? null : () {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const CodexSkillsScreen()),
-        );
-      },
+      onPressed: disabled
+          ? null
+          : () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const CodexSkillsScreen()),
+              );
+            },
+    );
+
+    final codexPromptBtn = IconButton(
+      icon: Icon(
+        Icons.tips_and_updates_outlined,
+        size: 18,
+        color: disabled ? Colors.grey : Colors.orange,
+      ),
+      tooltip: disabled
+          ? S.get('codex_not_installed_title')
+          : S.get('codex_prompt_title'),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      onPressed: disabled
+          ? null
+          : () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const CodexPromptsScreen()),
+              );
+            },
     );
 
     final providerBtn = _buildProviderButton(context, disabled, 'codex');
@@ -140,6 +169,8 @@ class HeaderActionButtons extends StatelessWidget {
       context,
       children: [
         codexSkillsBtn,
+        _buildDivider(),
+        codexPromptBtn,
         _buildDivider(),
         providerBtn,
         _buildDivider(),
@@ -156,14 +187,18 @@ class HeaderActionButtons extends StatelessWidget {
         size: 18,
         color: disabled ? Colors.grey : Colors.orange,
       ),
-      tooltip: disabled ? S.get('gemini_not_installed_title') : S.get('gemini_skills_title'),
+      tooltip: disabled
+          ? S.get('gemini_not_installed_title')
+          : S.get('gemini_skills_title'),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-      onPressed: disabled ? null : () {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const GeminiSkillsScreen()),
-        );
-      },
+      onPressed: disabled
+          ? null
+          : () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const GeminiSkillsScreen()),
+              );
+            },
     );
 
     final geminiPromptBtn = IconButton(
@@ -172,14 +207,18 @@ class HeaderActionButtons extends StatelessWidget {
         size: 18,
         color: disabled ? Colors.grey : Colors.orange,
       ),
-      tooltip: disabled ? S.get('gemini_not_installed_title') : 'Gemini Context',
+      tooltip: disabled
+          ? S.get('gemini_not_installed_title')
+          : 'Gemini Context',
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-      onPressed: disabled ? null : () {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const GeminiPromptsScreen()),
-        );
-      },
+      onPressed: disabled
+          ? null
+          : () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const GeminiPromptsScreen()),
+              );
+            },
     );
 
     final providerBtn = _buildProviderButton(context, disabled, 'gemini');
@@ -218,17 +257,16 @@ class HeaderActionButtons extends StatelessWidget {
 
     return _buildCapsuleContainer(
       context,
-      children: [
-        antigravitySkillsBtn,
-        _buildDivider(),
-        rulesBtn,
-      ],
+      children: [antigravitySkillsBtn, _buildDivider(), rulesBtn],
     );
   }
 
   /// 其他编辑器: Rules only
   Widget _buildDefaultButtons(BuildContext context, [bool disabled = false]) {
-    return _buildSingleButtonContainer(context, _buildRulesButton(context, disabled));
+    return _buildSingleButtonContainer(
+      context,
+      _buildRulesButton(context, disabled),
+    );
   }
 
   /// Skills 按钮 (Claude)
@@ -239,26 +277,34 @@ class HeaderActionButtons extends StatelessWidget {
         size: 18,
         color: disabled ? Colors.grey : Colors.orange,
       ),
-      tooltip: disabled ? S.get('claude_not_installed_title') : S.get('plugins_menu'),
+      tooltip: disabled
+          ? S.get('claude_not_installed_title')
+          : S.get('plugins_menu'),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-      onPressed: disabled ? null : () async {
-        final terminalService = context.read<TerminalService>();
-        final command = await Navigator.of(context).push<String>(
-          MaterialPageRoute(builder: (_) => const SkillsScreen()),
-        );
-        // 如果返回了命令，打开终端并执行
-        if (command != null && command.isNotEmpty) {
-          scaffoldKey.currentState?.openEndDrawer();
-          await Future.delayed(const Duration(milliseconds: 500));
-          terminalService.sendCommand(command);
-        }
-      },
+      onPressed: disabled
+          ? null
+          : () async {
+              final terminalService = context.read<TerminalService>();
+              final command = await Navigator.of(context).push<String>(
+                MaterialPageRoute(builder: (_) => const SkillsScreen()),
+              );
+              // 如果返回了命令，打开终端并执行
+              if (command != null && command.isNotEmpty) {
+                scaffoldKey.currentState?.openEndDrawer();
+                await Future.delayed(const Duration(milliseconds: 500));
+                terminalService.sendCommand(command);
+              }
+            },
     );
   }
 
   /// Provider 按钮 (Claude / Codex)
-  Widget _buildProviderButton(BuildContext context, bool disabled, String editorType) {
+  Widget _buildProviderButton(
+    BuildContext context,
+    bool disabled,
+    String editorType,
+  ) {
     return IconButton(
       icon: Icon(
         Icons.swap_horiz,
@@ -268,13 +314,16 @@ class HeaderActionButtons extends StatelessWidget {
       tooltip: disabled ? '' : S.get('provider_switch_tooltip'),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-      onPressed: disabled ? null : () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => ProviderListScreen(initialEditorType: editorType),
-          ),
-        );
-      },
+      onPressed: disabled
+          ? null
+          : () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ProviderListScreen(initialEditorType: editorType),
+                ),
+              );
+            },
     );
   }
 
@@ -286,14 +335,18 @@ class HeaderActionButtons extends StatelessWidget {
         size: 18,
         color: disabled ? Colors.grey : Colors.orange,
       ),
-      tooltip: disabled ? S.get('claude_not_installed_title') : S.get('prompt_name'),
+      tooltip: disabled
+          ? S.get('claude_not_installed_title')
+          : S.get('prompt_name'),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-      onPressed: disabled ? null : () {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ClaudePromptsScreen()),
-        );
-      },
+      onPressed: disabled
+          ? null
+          : () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ClaudePromptsScreen()),
+              );
+            },
     );
   }
 
@@ -303,7 +356,9 @@ class HeaderActionButtons extends StatelessWidget {
       icon: Icon(
         Icons.more_horiz,
         size: 18,
-        color: disabled ? Colors.grey : Theme.of(context).textTheme.bodyMedium?.color,
+        color: disabled
+            ? Colors.grey
+            : Theme.of(context).textTheme.bodyMedium?.color,
       ),
       tooltip: disabled ? S.get('claude_not_installed_title') : S.get('more'),
       enabled: !disabled,
@@ -371,7 +426,9 @@ class HeaderActionButtons extends StatelessWidget {
       icon: Icon(
         Icons.article_outlined,
         size: 18,
-        color: disabled ? Colors.grey : Theme.of(context).textTheme.bodyMedium?.color,
+        color: disabled
+            ? Colors.grey
+            : Theme.of(context).textTheme.bodyMedium?.color,
       ),
       tooltip: disabled ? S.get('env_not_installed') : 'Rules',
       padding: EdgeInsets.zero,
@@ -385,28 +442,42 @@ class HeaderActionButtons extends StatelessWidget {
     if (value == 'rules') {
       _handleRulesNavigation(context);
     } else if (value == 'sessions') {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const SessionManagerScreen()),
-      );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const SessionManagerScreen()));
     }
   }
 
   /// 处理 Rules 导航
   void _handleRulesNavigation(BuildContext context) {
     if (selectedEditor == EditorType.cursor) {
-      Toast.show(context, message: S.get('cursor_configure_hint'), type: ToastType.info);
+      Toast.show(
+        context,
+        message: S.get('cursor_configure_hint'),
+        type: ToastType.info,
+      );
       return;
     }
     if (selectedEditor == EditorType.claude) {
-      Toast.show(context, message: S.get('claude_rules_hint'), type: ToastType.info);
+      Toast.show(
+        context,
+        message: S.get('claude_rules_hint'),
+        type: ToastType.info,
+      );
       return;
     }
     if (selectedEditor == EditorType.codex) {
-      Toast.show(context, message: S.get('codex_rules_hint'), type: ToastType.info);
+      Toast.show(
+        context,
+        message: S.get('codex_rules_hint'),
+        type: ToastType.info,
+      );
       return;
     }
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => RulesScreen(editorType: selectedEditor)),
+      MaterialPageRoute(
+        builder: (_) => RulesScreen(editorType: selectedEditor),
+      ),
     );
   }
 
@@ -421,16 +492,21 @@ class HeaderActionButtons extends StatelessWidget {
       tooltip: S.get('session_manager'),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-      onPressed: disabled ? null : () {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const SessionManagerScreen()),
-        );
-      },
+      onPressed: disabled
+          ? null
+          : () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SessionManagerScreen()),
+              );
+            },
     );
   }
 
   /// 胶囊容器（多按钮）
-  Widget _buildCapsuleContainer(BuildContext context, {required List<Widget> children}) {
+  Widget _buildCapsuleContainer(
+    BuildContext context, {
+    required List<Widget> children,
+  }) {
     return Container(
       height: 32,
       decoration: BoxDecoration(
@@ -438,10 +514,7 @@ class HeaderActionButtons extends StatelessWidget {
         border: Border.all(color: Colors.grey.withValues(alpha: 0.3), width: 1),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: children,
-      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: children),
     );
   }
 

@@ -7,26 +7,40 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/claude_prompt.dart';
+import '../models/editor_type.dart';
 import '../utils/platform_utils.dart';
 
 import 'dart:async'; // Add import
 
 class PromptService extends ChangeNotifier {
+  final EditorType editorType;
+  final String? homeDirectory;
   List<ClaudePrompt> _prompts = [];
   bool _isInitialized = false;
   final Completer<void> _initCompleter = Completer<void>(); // Add completer
   bool _hasSeenTerminalArt = false;
 
+  PromptService({this.editorType = EditorType.claude, this.homeDirectory});
+
   List<ClaudePrompt> get prompts => _prompts;
   bool get hasSeenTerminalArt => _hasSeenTerminalArt;
-  
+
   Future<void> get ensureInitialized => _initCompleter.future;
 
   // Path constants
   static const String _mcpSwitchDir = '.mcp-switch';
   static const String _configFile = 'config.json';
-  static const String _claudeDir = '.claude';
-  static const String _claudeFile = 'CLAUDE.md';
+  String get _promptConfigKey =>
+      editorType == EditorType.codex ? 'codex' : 'claude';
+
+  String get _globalPromptFilePath {
+    final home = homeDirectory ?? PlatformUtils.userHome;
+    if (home.isEmpty) throw Exception('User home directory not found');
+    if (editorType == EditorType.codex) {
+      return PlatformUtils.joinPath(home, '.codex', 'AGENTS.md');
+    }
+    return PlatformUtils.joinPath(home, '.claude', 'CLAUDE.md');
+  }
 
   Future<void> init() async {
     if (_isInitialized) return;
@@ -41,7 +55,7 @@ class PromptService extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
+
   Future<void> markTerminalArtLoaded() async {
     _hasSeenTerminalArt = true;
     await _savePrompts();
@@ -49,19 +63,13 @@ class PromptService extends ChangeNotifier {
   }
 
   Future<String> get _appConfigPath async {
-    final home = PlatformUtils.userHome;
+    final home = homeDirectory ?? PlatformUtils.userHome;
     if (home.isEmpty) throw Exception('User home directory not found');
     final dir = Directory(PlatformUtils.joinPath(home, _mcpSwitchDir));
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
     return PlatformUtils.joinPath(dir.path, _configFile);
-  }
-
-  String get _claudeFilePath {
-    final home = PlatformUtils.userHome;
-    if (home.isEmpty) throw Exception('User home directory not found');
-    return PlatformUtils.joinPath(home, _claudeDir, _claudeFile);
   }
 
   Future<void> _loadPrompts() async {
@@ -71,20 +79,21 @@ class PromptService extends ChangeNotifier {
       if (await file.exists()) {
         final content = await file.readAsString();
         if (content.trim().isEmpty) return;
-        
+
         final Map<String, dynamic> json = jsonDecode(content);
-        
+
         // Load settings
         if (json.containsKey('terminal_art_seen')) {
           _hasSeenTerminalArt = json['terminal_art_seen'] == true;
         }
-        
+
         List<dynamic>? promptsList;
 
-        // 1. Try new structure: claude.prompts
-        if (json.containsKey('claude') && json['claude'] is Map) {
-          if (json['claude']['prompts'] is List) {
-            promptsList = json['claude']['prompts'];
+        // 1. Try editor-specific structure.
+        if (json.containsKey(_promptConfigKey) &&
+            json[_promptConfigKey] is Map) {
+          if (json[_promptConfigKey]['prompts'] is List) {
+            promptsList = json[_promptConfigKey]['prompts'];
           }
         }
 
@@ -94,10 +103,8 @@ class PromptService extends ChangeNotifier {
         }
 
         if (promptsList != null) {
-          _prompts = promptsList
-              .map((e) => ClaudePrompt.fromJson(e))
-              .toList();
-          
+          _prompts = promptsList.map((e) => ClaudePrompt.fromJson(e)).toList();
+
           // Sort by updated descending
           _prompts.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
         }
@@ -111,7 +118,7 @@ class PromptService extends ChangeNotifier {
     try {
       final path = await _appConfigPath;
       final file = File(path);
-      
+
       // Preserve other config if exists?
       Map<String, dynamic> fullConfig = {};
       if (await file.exists()) {
@@ -120,23 +127,24 @@ class PromptService extends ChangeNotifier {
           fullConfig = jsonDecode(content);
         } catch (_) {}
       }
-      
+
       fullConfig['terminal_art_seen'] = _hasSeenTerminalArt;
-      
-      // Ensure 'claude' object exists
-      if (!fullConfig.containsKey('claude') || fullConfig['claude'] is! Map) {
+
+      // Ensure the editor-specific object exists
+      if (!fullConfig.containsKey(_promptConfigKey) ||
+          fullConfig[_promptConfigKey] is! Map) {
         // Preserve existing if it was not a map (unlikely) or create new
-        fullConfig['claude'] = {};
+        fullConfig[_promptConfigKey] = {};
       }
 
       // Update prompts under claude
-      fullConfig['claude']['prompts'] = _prompts
+      fullConfig[_promptConfigKey]['prompts'] = _prompts
           .map((e) => e.toJson())
           .toList();
 
       // Clean up legacy root field
       fullConfig.remove('prompts');
-      
+
       const encoder = JsonEncoder.withIndent('  ');
       await file.writeAsString(encoder.convert(fullConfig));
     } catch (e) {
@@ -160,18 +168,18 @@ class PromptService extends ChangeNotifier {
     if (index != -1) {
       _prompts[index] = prompt;
       if (prompt.isActive) {
-         _deactivateothers(prompt.id);
+        _deactivateothers(prompt.id);
         await _writeToClaudeFile(prompt.content);
       } else {
         // If we turned it OFF, check if it was the one active
         // If so, clear file.
-        // Logic: The toggle calls activatePrompt usually. 
+        // Logic: The toggle calls activatePrompt usually.
         // But if updating title/content while active, we should re-write file.
         if (_didActiveChangeToInactive(index)) {
-             await _writeToClaudeFile(''); // Clear
-        } else if (prompt.isActive) { 
-             // Updated content of active prompt
-             await _writeToClaudeFile(prompt.content);
+          await _writeToClaudeFile(''); // Clear
+        } else if (prompt.isActive) {
+          // Updated content of active prompt
+          await _writeToClaudeFile(prompt.content);
         }
       }
       _prompts.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
@@ -179,11 +187,11 @@ class PromptService extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
+
   bool _didActiveChangeToInactive(int index) {
-      // Logic requires prev state. 
-      // For simplicity, UI handles toggle via specific method.
-      return false; 
+    // Logic requires prev state.
+    // For simplicity, UI handles toggle via specific method.
+    return false;
   }
 
   Future<void> deletePrompt(String id) async {
@@ -196,7 +204,7 @@ class PromptService extends ChangeNotifier {
       // print("Cannot delete active prompt");
       return;
     }
-    
+
     _prompts.removeAt(index);
     await _savePrompts();
     notifyListeners();
@@ -232,7 +240,7 @@ class PromptService extends ChangeNotifier {
 
   Future<void> _backfillContent() async {
     try {
-      final path = _claudeFilePath;
+      final path = _globalPromptFilePath;
       final file = File(path);
       if (await file.exists()) {
         final liveContent = (await file.readAsString()).trim();
@@ -282,31 +290,33 @@ class PromptService extends ChangeNotifier {
   }
 
   void _deactivateothers(String activeId) {
-     for (var i = 0; i < _prompts.length; i++) {
-        if (_prompts[i].id != activeId) {
-          _prompts[i] = _prompts[i].copyWith(isActive: false);
-        }
+    for (var i = 0; i < _prompts.length; i++) {
+      if (_prompts[i].id != activeId) {
+        _prompts[i] = _prompts[i].copyWith(isActive: false);
       }
+    }
   }
 
   Future<void> _writeToClaudeFile(String content) async {
     try {
-      final path = _claudeFilePath;
+      final path = _globalPromptFilePath;
       final file = File(path);
       final dir = file.parent;
       if (!await dir.exists()) {
-        await dir.create(recursive: true); // Should exist for Claude Code users but checking anyway
+        await dir.create(
+          recursive: true,
+        ); // Should exist for Claude Code users but checking anyway
       }
       await file.writeAsString(content);
     } catch (e) {
-      print('Error writing to CLAUDE.md: $e');
+      print('Error writing global prompt file: $e');
       throw e;
     }
   }
 
   Future<void> _syncFromClaudeFile() async {
     try {
-      final path = _claudeFilePath;
+      final path = _globalPromptFilePath;
       final file = File(path);
       if (await file.exists()) {
         final content = (await file.readAsString()).trim();
@@ -352,7 +362,9 @@ class PromptService extends ChangeNotifier {
           final newPrompt = ClaudePrompt(
             id: 'import-$timestamp',
             title: 'Imported $formattedDate',
-            description: '从 CLAUDE.md 自动同步',
+            description: editorType == EditorType.codex
+                ? '从 AGENTS.md 自动同步'
+                : '从 CLAUDE.md 自动同步',
             content: content,
             isActive: true,
             updatedAt: now,
@@ -367,4 +379,8 @@ class PromptService extends ChangeNotifier {
       print('Error syncing CLAUDE.md: $e');
     }
   }
+}
+
+class CodexPromptService extends PromptService {
+  CodexPromptService() : super(editorType: EditorType.codex);
 }

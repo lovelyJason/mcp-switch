@@ -9,17 +9,18 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../l10n/s.dart';
 import '../../../data/database.dart';
 import '../../../services/provider_switch_service.dart';
+import '../../../services/claude_account_service.dart';
+import '../../../services/claude_usage_api.dart';
 import '../../components/custom_dialog.dart';
 import '../../components/custom_toast.dart';
 import 'provider_edit_screen.dart';
+import 'components/claude_account_menu.dart';
+import 'components/codex_account_menu.dart';
 
 class ProviderListScreen extends StatefulWidget {
   final String initialEditorType;
 
-  const ProviderListScreen({
-    super.key,
-    this.initialEditorType = 'claude',
-  });
+  const ProviderListScreen({super.key, this.initialEditorType = 'claude'});
 
   @override
   State<ProviderListScreen> createState() => _ProviderListScreenState();
@@ -42,20 +43,14 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
   }
 
   void _checkConfigSync() {
-    final service = Provider.of<ProviderSwitchService>(
-      context,
-      listen: false,
-    );
+    final service = Provider.of<ProviderSwitchService>(context, listen: false);
     service.checkConfigSync(_selectedEditor).then((synced) {
       if (mounted) setState(() => _isConfigSynced = synced);
     });
   }
 
   Future<void> _applyAuthToProfile(ProviderProfile profile) async {
-    final service = Provider.of<ProviderSwitchService>(
-      context,
-      listen: false,
-    );
+    final service = Provider.of<ProviderSwitchService>(context, listen: false);
     final oauthData =
         await ProviderSwitchService.readCodexOauthDataFromAuthFile();
     if (oauthData == null || oauthData.isEmpty) return;
@@ -70,7 +65,8 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
     if (!mounted) return;
     Toast.show(
       context,
-      message: S.get('provider_apply_auth_success')
+      message: S
+          .get('provider_apply_auth_success')
           .replaceAll('{name}', profile.name),
       type: ToastType.success,
     );
@@ -114,7 +110,9 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
           Container(
             decoration: BoxDecoration(
               border: Border.all(
-                color: isDark ? Colors.white24 : Colors.grey.withValues(alpha: 0.3),
+                color: isDark
+                    ? Colors.white24
+                    : Colors.grey.withValues(alpha: 0.3),
               ),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -141,7 +139,9 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
           Container(
             decoration: BoxDecoration(
               border: Border.all(
-                color: isDark ? Colors.white24 : Colors.grey.withValues(alpha: 0.3),
+                color: isDark
+                    ? Colors.white24
+                    : Colors.grey.withValues(alpha: 0.3),
               ),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -180,9 +180,8 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
               onPressed: () async {
                 await Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => ProviderEditScreen(
-                      editorType: _selectedEditor,
-                    ),
+                    builder: (_) =>
+                        ProviderEditScreen(editorType: _selectedEditor),
                   ),
                 );
                 if (mounted) _checkConfigSync();
@@ -198,14 +197,21 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
   Widget _buildEditorSwitcher(bool isDark) {
     // (type, label, icon, fixedColor, useOriginalColor)
     final editors = [
-      ('claude', 'Claude Code', 'assets/icons/editors/claude.svg', const Color(0xFFd97757), false),
+      (
+        'claude',
+        'Claude Code',
+        'assets/icons/editors/claude.svg',
+        const Color(0xFFd97757),
+        false,
+      ),
       ('codex', 'Codex', 'assets/icons/editors/chatgpt.svg', null, false),
       ('gemini', 'Gemini', 'assets/icons/editors/gemini.svg', null, true),
     ];
 
     ColorFilter? colorFilter(Color? fixedColor, bool useOriginal) {
       if (useOriginal) return null;
-      if (fixedColor != null) return ColorFilter.mode(fixedColor, BlendMode.srcIn);
+      if (fixedColor != null)
+        return ColorFilter.mode(fixedColor, BlendMode.srcIn);
       return ColorFilter.mode(
         isDark ? Colors.white70 : Colors.black87,
         BlendMode.srcIn,
@@ -247,7 +253,9 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
                   label,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isSelected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                     color: isDark ? Colors.white : Colors.black87,
                   ),
                 ),
@@ -291,17 +299,30 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
   Widget _buildProfileList(bool isDark) {
     return Consumer<ProviderSwitchService>(
       builder: (context, service, child) {
-        final profiles = service.getProfiles(_selectedEditor);
-        if (profiles.isEmpty) {
+        final allProfiles = service.getProfiles(_selectedEditor);
+        // codex：把多张官方 OAuth 账号卡折叠成一张代表卡 + 子菜单
+        List<ProviderProfile> codexOfficial = const [];
+        var profiles = allProfiles;
+        if (_selectedEditor == 'codex') {
+          codexOfficial = allProfiles
+              .where((p) => p.isOfficialProvider)
+              .toList();
+          if (codexOfficial.isNotEmpty) {
+            final others = allProfiles
+                .where((p) => !p.isOfficialProvider)
+                .toList();
+            final rep =
+                codexOfficial.where((p) => p.isActive).firstOrNull ??
+                codexOfficial.first;
+            profiles = [rep, ...others];
+          }
+        }
+        if (allProfiles.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.swap_horiz,
-                  size: 64,
-                  color: Colors.grey.shade300,
-                ),
+                Icon(Icons.swap_horiz, size: 64, color: Colors.grey.shade300),
                 const SizedBox(height: 16),
                 Text(
                   S.get('provider_no_profiles'),
@@ -310,10 +331,7 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
                 const SizedBox(height: 8),
                 Text(
                   S.get('provider_no_profiles_hint'),
-                  style: TextStyle(
-                    color: Colors.grey.shade400,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
                 ),
               ],
             ),
@@ -321,18 +339,17 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
         }
 
         final activeProfile = service.getActiveProfile(_selectedEditor);
-        final activeName =
-            activeProfile?.name ?? S.get('provider_none_active');
+        final activeName = activeProfile?.name ?? S.get('provider_none_active');
         final statusText = S
             .get('provider_total_active')
-            .replaceAll('{count}', profiles.length.toString())
+            .replaceAll('{count}', allProfiles.length.toString())
             .replaceAll('{name}', activeName);
 
         final configPath = _selectedEditor == 'claude'
             ? S.get('provider_claude_file_path')
             : _selectedEditor == 'gemini'
-                ? S.get('provider_gemini_file_path')
-                : S.get('provider_codex_file_path');
+            ? S.get('provider_gemini_file_path')
+            : S.get('provider_codex_file_path');
 
         return Column(
           children: [
@@ -340,11 +357,12 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
             Container(
               width: double.infinity,
               margin: const EdgeInsets.only(
-                left: 24, right: 24, top: 16, bottom: 16,
+                left: 24,
+                right: 24,
+                top: 16,
+                bottom: 16,
               ),
-              padding: const EdgeInsets.symmetric(
-                vertical: 12, horizontal: 20,
-              ),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
                 borderRadius: BorderRadius.circular(12),
@@ -386,19 +404,23 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
                 separatorBuilder: (_, _) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
                   final profile = profiles[index];
+                  final isCodexOfficialGroup =
+                      _selectedEditor == 'codex' &&
+                      profile.isOfficialProvider &&
+                      codexOfficial.isNotEmpty;
                   return _ProviderListItem(
                     profile: profile,
                     editorType: _selectedEditor,
                     isDark: isDark,
-                    isConfigSynced: profile.isActive
-                        ? _isConfigSynced
+                    codexOfficialAccounts: isCodexOfficialGroup
+                        ? codexOfficial
                         : null,
+                    isConfigSynced: profile.isActive ? _isConfigSynced : null,
                     isActiveSynced: _isConfigSynced,
                     onReturnFromEdit: _checkConfigSync,
                     hasLocalCodexAuth: _hasLocalCodexAuth,
                     localCodexAuthPreview: _localCodexAuthPreview,
-                    onApplyAuth: () =>
-                        _applyAuthToProfile(profile),
+                    onApplyAuth: () => _applyAuthToProfile(profile),
                   );
                 },
               ),
@@ -421,6 +443,9 @@ class _ProviderListItem extends StatefulWidget {
   final String localCodexAuthPreview;
   final VoidCallback? onApplyAuth;
 
+  /// 非空时该卡为「codex 官方账号」折叠代表卡，渲染 CodexAccountMenu
+  final List<ProviderProfile>? codexOfficialAccounts;
+
   const _ProviderListItem({
     required this.profile,
     required this.editorType,
@@ -431,6 +456,7 @@ class _ProviderListItem extends StatefulWidget {
     this.hasLocalCodexAuth = false,
     this.localCodexAuthPreview = '',
     this.onApplyAuth,
+    this.codexOfficialAccounts,
   });
 
   @override
@@ -439,21 +465,61 @@ class _ProviderListItem extends StatefulWidget {
 
 class _ProviderListItemState extends State<_ProviderListItem> {
   bool _isHovering = false;
+  bool _isRefreshingUsage = false;
+  ClaudeUsage? _currentUsage;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isClaudeOfficial) return;
+      final service = context.read<ClaudeAccountService>();
+      final account = service.activeAccount;
+      final cached = account == null ? null : service.usageOf(account.id);
+      if (cached != null) setState(() => _currentUsage = cached);
+    });
+  }
 
   /// 是否为 Codex OAuth 供应商（通过 isOfficialProvider 标识）
   bool get _isCodexOauthProfile =>
       widget.editorType == 'codex' && widget.profile.isOfficialProvider;
 
   bool get _isNotLoggedIn =>
-      _isCodexOauthProfile &&
-      (widget.profile.oauthData ?? '').trim().isEmpty;
+      _isCodexOauthProfile && (widget.profile.oauthData ?? '').trim().isEmpty;
+
+  bool get _isClaudeOfficial =>
+      widget.editorType == 'claude' && widget.profile.isOfficialProvider;
+
+  Future<void> _queryCurrentUsage() async {
+    if (_isRefreshingUsage) return;
+    setState(() => _isRefreshingUsage = true);
+    try {
+      final usage = await context
+          .read<ClaudeAccountService>()
+          .fetchUsageForCurrentAccount();
+      if (!mounted) return;
+      setState(() => _currentUsage = usage);
+      Toast.show(
+        context,
+        message: S.get('claude_current_usage_updated'),
+        type: ToastType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Toast.show(
+        context,
+        message: '${S.get('claude_current_usage_failed')}: $e',
+        type: ToastType.error,
+      );
+    } finally {
+      if (mounted) setState(() => _isRefreshingUsage = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final cardColor =
-        widget.isDark ? const Color(0xFF2C2C2E) : Colors.white;
-    final borderColor =
-        widget.isDark ? Colors.white10 : Colors.grey.shade200;
+    final cardColor = widget.isDark ? const Color(0xFF2C2C2E) : Colors.white;
+    final borderColor = widget.isDark ? Colors.white10 : Colors.grey.shade200;
 
     final isActive = widget.profile.isActive;
 
@@ -471,26 +537,22 @@ class _ProviderListItemState extends State<_ProviderListItem> {
             color: _isHovering
                 ? const Color(0xFFd97757)
                 : isActive
-                    ? const Color(0xFFd97757).withValues(alpha: 0.5)
-                    : borderColor,
+                ? const Color(0xFFd97757).withValues(alpha: 0.5)
+                : borderColor,
           ),
-            boxShadow: [
-              if (!widget.isDark)
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.02),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-            ],
-          ),
+          boxShadow: [
+            if (!widget.isDark)
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+          ],
+        ),
         child: IntrinsicHeight(
           child: Row(
             children: [
-              if (isActive)
-                Container(
-                  width: 4,
-                  color: const Color(0xFFd97757),
-                ),
+              if (isActive) Container(width: 4, color: const Color(0xFFd97757)),
               Expanded(
                 child: Padding(
                   padding: EdgeInsets.only(
@@ -510,7 +572,9 @@ class _ProviderListItemState extends State<_ProviderListItem> {
                             padding: const EdgeInsets.symmetric(horizontal: 10),
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: const Color(0xFFd97757).withValues(alpha: 0.12),
+                              color: const Color(
+                                0xFFd97757,
+                              ).withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -523,6 +587,10 @@ class _ProviderListItemState extends State<_ProviderListItem> {
                             ),
                           ),
                         if (!isActive) _buildActivateButton(),
+                        if (_isClaudeOfficial) ...[
+                          const SizedBox(width: 8),
+                          _buildQueryUsageButton(),
+                        ],
                         const SizedBox(width: 8),
                         _buildEditButton(),
                         const SizedBox(width: 8),
@@ -539,6 +607,53 @@ class _ProviderListItemState extends State<_ProviderListItem> {
     );
   }
 
+  /// 官方供应商固定徽标：橙色胶囊 + 品牌图标 + 文案（按 editorType 区分）
+  Widget _buildOfficialBadge() {
+    const brandColor = Color(0xFFd97757);
+    final String iconAsset;
+    final String labelKey;
+    switch (widget.editorType) {
+      case 'codex':
+        iconAsset = 'assets/icons/editors/chatgpt.svg';
+        labelKey = 'provider_official_badge_codex';
+        break;
+      case 'gemini':
+        iconAsset = 'assets/icons/editors/gemini.svg';
+        labelKey = 'provider_official_badge_gemini';
+        break;
+      default:
+        iconAsset = 'assets/icons/editors/claude.svg';
+        labelKey = 'provider_official_badge_claude';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: brandColor.withValues(alpha: widget.isDark ? 0.2 : 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: brandColor.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SvgPicture.asset(
+            iconAsset,
+            width: 12,
+            height: 12,
+            colorFilter: const ColorFilter.mode(brandColor, BlendMode.srcIn),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            S.get(labelKey),
+            style: const TextStyle(
+              fontSize: 11,
+              color: brandColor,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildTextContent() {
     return Column(
@@ -558,7 +673,10 @@ class _ProviderListItemState extends State<_ProviderListItem> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (widget.profile.description?.isNotEmpty == true) ...[
+            if (widget.profile.isOfficialProvider) ...[
+              const SizedBox(width: 8),
+              _buildOfficialBadge(),
+            ] else if (widget.profile.description?.isNotEmpty == true) ...[
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
@@ -599,12 +717,43 @@ class _ProviderListItemState extends State<_ProviderListItem> {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: 13,
-            color: widget.isDark
-                ? Colors.grey.shade400
-                : Colors.grey.shade600,
+            color: widget.isDark ? Colors.grey.shade400 : Colors.grey.shade600,
           ),
         ),
-        if (_isNotLoggedIn || (_isCodexOauthProfile && widget.hasLocalCodexAuth))
+        if (widget.profile.isOfficialProvider && widget.editorType == 'claude')
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: ClaudeAccountMenu(
+                officialProfile: widget.profile,
+                onChanged: () {
+                  if (mounted) {
+                    setState(() => _currentUsage = null);
+                  }
+                  widget.onReturnFromEdit?.call();
+                },
+              ),
+            ),
+          ),
+        if (_isClaudeOfficial && _currentUsage != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: _buildUsageBadge(_currentUsage!),
+          ),
+        if (widget.codexOfficialAccounts != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: CodexAccountMenu(
+                officialAccounts: widget.codexOfficialAccounts!,
+                onChanged: widget.onReturnFromEdit,
+              ),
+            ),
+          ),
+        if (_isNotLoggedIn ||
+            (_isCodexOauthProfile && widget.hasLocalCodexAuth))
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Wrap(
@@ -614,7 +763,8 @@ class _ProviderListItemState extends State<_ProviderListItem> {
                 if (_isNotLoggedIn)
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 2,
+                      horizontal: 8,
+                      vertical: 2,
                     ),
                     decoration: BoxDecoration(
                       color: Colors.red.withValues(alpha: 0.12),
@@ -659,7 +809,8 @@ class _ProviderListItemState extends State<_ProviderListItem> {
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 2,
+                    horizontal: 8,
+                    vertical: 2,
                   ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFd97757).withValues(alpha: 0.12),
@@ -691,7 +842,8 @@ class _ProviderListItemState extends State<_ProviderListItem> {
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2,
+                          horizontal: 8,
+                          vertical: 2,
                         ),
                         decoration: BoxDecoration(
                           color: Colors.amber.withValues(alpha: 0.15),
@@ -731,11 +883,134 @@ class _ProviderListItemState extends State<_ProviderListItem> {
     if (widget.profile.model != null && widget.profile.model!.isNotEmpty) {
       parts.add(widget.profile.model!);
     }
-    if (widget.profile.baseUrl != null &&
-        widget.profile.baseUrl!.isNotEmpty) {
+    if (widget.profile.baseUrl != null && widget.profile.baseUrl!.isNotEmpty) {
       parts.add(widget.profile.baseUrl!);
     }
     return parts.isEmpty ? '—' : parts.join(' · ');
+  }
+
+  Widget _buildQueryUsageButton() {
+    return Container(
+      height: 32,
+      decoration: BoxDecoration(
+        color: widget.isDark ? Colors.white10 : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: TextButton.icon(
+        onPressed: _isRefreshingUsage ? null : _queryCurrentUsage,
+        icon: _isRefreshingUsage
+            ? const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.data_usage_outlined, size: 14),
+        label: Text(S.get('claude_current_usage_query')),
+        style: TextButton.styleFrom(
+          foregroundColor: widget.isDark ? Colors.white70 : Colors.black54,
+          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUsageBadge(ClaudeUsage usage) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: widget.isDark
+            ? Colors.black.withValues(alpha: 0.18)
+            : Colors.grey.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'USAGE',
+            style: TextStyle(
+              fontSize: 11,
+              letterSpacing: 1.2,
+              color: widget.isDark ? Colors.white70 : Colors.black54,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 9),
+          _buildUsageWindow(
+            label: 'Session (5hr)',
+            percent: usage.fiveHourPercent,
+            resetsAt: usage.fiveHourResetsAt,
+          ),
+          const SizedBox(height: 13),
+          _buildUsageWindow(
+            label: 'Weekly (7 day)',
+            percent: usage.sevenDayPercent,
+            resetsAt: usage.sevenDayResetsAt,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUsageWindow({
+    required String label,
+    required double percent,
+    required DateTime? resetsAt,
+  }) {
+    final value = percent.clamp(0, 100).toDouble();
+    final progress = value / 100;
+    final foreground = widget.isDark ? Colors.white70 : Colors.black87;
+    final muted = widget.isDark ? Colors.white54 : Colors.black45;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: foreground,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              '${value.round()}%',
+              style: TextStyle(fontSize: 12, color: foreground),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(5),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 7,
+            backgroundColor: widget.isDark ? Colors.white24 : Colors.black12,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              value >= 80 ? Colors.orange.shade400 : Colors.blueGrey.shade400,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Resets in ${_formatResetDuration(resetsAt)}',
+          style: TextStyle(fontSize: 11, color: muted),
+        ),
+      ],
+    );
+  }
+
+  String _formatResetDuration(DateTime? resetsAt) {
+    if (resetsAt == null) return '—';
+    final remaining = resetsAt.difference(DateTime.now());
+    if (remaining.isNegative || remaining == Duration.zero) return 'now';
+    if (remaining.inDays >= 1) return '${remaining.inDays}d';
+    if (remaining.inHours >= 1) return '${remaining.inHours}h';
+    return '${remaining.inMinutes.clamp(1, 59)}m';
   }
 
   Widget _buildActivateButton() {
@@ -760,11 +1035,7 @@ class _ProviderListItemState extends State<_ProviderListItem> {
             context,
             listen: false,
           );
-          service.toggleActive(
-            widget.profile.id,
-            widget.editorType,
-            true,
-          );
+          service.toggleActive(widget.profile.id, widget.editorType, true);
           Toast.show(
             context,
             message: S
@@ -845,7 +1116,6 @@ class _ProviderListItemState extends State<_ProviderListItem> {
       tooltip: S.get('delete'),
     );
   }
-
 }
 
 /// 「应用当前登录态」按钮：悬浮时以 Popover 展示 auth.json 内容
@@ -912,8 +1182,7 @@ class _AuthPopoverButtonState extends State<_AuthPopoverButton> {
             _hidePopover();
           },
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
               color: Colors.orange.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(4),
@@ -921,8 +1190,7 @@ class _AuthPopoverButtonState extends State<_AuthPopoverButton> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                    Icons.login, size: 12, color: Colors.orange),
+                const Icon(Icons.login, size: 12, color: Colors.orange),
                 const SizedBox(width: 4),
                 Text(
                   S.get('provider_apply_current_auth'),
@@ -998,7 +1266,9 @@ class _AuthPopoverOverlay extends StatelessWidget {
                     children: [
                       Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         child: Text(
                           '~/.codex/auth.json',
                           style: TextStyle(

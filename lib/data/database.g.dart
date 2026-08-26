@@ -2182,6 +2182,805 @@ class CursorAccountsCompanion extends UpdateCompanion<CursorAccount> {
   }
 }
 
+class $ClaudeAccountsTable extends ClaudeAccounts
+    with TableInfo<$ClaudeAccountsTable, ClaudeAccount> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ClaudeAccountsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _tokenMeta = const VerificationMeta('token');
+  @override
+  late final GeneratedColumn<String> token = GeneratedColumn<String>(
+    'token',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _subscriptionTypeMeta = const VerificationMeta(
+    'subscriptionType',
+  );
+  @override
+  late final GeneratedColumn<String> subscriptionType = GeneratedColumn<String>(
+    'subscription_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _organizationUuidMeta = const VerificationMeta(
+    'organizationUuid',
+  );
+  @override
+  late final GeneratedColumn<String> organizationUuid = GeneratedColumn<String>(
+    'organization_uuid',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _accountInfoMeta = const VerificationMeta(
+    'accountInfo',
+  );
+  @override
+  late final GeneratedColumn<String> accountInfo = GeneratedColumn<String>(
+    'account_info',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _usageInfoMeta = const VerificationMeta(
+    'usageInfo',
+  );
+  @override
+  late final GeneratedColumn<String> usageInfo = GeneratedColumn<String>(
+    'usage_info',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _proxySoftwareMeta = const VerificationMeta(
+    'proxySoftware',
+  );
+  @override
+  late final GeneratedColumn<String> proxySoftware = GeneratedColumn<String>(
+    'proxy_software',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _proxySubscriptionMeta = const VerificationMeta(
+    'proxySubscription',
+  );
+  @override
+  late final GeneratedColumn<String> proxySubscription =
+      GeneratedColumn<String>(
+        'proxy_subscription',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _timezoneMeta = const VerificationMeta(
+    'timezone',
+  );
+  @override
+  late final GeneratedColumn<String> timezone = GeneratedColumn<String>(
+    'timezone',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isActiveMeta = const VerificationMeta(
+    'isActive',
+  );
+  @override
+  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_active" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    token,
+    subscriptionType,
+    organizationUuid,
+    accountInfo,
+    usageInfo,
+    proxySoftware,
+    proxySubscription,
+    timezone,
+    isActive,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'claude_accounts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ClaudeAccount> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('token')) {
+      context.handle(
+        _tokenMeta,
+        token.isAcceptableOrUnknown(data['token']!, _tokenMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tokenMeta);
+    }
+    if (data.containsKey('subscription_type')) {
+      context.handle(
+        _subscriptionTypeMeta,
+        subscriptionType.isAcceptableOrUnknown(
+          data['subscription_type']!,
+          _subscriptionTypeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('organization_uuid')) {
+      context.handle(
+        _organizationUuidMeta,
+        organizationUuid.isAcceptableOrUnknown(
+          data['organization_uuid']!,
+          _organizationUuidMeta,
+        ),
+      );
+    }
+    if (data.containsKey('account_info')) {
+      context.handle(
+        _accountInfoMeta,
+        accountInfo.isAcceptableOrUnknown(
+          data['account_info']!,
+          _accountInfoMeta,
+        ),
+      );
+    }
+    if (data.containsKey('usage_info')) {
+      context.handle(
+        _usageInfoMeta,
+        usageInfo.isAcceptableOrUnknown(data['usage_info']!, _usageInfoMeta),
+      );
+    }
+    if (data.containsKey('proxy_software')) {
+      context.handle(
+        _proxySoftwareMeta,
+        proxySoftware.isAcceptableOrUnknown(
+          data['proxy_software']!,
+          _proxySoftwareMeta,
+        ),
+      );
+    }
+    if (data.containsKey('proxy_subscription')) {
+      context.handle(
+        _proxySubscriptionMeta,
+        proxySubscription.isAcceptableOrUnknown(
+          data['proxy_subscription']!,
+          _proxySubscriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('timezone')) {
+      context.handle(
+        _timezoneMeta,
+        timezone.isAcceptableOrUnknown(data['timezone']!, _timezoneMeta),
+      );
+    }
+    if (data.containsKey('is_active')) {
+      context.handle(
+        _isActiveMeta,
+        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ClaudeAccount map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ClaudeAccount(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      token: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}token'],
+      )!,
+      subscriptionType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}subscription_type'],
+      ),
+      organizationUuid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}organization_uuid'],
+      ),
+      accountInfo: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_info'],
+      ),
+      usageInfo: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}usage_info'],
+      ),
+      proxySoftware: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}proxy_software'],
+      ),
+      proxySubscription: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}proxy_subscription'],
+      ),
+      timezone: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}timezone'],
+      ),
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_active'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ClaudeAccountsTable createAlias(String alias) {
+    return $ClaudeAccountsTable(attachedDatabase, alias);
+  }
+}
+
+class ClaudeAccount extends DataClass implements Insertable<ClaudeAccount> {
+  final String id;
+  final String name;
+  final String token;
+  final String? subscriptionType;
+  final String? organizationUuid;
+
+  /// ~/.claude.json 中的账号身份 JSON：{userID, oauthAccount}
+  /// 用于切换时恢复 UI 显示的邮箱/组织（Keychain token 里没有 email）
+  final String? accountInfo;
+
+  /// 最近一次「刷新额度」的结果 JSON（持久化，重启后仍显示，虽可能过期）
+  final String? usageInfo;
+
+  /// 与该 Claude 账号绑定的本地环境配置。
+  final String? proxySoftware;
+  final String? proxySubscription;
+  final String? timezone;
+  final bool isActive;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const ClaudeAccount({
+    required this.id,
+    required this.name,
+    required this.token,
+    this.subscriptionType,
+    this.organizationUuid,
+    this.accountInfo,
+    this.usageInfo,
+    this.proxySoftware,
+    this.proxySubscription,
+    this.timezone,
+    required this.isActive,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['token'] = Variable<String>(token);
+    if (!nullToAbsent || subscriptionType != null) {
+      map['subscription_type'] = Variable<String>(subscriptionType);
+    }
+    if (!nullToAbsent || organizationUuid != null) {
+      map['organization_uuid'] = Variable<String>(organizationUuid);
+    }
+    if (!nullToAbsent || accountInfo != null) {
+      map['account_info'] = Variable<String>(accountInfo);
+    }
+    if (!nullToAbsent || usageInfo != null) {
+      map['usage_info'] = Variable<String>(usageInfo);
+    }
+    if (!nullToAbsent || proxySoftware != null) {
+      map['proxy_software'] = Variable<String>(proxySoftware);
+    }
+    if (!nullToAbsent || proxySubscription != null) {
+      map['proxy_subscription'] = Variable<String>(proxySubscription);
+    }
+    if (!nullToAbsent || timezone != null) {
+      map['timezone'] = Variable<String>(timezone);
+    }
+    map['is_active'] = Variable<bool>(isActive);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  ClaudeAccountsCompanion toCompanion(bool nullToAbsent) {
+    return ClaudeAccountsCompanion(
+      id: Value(id),
+      name: Value(name),
+      token: Value(token),
+      subscriptionType: subscriptionType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(subscriptionType),
+      organizationUuid: organizationUuid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(organizationUuid),
+      accountInfo: accountInfo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(accountInfo),
+      usageInfo: usageInfo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(usageInfo),
+      proxySoftware: proxySoftware == null && nullToAbsent
+          ? const Value.absent()
+          : Value(proxySoftware),
+      proxySubscription: proxySubscription == null && nullToAbsent
+          ? const Value.absent()
+          : Value(proxySubscription),
+      timezone: timezone == null && nullToAbsent
+          ? const Value.absent()
+          : Value(timezone),
+      isActive: Value(isActive),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory ClaudeAccount.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ClaudeAccount(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      token: serializer.fromJson<String>(json['token']),
+      subscriptionType: serializer.fromJson<String?>(json['subscriptionType']),
+      organizationUuid: serializer.fromJson<String?>(json['organizationUuid']),
+      accountInfo: serializer.fromJson<String?>(json['accountInfo']),
+      usageInfo: serializer.fromJson<String?>(json['usageInfo']),
+      proxySoftware: serializer.fromJson<String?>(json['proxySoftware']),
+      proxySubscription: serializer.fromJson<String?>(
+        json['proxySubscription'],
+      ),
+      timezone: serializer.fromJson<String?>(json['timezone']),
+      isActive: serializer.fromJson<bool>(json['isActive']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'token': serializer.toJson<String>(token),
+      'subscriptionType': serializer.toJson<String?>(subscriptionType),
+      'organizationUuid': serializer.toJson<String?>(organizationUuid),
+      'accountInfo': serializer.toJson<String?>(accountInfo),
+      'usageInfo': serializer.toJson<String?>(usageInfo),
+      'proxySoftware': serializer.toJson<String?>(proxySoftware),
+      'proxySubscription': serializer.toJson<String?>(proxySubscription),
+      'timezone': serializer.toJson<String?>(timezone),
+      'isActive': serializer.toJson<bool>(isActive),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  ClaudeAccount copyWith({
+    String? id,
+    String? name,
+    String? token,
+    Value<String?> subscriptionType = const Value.absent(),
+    Value<String?> organizationUuid = const Value.absent(),
+    Value<String?> accountInfo = const Value.absent(),
+    Value<String?> usageInfo = const Value.absent(),
+    Value<String?> proxySoftware = const Value.absent(),
+    Value<String?> proxySubscription = const Value.absent(),
+    Value<String?> timezone = const Value.absent(),
+    bool? isActive,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => ClaudeAccount(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    token: token ?? this.token,
+    subscriptionType: subscriptionType.present
+        ? subscriptionType.value
+        : this.subscriptionType,
+    organizationUuid: organizationUuid.present
+        ? organizationUuid.value
+        : this.organizationUuid,
+    accountInfo: accountInfo.present ? accountInfo.value : this.accountInfo,
+    usageInfo: usageInfo.present ? usageInfo.value : this.usageInfo,
+    proxySoftware: proxySoftware.present
+        ? proxySoftware.value
+        : this.proxySoftware,
+    proxySubscription: proxySubscription.present
+        ? proxySubscription.value
+        : this.proxySubscription,
+    timezone: timezone.present ? timezone.value : this.timezone,
+    isActive: isActive ?? this.isActive,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  ClaudeAccount copyWithCompanion(ClaudeAccountsCompanion data) {
+    return ClaudeAccount(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      token: data.token.present ? data.token.value : this.token,
+      subscriptionType: data.subscriptionType.present
+          ? data.subscriptionType.value
+          : this.subscriptionType,
+      organizationUuid: data.organizationUuid.present
+          ? data.organizationUuid.value
+          : this.organizationUuid,
+      accountInfo: data.accountInfo.present
+          ? data.accountInfo.value
+          : this.accountInfo,
+      usageInfo: data.usageInfo.present ? data.usageInfo.value : this.usageInfo,
+      proxySoftware: data.proxySoftware.present
+          ? data.proxySoftware.value
+          : this.proxySoftware,
+      proxySubscription: data.proxySubscription.present
+          ? data.proxySubscription.value
+          : this.proxySubscription,
+      timezone: data.timezone.present ? data.timezone.value : this.timezone,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ClaudeAccount(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('token: $token, ')
+          ..write('subscriptionType: $subscriptionType, ')
+          ..write('organizationUuid: $organizationUuid, ')
+          ..write('accountInfo: $accountInfo, ')
+          ..write('usageInfo: $usageInfo, ')
+          ..write('proxySoftware: $proxySoftware, ')
+          ..write('proxySubscription: $proxySubscription, ')
+          ..write('timezone: $timezone, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    token,
+    subscriptionType,
+    organizationUuid,
+    accountInfo,
+    usageInfo,
+    proxySoftware,
+    proxySubscription,
+    timezone,
+    isActive,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ClaudeAccount &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.token == this.token &&
+          other.subscriptionType == this.subscriptionType &&
+          other.organizationUuid == this.organizationUuid &&
+          other.accountInfo == this.accountInfo &&
+          other.usageInfo == this.usageInfo &&
+          other.proxySoftware == this.proxySoftware &&
+          other.proxySubscription == this.proxySubscription &&
+          other.timezone == this.timezone &&
+          other.isActive == this.isActive &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ClaudeAccountsCompanion extends UpdateCompanion<ClaudeAccount> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> token;
+  final Value<String?> subscriptionType;
+  final Value<String?> organizationUuid;
+  final Value<String?> accountInfo;
+  final Value<String?> usageInfo;
+  final Value<String?> proxySoftware;
+  final Value<String?> proxySubscription;
+  final Value<String?> timezone;
+  final Value<bool> isActive;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const ClaudeAccountsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.token = const Value.absent(),
+    this.subscriptionType = const Value.absent(),
+    this.organizationUuid = const Value.absent(),
+    this.accountInfo = const Value.absent(),
+    this.usageInfo = const Value.absent(),
+    this.proxySoftware = const Value.absent(),
+    this.proxySubscription = const Value.absent(),
+    this.timezone = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ClaudeAccountsCompanion.insert({
+    required String id,
+    required String name,
+    required String token,
+    this.subscriptionType = const Value.absent(),
+    this.organizationUuid = const Value.absent(),
+    this.accountInfo = const Value.absent(),
+    this.usageInfo = const Value.absent(),
+    this.proxySoftware = const Value.absent(),
+    this.proxySubscription = const Value.absent(),
+    this.timezone = const Value.absent(),
+    this.isActive = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       token = Value(token),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<ClaudeAccount> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? token,
+    Expression<String>? subscriptionType,
+    Expression<String>? organizationUuid,
+    Expression<String>? accountInfo,
+    Expression<String>? usageInfo,
+    Expression<String>? proxySoftware,
+    Expression<String>? proxySubscription,
+    Expression<String>? timezone,
+    Expression<bool>? isActive,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (token != null) 'token': token,
+      if (subscriptionType != null) 'subscription_type': subscriptionType,
+      if (organizationUuid != null) 'organization_uuid': organizationUuid,
+      if (accountInfo != null) 'account_info': accountInfo,
+      if (usageInfo != null) 'usage_info': usageInfo,
+      if (proxySoftware != null) 'proxy_software': proxySoftware,
+      if (proxySubscription != null) 'proxy_subscription': proxySubscription,
+      if (timezone != null) 'timezone': timezone,
+      if (isActive != null) 'is_active': isActive,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ClaudeAccountsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String>? token,
+    Value<String?>? subscriptionType,
+    Value<String?>? organizationUuid,
+    Value<String?>? accountInfo,
+    Value<String?>? usageInfo,
+    Value<String?>? proxySoftware,
+    Value<String?>? proxySubscription,
+    Value<String?>? timezone,
+    Value<bool>? isActive,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return ClaudeAccountsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      token: token ?? this.token,
+      subscriptionType: subscriptionType ?? this.subscriptionType,
+      organizationUuid: organizationUuid ?? this.organizationUuid,
+      accountInfo: accountInfo ?? this.accountInfo,
+      usageInfo: usageInfo ?? this.usageInfo,
+      proxySoftware: proxySoftware ?? this.proxySoftware,
+      proxySubscription: proxySubscription ?? this.proxySubscription,
+      timezone: timezone ?? this.timezone,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (token.present) {
+      map['token'] = Variable<String>(token.value);
+    }
+    if (subscriptionType.present) {
+      map['subscription_type'] = Variable<String>(subscriptionType.value);
+    }
+    if (organizationUuid.present) {
+      map['organization_uuid'] = Variable<String>(organizationUuid.value);
+    }
+    if (accountInfo.present) {
+      map['account_info'] = Variable<String>(accountInfo.value);
+    }
+    if (usageInfo.present) {
+      map['usage_info'] = Variable<String>(usageInfo.value);
+    }
+    if (proxySoftware.present) {
+      map['proxy_software'] = Variable<String>(proxySoftware.value);
+    }
+    if (proxySubscription.present) {
+      map['proxy_subscription'] = Variable<String>(proxySubscription.value);
+    }
+    if (timezone.present) {
+      map['timezone'] = Variable<String>(timezone.value);
+    }
+    if (isActive.present) {
+      map['is_active'] = Variable<bool>(isActive.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ClaudeAccountsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('token: $token, ')
+          ..write('subscriptionType: $subscriptionType, ')
+          ..write('organizationUuid: $organizationUuid, ')
+          ..write('accountInfo: $accountInfo, ')
+          ..write('usageInfo: $usageInfo, ')
+          ..write('proxySoftware: $proxySoftware, ')
+          ..write('proxySubscription: $proxySubscription, ')
+          ..write('timezone: $timezone, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2189,6 +2988,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $CursorAccountsTable cursorAccounts = $CursorAccountsTable(this);
+  late final $ClaudeAccountsTable claudeAccounts = $ClaudeAccountsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2196,6 +2996,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     providerProfiles,
     cursorAccounts,
+    claudeAccounts,
   ];
 }
 
@@ -3158,6 +3959,370 @@ typedef $$CursorAccountsTableProcessedTableManager =
       CursorAccount,
       PrefetchHooks Function()
     >;
+typedef $$ClaudeAccountsTableCreateCompanionBuilder =
+    ClaudeAccountsCompanion Function({
+      required String id,
+      required String name,
+      required String token,
+      Value<String?> subscriptionType,
+      Value<String?> organizationUuid,
+      Value<String?> accountInfo,
+      Value<String?> usageInfo,
+      Value<String?> proxySoftware,
+      Value<String?> proxySubscription,
+      Value<String?> timezone,
+      Value<bool> isActive,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$ClaudeAccountsTableUpdateCompanionBuilder =
+    ClaudeAccountsCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String> token,
+      Value<String?> subscriptionType,
+      Value<String?> organizationUuid,
+      Value<String?> accountInfo,
+      Value<String?> usageInfo,
+      Value<String?> proxySoftware,
+      Value<String?> proxySubscription,
+      Value<String?> timezone,
+      Value<bool> isActive,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$ClaudeAccountsTableFilterComposer
+    extends Composer<_$AppDatabase, $ClaudeAccountsTable> {
+  $$ClaudeAccountsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get token => $composableBuilder(
+    column: $table.token,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get subscriptionType => $composableBuilder(
+    column: $table.subscriptionType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get organizationUuid => $composableBuilder(
+    column: $table.organizationUuid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get accountInfo => $composableBuilder(
+    column: $table.accountInfo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get usageInfo => $composableBuilder(
+    column: $table.usageInfo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get proxySoftware => $composableBuilder(
+    column: $table.proxySoftware,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get proxySubscription => $composableBuilder(
+    column: $table.proxySubscription,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get timezone => $composableBuilder(
+    column: $table.timezone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ClaudeAccountsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ClaudeAccountsTable> {
+  $$ClaudeAccountsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get token => $composableBuilder(
+    column: $table.token,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get subscriptionType => $composableBuilder(
+    column: $table.subscriptionType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get organizationUuid => $composableBuilder(
+    column: $table.organizationUuid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get accountInfo => $composableBuilder(
+    column: $table.accountInfo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get usageInfo => $composableBuilder(
+    column: $table.usageInfo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get proxySoftware => $composableBuilder(
+    column: $table.proxySoftware,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get proxySubscription => $composableBuilder(
+    column: $table.proxySubscription,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get timezone => $composableBuilder(
+    column: $table.timezone,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ClaudeAccountsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ClaudeAccountsTable> {
+  $$ClaudeAccountsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get token =>
+      $composableBuilder(column: $table.token, builder: (column) => column);
+
+  GeneratedColumn<String> get subscriptionType => $composableBuilder(
+    column: $table.subscriptionType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get organizationUuid => $composableBuilder(
+    column: $table.organizationUuid,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get accountInfo => $composableBuilder(
+    column: $table.accountInfo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get usageInfo =>
+      $composableBuilder(column: $table.usageInfo, builder: (column) => column);
+
+  GeneratedColumn<String> get proxySoftware => $composableBuilder(
+    column: $table.proxySoftware,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get proxySubscription => $composableBuilder(
+    column: $table.proxySubscription,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get timezone =>
+      $composableBuilder(column: $table.timezone, builder: (column) => column);
+
+  GeneratedColumn<bool> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$ClaudeAccountsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ClaudeAccountsTable,
+          ClaudeAccount,
+          $$ClaudeAccountsTableFilterComposer,
+          $$ClaudeAccountsTableOrderingComposer,
+          $$ClaudeAccountsTableAnnotationComposer,
+          $$ClaudeAccountsTableCreateCompanionBuilder,
+          $$ClaudeAccountsTableUpdateCompanionBuilder,
+          (
+            ClaudeAccount,
+            BaseReferences<_$AppDatabase, $ClaudeAccountsTable, ClaudeAccount>,
+          ),
+          ClaudeAccount,
+          PrefetchHooks Function()
+        > {
+  $$ClaudeAccountsTableTableManager(
+    _$AppDatabase db,
+    $ClaudeAccountsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ClaudeAccountsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ClaudeAccountsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ClaudeAccountsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> token = const Value.absent(),
+                Value<String?> subscriptionType = const Value.absent(),
+                Value<String?> organizationUuid = const Value.absent(),
+                Value<String?> accountInfo = const Value.absent(),
+                Value<String?> usageInfo = const Value.absent(),
+                Value<String?> proxySoftware = const Value.absent(),
+                Value<String?> proxySubscription = const Value.absent(),
+                Value<String?> timezone = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ClaudeAccountsCompanion(
+                id: id,
+                name: name,
+                token: token,
+                subscriptionType: subscriptionType,
+                organizationUuid: organizationUuid,
+                accountInfo: accountInfo,
+                usageInfo: usageInfo,
+                proxySoftware: proxySoftware,
+                proxySubscription: proxySubscription,
+                timezone: timezone,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required String token,
+                Value<String?> subscriptionType = const Value.absent(),
+                Value<String?> organizationUuid = const Value.absent(),
+                Value<String?> accountInfo = const Value.absent(),
+                Value<String?> usageInfo = const Value.absent(),
+                Value<String?> proxySoftware = const Value.absent(),
+                Value<String?> proxySubscription = const Value.absent(),
+                Value<String?> timezone = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ClaudeAccountsCompanion.insert(
+                id: id,
+                name: name,
+                token: token,
+                subscriptionType: subscriptionType,
+                organizationUuid: organizationUuid,
+                accountInfo: accountInfo,
+                usageInfo: usageInfo,
+                proxySoftware: proxySoftware,
+                proxySubscription: proxySubscription,
+                timezone: timezone,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ClaudeAccountsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ClaudeAccountsTable,
+      ClaudeAccount,
+      $$ClaudeAccountsTableFilterComposer,
+      $$ClaudeAccountsTableOrderingComposer,
+      $$ClaudeAccountsTableAnnotationComposer,
+      $$ClaudeAccountsTableCreateCompanionBuilder,
+      $$ClaudeAccountsTableUpdateCompanionBuilder,
+      (
+        ClaudeAccount,
+        BaseReferences<_$AppDatabase, $ClaudeAccountsTable, ClaudeAccount>,
+      ),
+      ClaudeAccount,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3166,4 +4331,6 @@ class $AppDatabaseManager {
       $$ProviderProfilesTableTableManager(_db, _db.providerProfiles);
   $$CursorAccountsTableTableManager get cursorAccounts =>
       $$CursorAccountsTableTableManager(_db, _db.cursorAccounts);
+  $$ClaudeAccountsTableTableManager get claudeAccounts =>
+      $$ClaudeAccountsTableTableManager(_db, _db.claudeAccounts);
 }

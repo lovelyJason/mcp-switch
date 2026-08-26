@@ -12,6 +12,8 @@ import '../../../config/provider_presets_config.dart';
 import '../../../l10n/s.dart';
 import '../../../data/database.dart';
 import '../../../services/provider_switch_service.dart';
+import '../../../services/claude_account_service.dart';
+import '../../../services/claude_environment_service.dart';
 import '../../components/custom_dialog.dart';
 import '../../components/custom_toast.dart';
 import 'components/claude_config_editor.dart';
@@ -103,6 +105,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   late TextEditingController _defaultSonnetModelController;
   @override
   late TextEditingController _defaultOpusModelController;
+  late TextEditingController _timezoneController;
   @override
   bool _isSpeedTesting = false;
   @override
@@ -120,6 +123,11 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   final TextEditingController _codexAuthController = TextEditingController();
   @override
   bool _isAuthEditing = false;
+
+  String _selectedProxySoftware = 'clash_verge';
+  String? _selectedProxySubscription;
+  List<String> _clashSubscriptions = const [];
+  bool _environmentLoaded = false;
 
   @override
   String _geminiExistingEnvContent = '';
@@ -140,6 +148,11 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   /// 初始快照，用于检测是否有未保存的更改
   late Map<String, String?> _initialSnapshot;
 
+  /// 冲突解决时选定的「原始整份内容」：非空则保存时直接原样写入 configContent，
+  /// 不再走字段合并（避免 model_provider / [model_providers.xxx] 等被合并逻辑吞掉）。
+  /// 进入预览编辑（_isPreviewEditing）时让位给用户的手动编辑。
+  String? _resolvedRawConfig;
+
   bool get _isEditMode => widget.profile != null;
   @override
   bool get _isClaude => widget.editorType == 'claude';
@@ -151,20 +164,13 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
   bool get _isOfficial =>
       widget.profile != null && widget.profile!.isOfficialProvider;
 
-  /// 是否为官方种子 profile（ID 以 official- 开头，名称锁定）
-  bool get _isOfficialSeed =>
-      widget.profile != null &&
-      widget.profile!.id
-          .startsWith(ProviderSwitchService.officialIdPrefix);
-
   /// 是否隐藏 apiToken/baseUrl 字段
   @override
-  bool get _usesOfficialAuth =>
-      _isOfficial || _isOfficialPreset;
+  bool get _usesOfficialAuth => _isOfficial || _isOfficialPreset;
 
-  /// 名称锁定：仅官方种子 profile 不可改名
+  /// 名称锁定：官方供应商现已允许改名，不再锁定
   @override
-  bool get _lockName => _isOfficialSeed;
+  bool get _lockName => false;
 
   bool get _isOfficialPreset {
     if (_selectedPresetName == null || _selectedPresetName == '_custom_') {
@@ -201,10 +207,12 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
     _defaultOpusModelController = TextEditingController(
       text: p?.defaultOpusModel ?? '',
     );
+    _timezoneController = TextEditingController();
     _selectedModel = p?.model ?? (_isClaude ? 'default' : null);
     _selectedVscodeModel = _isClaude ? p?.vscodeModel : null;
-    _selectedVscodeModelMode =
-        _isClaude ? (p?.vscodeModelMode ?? 'legacy') : 'legacy';
+    _selectedVscodeModelMode = _isClaude
+        ? (p?.vscodeModelMode ?? 'legacy')
+        : 'legacy';
     _selectedReasoningEffort = p?.modelReasoningEffort ?? 'high';
     _selectedPersonality = p?.personality ?? 'pragmatic';
     _selectedPresetName = '_custom_';
@@ -227,6 +235,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
 
     _initConfigFromSqlite();
     _checkConfigConflict();
+    unawaited(_loadEnvironmentConfig());
 
     if (!_isClaude && !_isGemini) {
       final selected = _selectedModel;
@@ -362,15 +371,21 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
         if (_isClaude) {
           fileContent = await ProviderSwitchService.readClaudeConfigFile();
           isSynced = ProviderSwitchService.jsonEquals(
-              p.configContent!, fileContent);
+            p.configContent!,
+            fileContent,
+          );
         } else if (_isGemini) {
           fileContent = await ProviderSwitchService.readGeminiEnvFile();
           isSynced = ProviderSwitchService.envEquals(
-              p.configContent!, fileContent);
+            p.configContent!,
+            fileContent,
+          );
         } else {
           fileContent = await ProviderSwitchService.readCodexConfigFile();
           isSynced = ProviderSwitchService.normalizedEquals(
-              p.configContent!, fileContent);
+            p.configContent!,
+            fileContent,
+          );
         }
         if (!isSynced && mounted) {
           setState(() {
@@ -407,8 +422,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       // 按编辑界面当前选择的模式决定对比哪个文件，
       // 而不是 SQLite 中保存的旧值（用户可能正在切换模式但未保存）。
       final mode = _selectedVscodeModelMode;
-      final fileModel =
-          await ProviderSwitchService.readVscodeModelFor(mode);
+      final fileModel = await ProviderSwitchService.readVscodeModelFor(mode);
       final dbModel = (p.vscodeModel ?? '').trim();
       final diskModel = (fileModel ?? '').trim();
       if (!mounted) return;
@@ -451,7 +465,8 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              S.get('vscode_model_conflict_banner')
+              S
+                  .get('vscode_model_conflict_banner')
                   .replaceAll('{db}', dbDisplay)
                   .replaceAll('{file}', fileDisplay),
               style: const TextStyle(fontSize: 13, color: Colors.amber),
@@ -512,6 +527,23 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
 
   @override
   void _resolveConflict({required bool useLocal}) {
+    // 冲突解决 = 用户明确「就要这个版本」：记录所选版本的整份原始内容，
+    // 保存时原样写入，不再字段合并（否则会丢 model_provider 等）。
+    if (useLocal) {
+      _resolvedRawConfig = _localFileContent;
+    } else if (_isClaude) {
+      _resolvedRawConfig = _claudeBaseConfig.isEmpty
+          ? null
+          : const JsonEncoder.withIndent('  ').convert(_claudeBaseConfig);
+    } else if (_isGemini) {
+      _resolvedRawConfig = _geminiExistingEnvContent.isEmpty
+          ? null
+          : _geminiExistingEnvContent;
+    } else {
+      _resolvedRawConfig = _codexExistingConfigContent.isEmpty
+          ? null
+          : _codexExistingConfigContent;
+    }
     if (useLocal) {
       if (_isClaude) {
         try {
@@ -612,6 +644,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
     _defaultHaikuModelController.dispose();
     _defaultSonnetModelController.dispose();
     _defaultOpusModelController.dispose();
+    _timezoneController.dispose();
     _pageScrollController.dispose();
     _codexAuthController.dispose();
     super.dispose();
@@ -647,8 +680,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
                 ConfigConflictBanner(
                   onDismiss: () => _resolveConflict(useLocal: false),
                 ),
-              if (_hasVscodeModelConflict)
-                _buildVscodeModelConflictBanner(),
+              if (_hasVscodeModelConflict) _buildVscodeModelConflictBanner(),
               Expanded(
                 child: SingleChildScrollView(
                   controller: _pageScrollController,
@@ -701,6 +733,10 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
                           _buildCodexAuthPreview(isDark),
                         ],
                         const SizedBox(height: 24),
+                        if (_isClaude && _isOfficial) ...[
+                          _buildEnvironmentConfig(isDark),
+                          const SizedBox(height: 24),
+                        ],
                         _buildConfigPreview(isDark),
                         if (_isGemini) ...[
                           const SizedBox(height: 24),
@@ -716,6 +752,150 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _loadEnvironmentConfig() async {
+    if (!_isClaude || !_isOfficial) return;
+    final account = context.read<ClaudeAccountService>().activeAccount;
+    try {
+      final subscriptions = await ClashVergeService().listSubscriptions();
+      if (!mounted) return;
+      setState(() {
+        _clashSubscriptions = subscriptions;
+        _selectedProxySoftware = account?.proxySoftware ?? 'clash_verge';
+        _selectedProxySubscription = account?.proxySubscription;
+        _timezoneController.text = account?.timezone ?? '';
+        _environmentLoaded = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _selectedProxySoftware = account?.proxySoftware ?? 'clash_verge';
+        _selectedProxySubscription = account?.proxySubscription;
+        _timezoneController.text = account?.timezone ?? '';
+        _environmentLoaded = true;
+      });
+    }
+  }
+
+  Widget _buildEnvironmentConfig(bool isDark) {
+    final account = context.read<ClaudeAccountService>().activeAccount;
+    final enabled = account != null && _environmentLoaded;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final borderColor = isDark ? Colors.white12 : Colors.grey.shade300;
+    final fill = isDark ? const Color(0xFF2C2C2E) : Colors.grey.shade50;
+    InputDecoration decoration(String hint) => InputDecoration(
+      hintText: hint,
+      filled: true,
+      fillColor: fill,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: borderColor),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: borderColor),
+      ),
+      isDense: true,
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            S.get('provider_environment_config'),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            enabled
+                ? S.get('provider_environment_config_hint')
+                : S.get('provider_environment_no_active_account'),
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _selectedProxySoftware,
+                  decoration: decoration(S.get('provider_environment_proxy')),
+                  dropdownColor: isDark
+                      ? const Color(0xFF2C2C2E)
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  menuMaxHeight: 320,
+                  style: TextStyle(color: textColor, fontSize: 14),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'clash_verge',
+                      child: Text('Clash Verge'),
+                    ),
+                  ],
+                  onChanged: enabled
+                      ? (value) =>
+                            setState(() => _selectedProxySoftware = value!)
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value:
+                      _clashSubscriptions.contains(_selectedProxySubscription)
+                      ? _selectedProxySubscription
+                      : null,
+                  decoration: decoration(
+                    S.get('provider_environment_subscription'),
+                  ),
+                  dropdownColor: isDark
+                      ? const Color(0xFF2C2C2E)
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  menuMaxHeight: 320,
+                  style: TextStyle(color: textColor, fontSize: 14),
+                  items: _clashSubscriptions
+                      .map(
+                        (name) => DropdownMenuItem(
+                          value: name,
+                          child: Text(
+                            name,
+                            style: TextStyle(color: textColor, fontSize: 14),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: enabled
+                      ? (value) =>
+                            setState(() => _selectedProxySubscription = value)
+                      : null,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _timezoneController,
+            enabled: enabled,
+            style: TextStyle(color: textColor),
+            decoration: decoration(
+              S.get('provider_environment_timezone_hint'),
+            ).copyWith(labelText: S.get('provider_environment_timezone')),
+          ),
+        ],
       ),
     );
   }
@@ -869,11 +1049,11 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
 
   /// 为官方预设生成不重复的默认名，如 "OpenAI - 账号 2"
   String _nextOfficialAccountName(String providerName) {
-    final service =
-        Provider.of<ProviderSwitchService>(context, listen: false);
+    final service = Provider.of<ProviderSwitchService>(context, listen: false);
     final existing = service.getProfiles(widget.editorType);
-    for (var n = existing.length + 1;; n++) {
-      final candidate = S.get('provider_official_account_default_name')
+    for (var n = existing.length + 1; ; n++) {
+      final candidate = S
+          .get('provider_official_account_default_name')
           .replaceAll('{provider}', providerName)
           .replaceAll('{n}', '$n');
       final taken = existing.any(
@@ -899,8 +1079,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
             Icon(
               Icons.lightbulb_outline,
               size: 14,
-              color:
-                  isDark ? Colors.amber.shade300 : Colors.amber.shade700,
+              color: isDark ? Colors.amber.shade300 : Colors.amber.shade700,
             ),
             const SizedBox(width: 6),
             Expanded(
@@ -908,9 +1087,7 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
                 S.get('provider_official_account_save_first_hint'),
                 style: TextStyle(
                   fontSize: 12,
-                  color: isDark
-                      ? Colors.amber.shade300
-                      : Colors.amber.shade800,
+                  color: isDark ? Colors.amber.shade300 : Colors.amber.shade800,
                 ),
               ),
             ),
@@ -1001,18 +1178,15 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
         : _websiteController.text.trim();
 
     final configContent = _buildConfigContentForSave();
-    final defaultHaikuModel =
-        _defaultHaikuModelController.text.trim().isEmpty
-            ? null
-            : _defaultHaikuModelController.text.trim();
-    final defaultSonnetModel =
-        _defaultSonnetModelController.text.trim().isEmpty
-            ? null
-            : _defaultSonnetModelController.text.trim();
-    final defaultOpusModel =
-        _defaultOpusModelController.text.trim().isEmpty
-            ? null
-            : _defaultOpusModelController.text.trim();
+    final defaultHaikuModel = _defaultHaikuModelController.text.trim().isEmpty
+        ? null
+        : _defaultHaikuModelController.text.trim();
+    final defaultSonnetModel = _defaultSonnetModelController.text.trim().isEmpty
+        ? null
+        : _defaultSonnetModelController.text.trim();
+    final defaultOpusModel = _defaultOpusModelController.text.trim().isEmpty
+        ? null
+        : _defaultOpusModelController.text.trim();
 
     final isNewOfficialCodex =
         !_isEditMode && _isOfficialPreset && !_isClaude && !_isGemini;
@@ -1087,6 +1261,24 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       return;
     }
 
+    if (_isClaude && _isOfficial && _environmentLoaded) {
+      final accountService = context.read<ClaudeAccountService>();
+      final account = accountService.activeAccount;
+      if (account != null) {
+        await accountService.updateAccount(
+          id: account.id,
+          name: account.name,
+          proxySoftware: Value(_selectedProxySoftware),
+          proxySubscription: Value(_selectedProxySubscription),
+          timezone: Value(
+            _timezoneController.text.trim().isEmpty
+                ? null
+                : _timezoneController.text.trim(),
+          ),
+        );
+      }
+    }
+
     if (mounted) {
       if (isNewOfficialCodex) {
         Toast.show(
@@ -1108,6 +1300,11 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
 
   /// 构建完整配置内容字符串，存入 SQLite configContent
   String? _buildConfigContentForSave() {
+    // 冲突解决时选定的原始内容优先原样保存；进入预览手动编辑时让位给用户编辑
+    if (_resolvedRawConfig != null && !_isPreviewEditing) {
+      final raw = _resolvedRawConfig!.trim();
+      return raw.isEmpty ? null : raw;
+    }
     if (_isClaude) {
       final data = _buildClaudeConfigForSave();
       if (data != null) {
@@ -1156,7 +1353,8 @@ class _ProviderEditScreenState extends State<ProviderEditScreen>
       defaultOpusModel: _defaultOpusModelController.text.trim().isEmpty
           ? null
           : _defaultOpusModelController.text.trim(),
-      isOfficialProvider: widget.profile?.isOfficialProvider ?? _isOfficialPreset,
+      isOfficialProvider:
+          widget.profile?.isOfficialProvider ?? _isOfficialPreset,
       createdAt: widget.profile?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
     );

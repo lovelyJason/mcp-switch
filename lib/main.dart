@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -29,6 +28,7 @@ import 'config/provider_presets_config.dart';
 import 'constants/editor_features.dart';
 import 'services/cursor_workspace_service.dart';
 import 'services/cursor_account_service.dart';
+import 'services/claude_account_service.dart';
 import 'utils/global_keys.dart';
 import 'data/database.dart';
 import 'services/provider_switch_service.dart';
@@ -36,7 +36,7 @@ import 'services/remote_claw_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize Logger
   await LoggerService.init();
 
@@ -50,10 +50,10 @@ void main() async {
     LoggerService.error('Async Error', error, stack);
     return true;
   };
-  
+
   // Initialize Window Manager
   await windowManager.ensureInitialized();
-  
+
   // Windows 使用原生标题栏，macOS 隐藏标题栏内容但保留红绿灯
   final titleBarStyle = Platform.isWindows
       ? TitleBarStyle.normal
@@ -67,7 +67,7 @@ void main() async {
     skipTaskbar: false,
     titleBarStyle: titleBarStyle,
   );
-  
+
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.setPreventClose(true);
     await windowManager.show();
@@ -89,8 +89,8 @@ void main() async {
   final prefsPath = Platform.isMacOS
       ? '~/Library/Preferences/com.jason.mcpSwitch.plist'
       : Platform.isWindows
-          ? r'%APPDATA%\com.jason\mcpSwitch\shared_preferences.json'
-          : '~/.local/share/mcpSwitch/shared_preferences.json';
+      ? r'%APPDATA%\com.jason\mcpSwitch\shared_preferences.json'
+      : '~/.local/share/mcpSwitch/shared_preferences.json';
   LoggerService.info('''
   ════════════════════════════════════════════
       🚀 MCP Switch Initialized Successfully 🚀
@@ -131,6 +131,9 @@ void main() async {
   final cursorAccountService = CursorAccountService(db);
   await cursorAccountService.init();
 
+  final claudeAccountService = ClaudeAccountService(db);
+  await claudeAccountService.init();
+
   // Initialize Update Service（自动检测更新）
   final updateService = UpdateService(configService: configService);
   updateService.init();
@@ -156,19 +159,20 @@ void main() async {
       providers: [
         ChangeNotifierProvider.value(value: configService),
         ChangeNotifierProvider(create: (_) => PromptService()..init()),
+        ChangeNotifierProvider(create: (_) => CodexPromptService()..init()),
         ChangeNotifierProvider.value(value: terminalService),
         ChangeNotifierProvider.value(value: aiChatService),
         ChangeNotifierProvider.value(value: mcpHealthCheckService),
         ChangeNotifierProvider.value(value: updateService),
         ChangeNotifierProvider.value(value: providerSwitchService),
         ChangeNotifierProvider.value(value: cursorAccountService),
+        ChangeNotifierProvider.value(value: claudeAccountService),
         ChangeNotifierProvider.value(value: remoteClawService),
       ],
       child: const McpSwitchApp(),
     ),
   );
 }
-
 
 class McpSwitchApp extends StatefulWidget {
   const McpSwitchApp({super.key});
@@ -230,18 +234,32 @@ class _McpSwitchAppState extends State<McpSwitchApp> {
                                     onTap: () async {
                                       // Windows 首次打开终端：弹窗选择 Shell
                                       if (Platform.isWindows) {
-                                        final navContext = globalNavigatorKey.currentContext;
+                                        final navContext =
+                                            globalNavigatorKey.currentContext;
                                         if (navContext != null) {
-                                          final configService = navContext.read<ConfigService>();
-                                          if (!configService.hasWindowsShellPreference) {
-                                            final shellType = await WindowsShellSelectorDialog.show(navContext);
+                                          final configService = navContext
+                                              .read<ConfigService>();
+                                          if (!configService
+                                              .hasWindowsShellPreference) {
+                                            final shellType =
+                                                await WindowsShellSelectorDialog.show(
+                                                  navContext,
+                                                );
                                             if (shellType != null) {
-                                              await configService.setWindowsShell(shellType.name);
+                                              await configService
+                                                  .setWindowsShell(
+                                                    shellType.name,
+                                                  );
                                             } else {
-                                              await configService.setWindowsShell('powershell');
+                                              await configService
+                                                  .setWindowsShell(
+                                                    'powershell',
+                                                  );
                                             }
                                           }
-                                          terminalService.setConfigService(configService);
+                                          terminalService.setConfigService(
+                                            configService,
+                                          );
                                         }
                                       }
                                       terminalService.openTerminalPanel();
@@ -287,4 +305,3 @@ class _McpSwitchAppState extends State<McpSwitchApp> {
     );
   }
 }
-
